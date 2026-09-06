@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160" fill="none">
+  <defs>
+    <linearGradient id="agreeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <filter id="agreeShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1e293b" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Contract Page (Behind) -->
+  <rect x="52" y="16" width="96" height="126" rx="6" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>
+
+  <!-- Contract Page (Front) -->
+  <rect x="42" y="24" width="96" height="122" rx="6" fill="url(#agreeGrad)" stroke="#1e293b" stroke-width="3" filter="url(#agreeShadow)"/>
+
+  <!-- Document Header Seal -->
+  <circle cx="90" cy="42" r="10" fill="#0f172a"/>
+  <circle cx="90" cy="42" r="7" fill="#fbbf24"/>
+  <rect x="62" y="58" width="56" height="4" rx="2" fill="#0f172a"/>
+
+  <!-- Clauses / Contract Lines -->
+  <rect x="54" y="68" width="72" height="2.5" rx="1.2" fill="#64748b"/>
+  <rect x="54" y="75" width="66" height="2.5" rx="1.2" fill="#64748b"/>
+  <rect x="54" y="82" width="70" height="2.5" rx="1.2" fill="#64748b"/>
+  
+  <!-- Signatures section -->
+  <line x1="54" y1="104" x2="84" y2="104" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <path d="M56 100 Q62 92 68 100 T78 96" stroke="#0284c7" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <line x1="94" y1="104" x2="124" y2="104" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <path d="M96 98 Q104 90 110 99 T120 97" stroke="#0284c7" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Gold Wax Stamp at bottom right -->
+  <g transform="translate(104, 114)">
+    <circle cx="14" cy="14" r="13" fill="#f59e0b" stroke="#b45309" stroke-width="1.5"/>
+    <path d="M9 14 L13 18 L20 10" stroke="#78350f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Quill / Fountain Pen Overlay (Right) -->
+  <g transform="translate(132, 28) rotate(22)">
+    <!-- Pen body -->
+    <rect x="-4" y="0" width="8" height="74" rx="4" fill="#0f172a"/>
+    <rect x="-4" y="24" width="8" height="6" fill="#f59e0b"/>
+    <!-- Gold Nib -->
+    <polygon points="-4,74 4,74 0,92" fill="#fbbf24" stroke="#b45309" stroke-width="1"/>
+    <line x1="0" y1="74" x2="0" y2="87" stroke="#78350f" stroke-width="1"/>
+    <circle cx="0" cy="82" r="1" fill="#78350f"/>
+  </g>
+</svg>

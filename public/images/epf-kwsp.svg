@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160" fill="none">
+  <defs>
+    <filter id="epfShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0c316d" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background circular badge plate -->
+  <circle cx="100" cy="74" r="54" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" filter="url(#epfShadow)"/>
+
+  <!-- KWSP Interlocking Emblem (4 Petals / Security Flower in Blue & Green) -->
+  <g transform="translate(100, 62)">
+    <!-- Blue Petals -->
+    <path d="M0 -32 C12 -32 20 -20 20 -8 C10 -8 0 -18 0 -32 Z" fill="#0c316d"/>
+    <path d="M0 32 C-12 32 -20 20 -20 8 C-10 8 0 18 0 32 Z" fill="#0c316d"/>
+    <!-- Green Petals -->
+    <path d="M32 0 C32 12 20 20 8 20 C8 10 18 0 32 0 Z" fill="#00a651"/>
+    <path d="M-32 0 C-32 -12 -20 -20 -8 -20 C-8 -10 -18 0 -32 0 Z" fill="#00a651"/>
+    
+    <!-- Inner Linked Rings -->
+    <circle cx="0" cy="0" r="14" fill="#ffffff" stroke="#0c316d" stroke-width="3.5"/>
+    <circle cx="0" cy="0" r="7" fill="#00a651"/>
+  </g>
+
+  <!-- Typography: KWSP & EPF -->
+  <text x="100" y="132" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="18" fill="#0c316d" letter-spacing="2">KWSP</text>
+  <text x="100" y="146" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="10" fill="#00a651" letter-spacing="3">EPF MALAYSIA</text>
+</svg>

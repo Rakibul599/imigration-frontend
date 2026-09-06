@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160" fill="none">
+  <!-- Biometric Passport / ID Card based on Malaysian MyOnline Pasport graphic in screenshot -->
+  <defs>
+    <linearGradient id="passportBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f4f7fb"/>
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#102a5c" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <!-- Document Booklet Outer -->
+  <rect x="42" y="15" width="86" height="116" rx="8" fill="url(#passportBg)" stroke="#22272e" stroke-width="3" filter="url(#softShadow)"/>
+  <line x1="42" y1="68" x2="128" y2="68" stroke="#22272e" stroke-width="2.5"/>
+
+  <!-- Top Page: Golden Shield Emblem -->
+  <path d="M85 30 L95 35 V46 C95 53 85 57 85 57 C85 57 75 53 75 46 V35 Z" fill="#f59e0b" stroke="#22272e" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M85 33 V54" stroke="#d97706" stroke-width="1.5"/>
+
+  <!-- Top Page decorative lines -->
+  <rect x="58" y="24" width="54" height="2" rx="1" fill="#cbd5e1"/>
+  <rect x="62" y="60" width="46" height="2" rx="1" fill="#cbd5e1"/>
+
+  <!-- Bottom Page: Photo Silhouette -->
+  <rect x="52" y="78" width="26" height="30" rx="4" fill="#94a3b8" stroke="#22272e" stroke-width="2"/>
+  <circle cx="65" cy="87" r="5" fill="#475569"/>
+  <path d="M56 104 C56 97 60 95 65 95 C70 95 74 97 74 104 Z" fill="#475569"/>
+
+  <!-- Details Lines -->
+  <rect x="85" y="78" width="36" height="3" rx="1.5" fill="#22272e"/>
+  <rect x="85" y="85" width="28" height="2.5" rx="1.2" fill="#64748b"/>
+  <rect x="85" y="92" width="32" height="2.5" rx="1.2" fill="#64748b"/>
+  <rect x="52" y="115" width="68" height="3" rx="1.5" fill="#22272e"/>
+  <rect x="52" y="121" width="50" height="2" rx="1" fill="#94a3b8"/>
+
+  <!-- Magnifying Glass (Right Overlay) -->
+  <g transform="translate(10, 0)">
+    <!-- Handle -->
+    <line x1="126" y1="102" x2="154" y2="130" stroke="#22272e" stroke-width="9" stroke-linecap="round"/>
+    <line x1="128" y1="104" x2="152" y2="128" stroke="#d97706" stroke-width="5" stroke-linecap="round"/>
+    
+    <!-- Lens Outer Rim -->
+    <circle cx="106" cy="82" r="28" fill="#93c5fd" stroke="#22272e" stroke-width="4"/>
+    <circle cx="106" cy="82" r="23" fill="#60a5fa" fill-opacity="0.85"/>
+    <circle cx="106" cy="82" r="23" stroke="#bfdbfe" stroke-width="1.5"/>
+    
+    <!-- Question Mark Symbol inside Lens -->
+    <path d="M102 73 C102 69 105 66 109 66 C113.5 66 116.5 69 116.5 73 C116.5 76.5 113.5 78.5 110.5 81 C108.5 82.5 107.5 84.5 107.5 88" stroke="#1e293b" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <circle cx="107.5" cy="95" r="2.5" fill="#1e293b"/>
+    
+    <!-- Lens Glare Reflection -->
+    <path d="M92 72 A20 20 0 0 1 118 64" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

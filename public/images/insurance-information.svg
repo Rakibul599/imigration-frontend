@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160" fill="none">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="shieldBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <filter id="insShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#1e3a8a" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Golden Laurels Background Left & Right -->
+  <g stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" fill="none">
+    <!-- Left Wreath -->
+    <path d="M48 95 C40 75 44 48 62 34"/>
+    <path d="M42 85 C36 82 40 76 46 80" fill="#fbbf24"/>
+    <path d="M44 70 C38 66 42 60 48 64" fill="#fbbf24"/>
+    <path d="M48 55 C42 50 46 44 52 48" fill="#fbbf24"/>
+    <path d="M55 42 C50 36 56 32 60 36" fill="#fbbf24"/>
+    
+    <!-- Right Wreath -->
+    <path d="M152 95 C160 75 156 48 138 34"/>
+    <path d="M158 85 C164 82 160 76 154 80" fill="#fbbf24"/>
+    <path d="M156 70 C162 66 158 60 152 64" fill="#fbbf24"/>
+    <path d="M152 55 C158 50 154 44 148 48" fill="#fbbf24"/>
+    <path d="M145 42 C150 36 144 32 140 36" fill="#fbbf24"/>
+  </g>
+
+  <!-- Main Security Shield -->
+  <path d="M100 24 C128 24 142 32 142 66 C142 108 108 134 100 140 C92 134 58 108 58 66 C58 32 72 24 100 24 Z" fill="url(#shieldBlue)" stroke="url(#goldGrad)" stroke-width="4" filter="url(#insShadow)"/>
+
+  <!-- Inner Gold Trim Shield -->
+  <path d="M100 32 C122 32 133 38 133 66 C133 102 106 124 100 129 C94 124 67 102 67 66 C67 38 78 32 100 32 Z" stroke="#38bdf8" stroke-width="1.5" fill="none" opacity="0.6"/>
+
+  <!-- Security Padlock in Center -->
+  <g transform="translate(100, 75)">
+    <!-- Shackle -->
+    <path d="M-12 0 V-12 C-12 -19 12 -19 12 -12 V0" stroke="url(#goldGrad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <!-- Lock Body -->
+    <rect x="-18" y="0" width="36" height="28" rx="5" fill="url(#goldGrad)" stroke="#78350f" stroke-width="1.5"/>
+    <!-- Keyhole -->
+    <circle cx="0" cy="11" r="3.5" fill="#1e293b"/>
+    <polygon points="-2,11 2,11 3,20 -3,20" fill="#1e293b"/>
+  </g>
+
+  <!-- Top Star -->
+  <path d="M100 10 L103 16 L110 17 L105 21 L106 27 L100 24 L94 27 L95 21 L90 17 L97 16 Z" fill="url(#goldGrad)"/>
+</svg>
