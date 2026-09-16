@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="gentingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#991b1b" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="#fef2f2" />
+  <circle cx="60" cy="60" r="42" fill="url(#gentingGrad)" />
+  <!-- Highlands / Resort Crown Peaks -->
+  <path d="M35 74 L45 42 L55 58 L60 36 L65 58 L75 42 L85 74 Z" fill="#facc15" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" />
+  <circle cx="45" cy="40" r="3" fill="#ffffff" />
+  <circle cx="60" cy="34" r="3.5" fill="#ffffff" />
+  <circle cx="75" cy="40" r="3" fill="#ffffff" />
+  <rect x="36" y="76" width="48" height="6" rx="3" fill="#ffffff" />
+</svg>

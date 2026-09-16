@@ -1,10 +1,11 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
+  ArrowRight,
   Building2,
   CheckCircle2,
   ChevronDown,
@@ -15,34 +16,55 @@ import {
   Info,
   Lock,
   ShieldCheck,
+  Sparkles,
   User,
 } from 'lucide-react';
+import { companies, Company } from '@/lib/companies';
 import { services, Service } from '@/lib/services';
 
-function Crest() {
+function WebLogo({ className = 'w-11 h-11' }: { className?: string }) {
   return (
-    <div className="crest" aria-label="Malaysian Immigration Department crest">
-      <div className="crest-star">✦</div>
-      <div className="crest-shield"><span>MY</span></div>
-      <div className="crest-wings"><i /><i /><i /></div>
+    <div className={`flex items-center justify-center ${className} bg-white rounded-xl shadow-xs border border-slate-200/80 p-1 shrink-0 overflow-hidden`}>
+      <img
+        src="/images/registration-document.svg"
+        alt="Official Portal Logo"
+        className="w-full h-full object-contain"
+      />
     </div>
   );
 }
 
+// Default Credentials for Demo
+const DEFAULT_USER_ID = 'DEMO2026';
+const DEFAULT_PASSWORD = 'password123';
+
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const companyParam = searchParams.get('company');
   const serviceParam = searchParams.get('service');
 
-  const matchedService = services.find(
-    (s) =>
-      s.id.toLowerCase() === (serviceParam || '').toLowerCase() ||
-      s.title.toLowerCase() === (serviceParam || '').toLowerCase()
-  ) || services[0];
+  const isServiceLogin = Boolean(serviceParam);
+
+  const matchedService =
+    services.find(
+      (s) =>
+        s.id.toLowerCase() === (serviceParam || '').toLowerCase() ||
+        s.title.toLowerCase() === (serviceParam || '').toLowerCase()
+    ) || services[0];
+
+  const matchedCompany =
+    companies.find(
+      (c) =>
+        c.id.toLowerCase() === (companyParam || '').toLowerCase() ||
+        c.name.toLowerCase().includes((companyParam || '').toLowerCase())
+    ) || companies[0];
 
   const [selectedService, setSelectedService] = useState<Service>(matchedService);
+  const [selectedCompany, setSelectedCompany] = useState<Company>(matchedCompany);
   const [sector, setSector] = useState<'Housekeeper' | 'Other Sectors'>('Other Sectors');
-  const [userId, setUserId] = useState('');
-  const [password, setPassword] = useState('');
+  const [userId, setUserId] = useState(DEFAULT_USER_ID);
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
@@ -60,61 +82,215 @@ function LoginForm() {
     }
   }, [serviceParam]);
 
+  useEffect(() => {
+    if (companyParam) {
+      const found = companies.find(
+        (c) =>
+          c.id.toLowerCase() === companyParam.toLowerCase() ||
+          c.name.toLowerCase().includes(companyParam.toLowerCase())
+      );
+      if (found) {
+        setSelectedCompany(found);
+      }
+    }
+  }, [companyParam]);
+
+  const handleQuickFill = () => {
+    setUserId(DEFAULT_USER_ID);
+    setPassword(DEFAULT_PASSWORD);
+    setFeedback({
+      type: 'info',
+      message: 'Demo credentials loaded! Click LOGIN to authenticate.',
+    });
+  };
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setFeedback(null);
 
+    // Store active session in localStorage
+    try {
+      localStorage.setItem('activeCompany', JSON.stringify(selectedCompany));
+      if (isServiceLogin) {
+        localStorage.setItem('activeService', JSON.stringify(selectedService));
+      }
+      localStorage.setItem('isLoggedIn', 'true');
+    } catch {}
+
     setTimeout(() => {
       setIsLoading(false);
-      setFeedback({
-        type: 'success',
-        message: `Authentication verified for ${selectedService.title}. Redirecting to system...`,
-      });
-    }, 1000);
+      if (isServiceLogin) {
+        // If last card (work-information), redirect to the new MYPASS@JIM demo page!
+        const isLastCard =
+          selectedService.id === 'work-information' ||
+          selectedService.id === services[services.length - 1].id;
+
+        if (isLastCard) {
+          setFeedback({
+            type: 'success',
+            message: `Authentication verified for ${selectedService.title} (${selectedCompany.name})! Opening MYPASS@JIM Portal...`,
+          });
+          setTimeout(() => {
+            router.push(`/mypass?company=${encodeURIComponent(selectedCompany.id)}`);
+          }, 600);
+          return;
+        }
+
+        setFeedback({
+          type: 'success',
+          message: `Authentication verified for ${selectedService.title} (${selectedCompany.name})! Opening authorized portal...`,
+        });
+        setTimeout(() => {
+          router.push(
+            `/services?company=${encodeURIComponent(selectedCompany.id)}&verifiedService=${encodeURIComponent(selectedService.id)}`
+          );
+        }, 600);
+      } else {
+        setFeedback({
+          type: 'success',
+          message: `Authentication verified for ${selectedCompany.name}! Loading digital service cards...`,
+        });
+        setTimeout(() => {
+          router.push(`/services?company=${encodeURIComponent(selectedCompany.id)}`);
+        }, 500);
+      }
+    }, 600);
   };
 
   const handleForgotPassword = () => {
     setFeedback({
       type: 'info',
       message:
-        'Password reset request received. Please consult the Foreign Workers Division Counter with your registered company credentials.',
+        'Password reset request logged. For demo access, use default credentials: User ID: DEMO2026 | Password: password123',
     });
   };
 
   return (
     <div className="w-full max-w-[540px] mx-auto">
+      {/* Breadcrumb */}
+      <div className="w-full mx-auto mb-3.5 flex items-center gap-2 text-xs text-slate-500 font-medium">
+        <Link href="/" className="hover:text-blue-600 transition-colors">
+          Home
+        </Link>
+        <ChevronRight size={13} />
+        <Link href="/#companies" className="hover:text-blue-600 transition-colors">
+          Employers
+        </Link>
+        <ChevronRight size={13} />
+        {isServiceLogin ? (
+          <>
+            <Link
+              href={`/services?company=${encodeURIComponent(selectedCompany.id)}`}
+              className="hover:text-blue-600 transition-colors truncate max-w-[130px]"
+            >
+              {selectedCompany.name}
+            </Link>
+            <ChevronRight size={13} />
+            <span className="text-slate-800 font-semibold">{selectedService.title} Login</span>
+          </>
+        ) : (
+          <span className="text-slate-800 font-semibold">Employer Login</span>
+        )}
+      </div>
+
       {/* Main Login Card */}
       <div className="bg-white rounded-3xl shadow-[0_20px_50px_-15px_rgba(7,42,107,0.18)] border border-slate-200/90 overflow-hidden">
         {/* Card Header with official Malaysian navy gradient */}
         <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white p-6 sm:p-7 relative">
           <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="inline-flex items-center gap-2 bg-white/15 border border-white/25 rounded-full px-3 py-1 text-[11px] font-semibold text-yellow-300">
-              <img src={selectedService.image} alt="" className="w-4 h-4 object-contain" />
-              <span>{selectedService.title}</span>
-            </div>
-            <select
-              value={selectedService.id}
-              onChange={(e) => {
-                const s = services.find((srv) => srv.id === e.target.value);
-                if (s) setSelectedService(s);
-              }}
-              className="text-[11px] bg-white/20 hover:bg-white/30 text-white border border-white/30 rounded-lg px-2.5 py-1 font-medium outline-none cursor-pointer"
-              aria-label="Change target service"
-            >
-              {services.map((s) => (
-                <option key={s.id} value={s.id} className="text-slate-800 bg-white">
-                  {s.title}
-                </option>
-              ))}
-            </select>
+            {isServiceLogin ? (
+              <>
+                <div className="inline-flex items-center gap-2 bg-white/15 border border-white/25 rounded-full px-3 py-1 text-[11px] font-semibold text-yellow-300">
+                  <img
+                    src={selectedService.image}
+                    alt=""
+                    className="w-4 h-4 object-contain rounded bg-white/90 p-0.5"
+                  />
+                  <span className="truncate max-w-[180px]">{selectedService.title}</span>
+                </div>
+                <select
+                  value={selectedService.id}
+                  onChange={(e) => {
+                    const s = services.find((srv) => srv.id === e.target.value);
+                    if (s) setSelectedService(s);
+                  }}
+                  className="text-[11px] bg-white/20 hover:bg-white/30 text-white border border-white/30 rounded-lg px-2 py-1 font-medium outline-none cursor-pointer"
+                  aria-label="Change target service"
+                >
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id} className="text-slate-800 bg-white">
+                      {s.title}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <>
+                <div className="inline-flex items-center gap-2 bg-white/15 border border-white/25 rounded-full px-3 py-1 text-[11px] font-semibold text-yellow-300">
+                  <img
+                    src={selectedCompany.logo}
+                    alt=""
+                    className="w-4 h-4 object-contain rounded-full bg-white p-0.5"
+                  />
+                  <span className="truncate max-w-[180px]">{selectedCompany.name}</span>
+                </div>
+                <select
+                  value={selectedCompany.id}
+                  onChange={(e) => {
+                    const c = companies.find((comp) => comp.id === e.target.value);
+                    if (c) setSelectedCompany(c);
+                  }}
+                  className="text-[11px] bg-white/20 hover:bg-white/30 text-white border border-white/30 rounded-lg px-2 py-1 font-medium outline-none cursor-pointer"
+                  aria-label="Change target company"
+                >
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id} className="text-slate-800 bg-white">
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
+
           <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white m-0 leading-snug">
             Please Log In To Enter The System
           </h1>
           <p className="text-xs text-blue-100/90 tracking-wide mt-1.5 font-medium">
             Malaysian Immigration Department • Foreign Workers Division
           </p>
+
+          {isServiceLogin && (
+            <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-white/15 text-[11px] text-blue-100/90 font-medium">
+              <div className="flex items-center gap-2">
+                <Building2 size={13} className="text-yellow-300 shrink-0" />
+                <span>
+                  Employer: <strong className="text-white font-semibold">{selectedCompany.name}</strong>
+                </span>
+              </div>
+              <span className="font-mono text-[10px] text-blue-200/90 bg-white/10 px-2 py-0.5 rounded">
+                {selectedCompany.roc}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Demo Fast-Login Helper Callout */}
+        <div className="bg-amber-50/90 border-b border-amber-200/80 px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-900">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-amber-600 shrink-0" />
+            <span>
+              <strong>Default Demo:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleQuickFill}
+            className="text-[11px] bg-amber-200 hover:bg-amber-300 text-amber-950 px-2.5 py-1 rounded-md font-bold transition-colors shrink-0 cursor-pointer border-0"
+          >
+            Auto Fill
+          </button>
         </div>
 
         {/* Card Form */}
@@ -217,7 +393,7 @@ function LoginForm() {
                 placeholder="Enter your User ID"
                 required
                 autoFocus
-                className="w-full h-11 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#0b4da2] focus:ring-2 focus:ring-[#0b4da2]/20 transition-all shadow-sm"
+                className="w-full h-11 pl-10 pr-4 bg-white border border-slate-200 rounded-xl text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#0b4da2] focus:ring-2 focus:ring-[#0b4da2]/20 transition-all shadow-sm font-medium"
               />
             </div>
           </div>
@@ -237,7 +413,7 @@ function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 required
-                className="w-full h-11 pl-10 pr-10 bg-white border border-slate-200 rounded-xl text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#0b4da2] focus:ring-2 focus:ring-[#0b4da2]/20 transition-all shadow-sm"
+                className="w-full h-11 pl-10 pr-10 bg-white border border-slate-200 rounded-xl text-[13.5px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#0b4da2] focus:ring-2 focus:ring-[#0b4da2]/20 transition-all shadow-sm font-medium"
               />
               <button
                 type="button"
@@ -257,7 +433,14 @@ function LoginForm() {
               disabled={isLoading}
               className="w-full h-11 bg-[#0b4da2] hover:bg-[#083c80] text-white font-bold text-xs tracking-wider uppercase rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed border-0"
             >
-              {isLoading ? 'VERIFYING...' : 'LOGIN'}
+              {isLoading ? (
+                'AUTHENTICATING...'
+              ) : (
+                <>
+                  <span>LOGIN</span>
+                  <ArrowRight size={15} />
+                </>
+              )}
             </button>
             <button
               type="button"
@@ -283,13 +466,23 @@ function LoginForm() {
 
         {/* Card Footer Back Link */}
         <div className="bg-slate-50 border-t border-slate-100 px-6 py-3.5 flex items-center justify-between text-xs text-slate-500">
-          <Link
-            href="/#services"
-            className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-semibold transition-colors"
-          >
-            <ArrowLeft size={14} />
-            <span>Return to Services</span>
-          </Link>
+          {isServiceLogin ? (
+            <Link
+              href={`/services?company=${encodeURIComponent(selectedCompany.id)}`}
+              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+            >
+              <ArrowLeft size={14} />
+              <span>Return to {selectedCompany.name} Services</span>
+            </Link>
+          ) : (
+            <Link
+              href="/#companies"
+              className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-semibold transition-colors"
+            >
+              <ArrowLeft size={14} />
+              <span>Return to Employers</span>
+            </Link>
+          )}
           <span className="flex items-center gap-1 text-slate-400">
             <ShieldCheck size={14} className="text-emerald-500" />
             <span>256-bit SSL Protected</span>
@@ -313,7 +506,7 @@ export default function LoginPage() {
       <header className="bg-white border-b border-slate-200 shadow-xs">
         <div className="w-full max-w-[1180px] mx-auto px-6 h-18 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3" aria-label="Immigration Department Home">
-            <Crest />
+            <WebLogo />
             <div className="flex flex-col">
               <strong className="text-[#06245d] text-xs tracking-wider">
                 JABATAN IMIGRESEN MALAYSIA
@@ -332,10 +525,10 @@ export default function LoginPage() {
               Home
             </Link>
             <Link
-              href="/#services"
+              href="/#companies"
               className="text-xs font-semibold text-slate-600 hover:text-[#0b4da2] transition-colors"
             >
-              All Services
+              Employers
             </Link>
             <button
               className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-xs text-slate-700 font-medium cursor-pointer"
@@ -363,19 +556,6 @@ export default function LoginPage() {
           aria-hidden="true"
         />
 
-        {/* Breadcrumb */}
-        <div className="w-full max-w-[540px] mx-auto mb-3.5 flex items-center gap-2 text-xs text-slate-500 font-medium">
-          <Link href="/" className="hover:text-blue-600 transition-colors">
-            Home
-          </Link>
-          <ChevronRight size={13} />
-          <Link href="/#services" className="hover:text-blue-600 transition-colors">
-            Services
-          </Link>
-          <ChevronRight size={13} />
-          <span className="text-slate-800 font-semibold">User Authentication</span>
-        </div>
-
         <Suspense
           fallback={
             <div className="w-full max-w-[540px] mx-auto bg-white rounded-3xl p-10 text-center text-slate-500 shadow-md">
@@ -391,7 +571,7 @@ export default function LoginPage() {
       <footer className="bg-[#071d49] text-white py-4 px-6">
         <div className="w-full max-w-[1180px] mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-400">
           <div className="flex items-center gap-2.5">
-            <Crest />
+            <WebLogo className="w-9 h-9" />
             <div>
               <p className="m-0 font-bold text-white text-xs">JABATAN IMIGRESEN MALAYSIA</p>
               <p className="m-0 text-[10px] text-slate-400">Official Portal Immigration Department of Malaysia</p>

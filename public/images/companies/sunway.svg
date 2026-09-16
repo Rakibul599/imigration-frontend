@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="swGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b91c1c" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="#fff7ed" />
+  <circle cx="60" cy="60" r="42" fill="url(#swGrad)" />
+  <!-- Sun & Architectural Arch -->
+  <path d="M38 72 A22 22 0 0 1 82 72 Z" fill="#ffffff" />
+  <path d="M46 72 A14 14 0 0 1 74 72 Z" fill="#b91c1c" />
+  <circle cx="60" cy="40" r="6" fill="#facc15" />
+</svg>

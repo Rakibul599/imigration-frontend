@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="sdGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f5132" />
+      <stop offset="100%" stop-color="#198754" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="#f0fdf4" />
+  <circle cx="60" cy="60" r="42" fill="url(#sdGrad)" />
+  <!-- Palm / Leaf Motif -->
+  <path d="M60 28 C60 28, 42 45, 42 62 C42 72, 50 80, 60 80 C70 80, 78 72, 78 62 C78 45, 60 28, 60 28 Z" fill="#ffffff" opacity="0.95" />
+  <path d="M60 38 L60 88" stroke="#198754" stroke-width="3" stroke-linecap="round" />
+  <path d="M60 52 C52 48, 48 56, 48 56" stroke="#198754" stroke-width="2.5" stroke-linecap="round" fill="none" />
+  <path d="M60 62 C68 58, 72 66, 72 66" stroke="#198754" stroke-width="2.5" stroke-linecap="round" fill="none" />
+  <circle cx="60" cy="94" r="3.5" fill="#f59e0b" />
+</svg>

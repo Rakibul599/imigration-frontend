@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   description:
     'Official digital access portal to the Immigration Department of Malaysia (JIM). Services, foreign worker management, and document verification.',
   icons: {
-    icon: '/images/special-pass.png',
-    apple: '/images/special-pass.png',
+    icon: '/images/registration-document.svg',
+    apple: '/images/registration-document.svg',
   },
   openGraph: {
     type: 'website',
@@ -24,10 +24,10 @@ export const metadata: Metadata = {
       'Official digital portal of the Malaysian Immigration Department. Access foreign workers services and information.',
     images: [
       {
-        url: '/images/special-pass.png',
+        url: '/images/registration-document.svg',
         width: 800,
         height: 600,
-        alt: 'Jabatan Imigresen Malaysia Official Crest',
+        alt: 'Official Document Portal Logo',
       },
     ],
   },
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     title: 'Jabatan Imigresen Malaysia | Official Portal',
     description:
       'Official digital portal of the Malaysian Immigration Department.',
-    images: ['/images/special-pass.png'],
+    images: ['/images/registration-document.svg'],
   },
 };
 

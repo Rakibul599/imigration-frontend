@@ -12,16 +12,20 @@ import {
   Globe2,
   Menu,
   Search,
+  ShieldCheck,
+  Users,
   X,
 } from 'lucide-react';
-import { services } from '@/lib/services';
+import { companies } from '@/lib/companies';
 
-function Crest() {
+function WebLogo({ className = 'w-11 h-11' }: { className?: string }) {
   return (
-    <div className="crest" aria-label="Malaysian Immigration Department crest">
-      <div className="crest-star">✦</div>
-      <div className="crest-shield"><span>MY</span></div>
-      <div className="crest-wings"><i /><i /><i /></div>
+    <div className={`flex items-center justify-center ${className} bg-white rounded-xl shadow-xs border border-slate-200/80 p-1 shrink-0 overflow-hidden`}>
+      <img
+        src="/images/registration-document.svg"
+        alt="Official Portal Logo"
+        className="w-full h-full object-contain"
+      />
     </div>
   );
 }
@@ -113,8 +117,11 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
 
-  const filteredServices = services.filter((service) =>
-    service.title.toLowerCase().includes(query.toLowerCase())
+  const filteredCompanies = companies.filter(
+    (c) =>
+      c.name.toLowerCase().includes(query.toLowerCase()) ||
+      c.sector.toLowerCase().includes(query.toLowerCase()) ||
+      c.roc.toLowerCase().includes(query.toLowerCase())
   );
 
   return (
@@ -124,13 +131,13 @@ export default function Home() {
 
       <header className="site-header">
         <div className="container header-inner">
-          <a className="brand" href="#home" aria-label="Immigration Department home">
-            <Crest />
+          <Link className="brand" href="/" aria-label="Immigration Department home">
+            <WebLogo />
             <span className="brand-copy"><strong>JABATAN IMIGRESEN MALAYSIA</strong><small>IMMIGRATION DEPARTMENT OF MALAYSIA</small></span>
-          </a>
+          </Link>
           <nav className={menuOpen ? 'main-nav main-nav--open' : 'main-nav'} aria-label="Main navigation">
             <a className="active" href="#home" onClick={() => setMenuOpen(false)}>Home</a>
-            <a href="#services" onClick={() => setMenuOpen(false)}>Services</a>
+            <a href="#companies" onClick={() => setMenuOpen(false)}>Employers</a>
             <a href="#information" onClick={() => setMenuOpen(false)}>Information</a>
             <a href="#contact" onClick={() => setMenuOpen(false)}>Contact</a>
             <Link
@@ -153,15 +160,22 @@ export default function Home() {
           <div className="hero-copy">
             <p className="eyebrow"><span className="eyebrow-line" /> WELCOME TO THE OFFICIAL SHORTLINK PORTAL</p>
             <h1>Malaysian Immigration<br /><em>Department</em></h1>
-            <p className="hero-subtitle">Official Portal Immigration Department of Malaysia</p>
-            <div className="hero-actions"><a href="#services" className="button button--yellow">Explore services <ArrowUpRight size={18} /></a><a href="#information" className="text-link">Learn more <ArrowUpRight size={16} /></a></div>
+            <p className="hero-subtitle">Official Foreign Workers Management Portal & Employer Directory</p>
+            <div className="hero-actions">
+              <a href="#companies" className="button button--yellow">
+                Choose Employer <ArrowUpRight size={18} />
+              </a>
+              <a href="#information" className="text-link">
+                Learn more <ArrowUpRight size={16} />
+              </a>
+            </div>
           </div>
           <div className="hero-art" aria-hidden="true">
             <div className="passport-stack">
               <div className="passport-card passport-card--back" />
               <div className="passport-card passport-card--front">
                 <div className="passport-header">
-                  <Crest />
+                  <WebLogo className="w-10 h-10" />
                   <div className="passport-title"><strong>PASPORT</strong><small>MALAYSIA</small></div>
                 </div>
                 <div className="passport-chip"><Fingerprint size={20} /></div>
@@ -182,80 +196,156 @@ export default function Home() {
       </section>
 
       <section className="intro-section" id="information">
-        <div className="container intro-content"><div className="section-kicker">DIGITAL IMMIGRATION SERVICES</div><h2>Faster communication.<br /><span>Better service.</span></h2><p>Access important immigration services through one secure, simple and official portal.</p></div>
-        <div className="intro-stat"><strong>10</strong><span>services in one place</span></div>
+        <div className="container intro-content">
+          <div className="section-kicker">EMPLOYER & AGENCY DIRECTORY</div>
+          <h2>Verified Employers.<br /><span>Direct Quota Access.</span></h2>
+          <p>Select your registered Malaysian company to sign in and manage foreign worker permits, special passes, and medical records.</p>
+        </div>
+        <div className="intro-stat">
+          <strong>6</strong>
+          <span>registered employers</span>
+        </div>
       </section>
 
-      {/* Services Section with 3-column Tailwind CSS grid */}
-      <section className="bg-[#f7f9fb] py-16 md:py-20" id="services">
+      {/* 6 Company Cards in 3-column Tailwind CSS grid */}
+      <section className="bg-[#f7f9fb] py-16 md:py-20" id="companies">
         <div className="w-full max-w-[1180px] mx-auto px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-8">
             <div>
               <p className="text-[#2b74c9] text-[11px] font-bold tracking-[0.15em] mb-2 uppercase">
-                YOUR DIGITAL ACCESS
+                REGISTERED EMPLOYERS & AGENCIES
               </p>
               <h2 className="text-[#1a283c] text-3xl md:text-4xl font-extrabold tracking-tight m-0">
-                Choose a service
+                Choose your company
               </h2>
             </div>
-            <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 w-full sm:w-64 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-sm">
+            <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 w-full sm:w-72 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-sm">
               <Search size={18} className="shrink-0 text-slate-400" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search services"
-                aria-label="Search services"
+                placeholder="Search by company or sector"
+                aria-label="Search companies"
                 className="border-0 bg-transparent text-slate-800 text-xs outline-none w-full placeholder:text-slate-400"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-            {filteredServices.map((service, index) => (
+            {filteredCompanies.map((company, index) => (
               <Link
-                href={`/login?service=${encodeURIComponent(service.id)}`}
-                id={`service-card-${index}`}
-                key={service.title}
+                href={`/login?company=${encodeURIComponent(company.id)}`}
+                id={`company-card-${index}`}
+                key={company.id}
                 style={{ animationDelay: `${index * 50}ms` }}
-                className="group relative flex flex-col items-center text-center bg-white border border-slate-200/90 rounded-[20px] p-8 md:p-10 shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:border-blue-400 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer min-h-[290px] outline-none focus-visible:ring-2 focus-visible:ring-blue-600 font-inherit no-underline"
+                className="group relative flex flex-col items-center text-center bg-white border border-slate-200/90 rounded-[20px] p-8 md:p-9 shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:border-blue-400 hover:-translate-y-1.5 transition-all duration-300 cursor-pointer min-h-[310px] outline-none focus-visible:ring-2 focus-visible:ring-blue-600 no-underline"
               >
-                <div className="flex items-center justify-center h-[120px] w-full mb-5 pointer-events-none">
+                {/* Company Logo Wrap */}
+                <div className="flex items-center justify-center h-[115px] w-full mb-4 pointer-events-none">
                   <img
-                    src={service.image}
-                    alt={service.title}
-                    className="max-h-[110px] max-w-[170px] w-auto h-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.04)] group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                    src={company.logo}
+                    alt={company.name}
+                    className="max-h-[105px] max-w-[160px] w-auto h-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.04)] group-hover:scale-105 transition-transform duration-300 pointer-events-none"
                     loading="lazy"
                   />
                 </div>
+
+                {/* Company Info */}
                 <div className="flex flex-col items-center flex-1 justify-start w-full pointer-events-none">
-                  <div className="flex flex-col items-center gap-2 justify-center pointer-events-none">
-                    <h3 className="text-[17px] font-bold text-slate-900 leading-snug m-0 pointer-events-none">
-                      {service.title}
+                  <div className="flex flex-col items-center gap-1.5 justify-center pointer-events-none">
+                    <h3 className="text-[17px] font-bold text-slate-900 leading-snug m-0 pointer-events-none group-hover:text-[#0b4da2] transition-colors">
+                      {company.name}
                     </h3>
-                    {service.tag && (
-                      <span className="inline-block bg-blue-50 border border-blue-200 text-blue-600 text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase pointer-events-none">
-                        {service.tag}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap justify-center">
+                      <span className="inline-block bg-blue-50 border border-blue-200 text-[#0b4da2] text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase pointer-events-none">
+                        {company.sector}
                       </span>
-                    )}
+                      {company.tag && (
+                        <span className="inline-block bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase pointer-events-none">
+                          {company.tag}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[13.5px] text-slate-500 leading-relaxed mt-2 max-w-[290px] pointer-events-none">
-                    {service.description}
+
+                  <p className="text-[13px] text-slate-500 leading-relaxed mt-2.5 max-w-[280px] pointer-events-none">
+                    {company.description}
                   </p>
+
+                  <div className="mt-auto pt-4 flex items-center justify-between w-full border-t border-slate-100 text-xs text-slate-500">
+                    <span className="font-mono text-[11px] text-slate-400">
+                      {company.roc}
+                    </span>
+                    <span className="inline-flex items-center gap-1 font-semibold text-[#0b4da2] group-hover:translate-x-1 transition-transform">
+                      Login Portal <ArrowUpRight size={14} />
+                    </span>
+                  </div>
                 </div>
               </Link>
             ))}
           </div>
-          {filteredServices.length === 0 && (
+
+          {filteredCompanies.length === 0 && (
             <div className="text-slate-500 py-12 text-center text-sm w-full">
-              No service found. Try another search.
+              No registered employer found matching your search.
             </div>
           )}
         </div>
       </section>
 
-      <section className="trust-section"><div className="container trust-inner"><div className="trust-icon"><FileLock2 size={28} /></div><div><p className="section-kicker">OFFICIAL AND SECURE</p><h2>Your information is in safe hands.</h2><p>Use this official portal to reach verified immigration services. Never share your password or personal details with unofficial websites.</p></div><a href="#contact" className="button button--outline">Security information <ArrowUpRight size={17} /></a></div></section>
+      <section className="trust-section">
+        <div className="container trust-inner">
+          <div className="trust-icon"><FileLock2 size={28} /></div>
+          <div>
+            <p className="section-kicker">OFFICIAL AND SECURE</p>
+            <h2>Your company records are protected.</h2>
+            <p>Direct integration with the Malaysian Immigration Department (Jabatan Imigresen Malaysia) for verified employer quota & foreign worker processing.</p>
+          </div>
+          <a href="#contact" className="button button--outline">Security information <ArrowUpRight size={17} /></a>
+        </div>
+      </section>
 
-      <footer className="site-footer" id="contact"><div className="container footer-top"><div className="footer-brand"><a className="brand brand--footer" href="#home"><Crest /><span className="brand-copy"><strong>JABATAN IMIGRESEN MALAYSIA</strong><small>IMMIGRATION DEPARTMENT OF MALAYSIA</small></span></a><p>Official digital access to the Immigration Department of Malaysia.</p></div><div className="footer-links"><div><h3>Portal</h3><a href="#services">All services</a><a href="#information">Information</a><a href="#home">Accessibility</a></div><div><h3>Need help?</h3><a href="#contact">Contact support</a><a href="#contact">FAQ</a><a href="#contact">Privacy policy</a></div></div><div className="jobs-card"><div className="jobs-icon"><Building2 size={22} /></div><div><span>CAREERS</span><h3>Join our team</h3><p>Explore opportunities with us.</p></div><a href="#contact" aria-label="Apply for a job"><ArrowUpRight size={18} /></a></div></div><div className="container footer-bottom"><span>© 2026 Immigration Department of Malaysia. All rights reserved.</span><span>Built for a safer, simpler digital experience.</span></div></footer>
+      <footer className="site-footer" id="contact">
+        <div className="container footer-top">
+          <div className="footer-brand">
+            <Link className="brand brand--footer" href="/">
+              <WebLogo />
+              <span className="brand-copy">
+                <strong>JABATAN IMIGRESEN MALAYSIA</strong>
+                <small>IMMIGRATION DEPARTMENT OF MALAYSIA</small>
+              </span>
+            </Link>
+            <p>Official digital access to the Immigration Department of Malaysia.</p>
+          </div>
+          <div className="footer-links">
+            <div>
+              <h3>Employers</h3>
+              <a href="#companies">All Companies</a>
+              <a href="#information">Information</a>
+              <a href="#home">Accessibility</a>
+            </div>
+            <div>
+              <h3>Need help?</h3>
+              <a href="#contact">Contact support</a>
+              <a href="#contact">FAQ</a>
+              <a href="#contact">Privacy policy</a>
+            </div>
+          </div>
+          <div className="jobs-card">
+            <div className="jobs-icon"><Building2 size={22} /></div>
+            <div>
+              <span>CAREERS</span>
+              <h3>Join our team</h3>
+              <p>Explore opportunities with us.</p>
+            </div>
+            <a href="#contact" aria-label="Apply for a job"><ArrowUpRight size={18} /></a>
+          </div>
+        </div>
+        <div className="container footer-bottom">
+          <span>© 2026 Immigration Department of Malaysia. All rights reserved.</span>
+          <span>Built for a safer, simpler digital experience.</span>
+        </div>
+      </footer>
     </main>
   );
 }

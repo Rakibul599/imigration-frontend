@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="ioiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="28" fill="#ecfdf5" />
+  <circle cx="60" cy="60" r="42" fill="url(#ioiGrad)" />
+  <!-- Tri-leaf / Circular Organic Ring -->
+  <circle cx="60" cy="60" r="26" fill="none" stroke="#facc15" stroke-width="4" stroke-dasharray="8 4" />
+  <circle cx="60" cy="60" r="14" fill="#ffffff" />
+  <text x="60" y="66" font-family="Arial, sans-serif" font-size="14" font-weight="900" fill="#064e3b" text-anchor="middle">IOI</text>
+</svg>
