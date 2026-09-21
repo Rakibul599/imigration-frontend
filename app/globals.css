@@ -60,28 +60,139 @@ button, input { font: inherit; }
 .button--yellow { background: var(--yellow); color: #082657; }
 .button--outline { border: 1px solid #aebfd3; color: #0b3e87; }
 .text-link { align-items: center; color: white; display: inline-flex; font-size: 12px; font-weight: 700; gap: 6px; }
-.hero-art { height: 340px; position: absolute; right: 0; top: 30px; width: 465px; z-index: 1; }
-.passport-stack { height: 100%; position: relative; }
-.passport-card { background: linear-gradient(160deg, #0a3270 0%, #0d4290 50%, #062358 100%); border-radius: 12px; box-shadow: 0 18px 40px rgba(0, 12, 40, .4); left: 50%; overflow: hidden; position: absolute; transform: translateX(-50%); }
-.passport-card--back { height: 270px; top: 20px; transform: translateX(-50%) rotate(-7deg); width: 380px; opacity: .5; }
-.passport-card--front { border: 1px solid rgba(255,255,255,.12); height: 270px; top: 35px; width: 380px; z-index: 2; animation: passportFloat 6s ease-in-out infinite; }
-.passport-header { align-items: center; display: flex; gap: 12px; padding: 22px 24px 0; }
-.passport-header .crest { height: 40px; width: 40px; }
-.passport-header .crest-star { font-size: 20px; }
-.passport-header .crest-shield { height: 26px; width: 24px; }
-.passport-title { display: grid; gap: 3px; }
-.passport-title strong { color: #e8c122; font-size: 15px; letter-spacing: .18em; }
-.passport-title small { color: #b8d0f0; font-size: 9px; letter-spacing: .14em; }
-.passport-chip { align-items: center; background: linear-gradient(135deg, #c9a528, #e8c540); border-radius: 6px; bottom: 80px; color: #3a2c08; display: flex; height: 38px; justify-content: center; left: 24px; position: absolute; width: 50px; }
-.passport-lines { display: grid; gap: 8px; padding: 16px 24px 0; }
-.passport-lines i { background: rgba(200, 220, 255, .18); border-radius: 3px; height: 6px; width: 70%; }
-.passport-lines i:nth-child(2) { width: 55%; }
-.passport-lines i:nth-child(3) { width: 62%; }
-.passport-mrz { bottom: 18px; color: #aecbe8; font-family: 'Courier New', monospace; font-size: 9px; letter-spacing: .08em; left: 24px; position: absolute; }
-.passport-photo { border-radius: 12px; box-shadow: 0 14px 30px rgba(0, 10, 35, .35); height: 120px; object-fit: cover; overflow: hidden; position: absolute; right: 20px; top: 0; width: 160px; z-index: 3; animation: passportFloat 7s ease-in-out infinite reverse; }
-.passport-photo img { height: 100%; object-fit: cover; width: 100%; }
-.floating-pass { align-items: center; background: #f5db29; border-radius: 10px; bottom: 0; box-shadow: 0 13px 24px rgba(6, 28, 75, .3); color: #123878; display: flex; flex-direction: column; gap: 6px; left: 10px; padding: 15px 16px; position: absolute; z-index: 4; }
-.floating-pass small { font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.hero-art { height: 380px; position: absolute; right: 0; top: 15px; width: 510px; z-index: 1; }
+.hero-visual-stack { height: 100%; position: relative; width: 100%; }
+.hero-glow-backdrop {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.28) 0%, rgba(37, 99, 235, 0.12) 50%, transparent 70%);
+  filter: blur(40px);
+  height: 320px;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 30px;
+  transform: translateX(-50%);
+  width: 460px;
+}
+.hero-laptop-card {
+  animation: passportFloat 6s ease-in-out infinite;
+  background: #09172e;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 24px 50px rgba(0, 10, 30, 0.55), 0 0 35px rgba(14, 165, 233, 0.15);
+  left: 48%;
+  overflow: hidden;
+  position: absolute;
+  top: 10px;
+  transform: translateX(-50%);
+  width: 440px;
+  z-index: 2;
+}
+.laptop-badge {
+  align-items: center;
+  background: rgba(10, 24, 52, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  color: #93c5fd;
+  display: flex;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 3;
+}
+.live-dot {
+  animation: livePulse 2s infinite;
+  background: #10b981;
+  border-radius: 50%;
+  display: inline-block;
+  height: 6px;
+  width: 6px;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+.hero-laptop-img {
+  display: block;
+  height: 245px;
+  object-fit: cover;
+  width: 100%;
+}
+.hero-chart-card {
+  animation: chartFloat 7s ease-in-out infinite reverse;
+  background: rgba(8, 20, 44, 0.94);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 14px;
+  bottom: 0px;
+  box-shadow: 0 20px 45px rgba(2, 8, 26, 0.65), 0 0 30px rgba(16, 185, 129, 0.18);
+  overflow: hidden;
+  position: absolute;
+  right: 0px;
+  width: 310px;
+  z-index: 4;
+}
+.hero-chart-img {
+  display: block;
+  height: 165px;
+  object-fit: cover;
+  width: 100%;
+}
+.floating-metric {
+  align-items: center;
+  animation: badgeFloat 5s ease-in-out infinite;
+  background: linear-gradient(135deg, #f5dd2e 0%, #e8c122 100%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  bottom: 15px;
+  box-shadow: 0 14px 28px rgba(3, 14, 38, 0.4);
+  color: #0b2d6b;
+  display: flex;
+  gap: 10px;
+  left: 5px;
+  padding: 10px 14px;
+  position: absolute;
+  z-index: 5;
+}
+.metric-icon {
+  align-items: center;
+  background: rgba(11, 45, 107, 0.12);
+  border-radius: 8px;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.metric-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.metric-text strong {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.metric-text small {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+@keyframes chartFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes badgeFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
 @keyframes passportFloat { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-10px); } }
 
 .intro-section { align-items: center; background: #f0f3f7; display: flex; justify-content: space-between; min-height: 182px; padding: 42px 0; }.intro-content h2, .section-heading h2, .trust-section h2 { color: #1a283c; font-size: clamp(27px, 3vw, 37px); letter-spacing: -.05em; line-height: 1.08; margin: 0; }.intro-content h2 span { color: var(--blue); }.intro-content p { color: #657389; font-size: 15px; margin: 12px 0 0; }.intro-stat { align-items: center; border-left: 1px solid #ccd7e4; display: flex; gap: 14px; margin-right: max(24px, calc((100vw - 1180px) / 2)); padding-left: 28px; }.intro-stat strong { color: var(--blue); font-size: 53px; letter-spacing: -.08em; }.intro-stat span { color: #748198; font-size: 12px; max-width: 80px; }
@@ -89,9 +200,9 @@ button, input { font: inherit; }
 .site-footer { background: #071d49; color: white; padding: 53px 0 0; }.footer-top { display: grid; gap: 50px; grid-template-columns: 1.4fr .8fr 1fr; padding-bottom: 45px; }.brand--footer .brand-copy strong { color: white; }.brand--footer .brand-copy small { color: #90a6c7; }.footer-brand p { color: #9fb2cf; font-size: 12px; line-height: 1.6; margin: 18px 0 0; max-width: 260px; }.footer-links { display: flex; gap: 65px; }.footer-links h3, .jobs-card h3 { color: white; font-size: 13px; margin: 0 0 16px; }.footer-links div { display: grid; gap: 10px; align-content: start; }.footer-links a { color: #a6b9d5; font-size: 11px; }.footer-links a:hover { color: var(--yellow); }.jobs-card { align-items: center; background: #0d3373; border: 1px solid #2b548c; border-radius: 9px; display: flex; gap: 13px; padding: 18px; }.jobs-icon { align-items: center; background: #f5dd2e; border-radius: 8px; color: #0b3375; display: flex; height: 45px; justify-content: center; width: 45px; }.jobs-card span { color: #91c7ff; font-size: 9px; font-weight: 800; letter-spacing: .13em; }.jobs-card h3 { margin: 4px 0; }.jobs-card p { color: #afc1db; font-size: 10px; margin: 0; }.jobs-card > a { align-items: center; background: #184786; border-radius: 50%; color: white; display: flex; height: 32px; justify-content: center; margin-left: auto; width: 32px; }.footer-bottom { border-top: 1px solid #234476; color: #8199bc; display: flex; font-size: 10px; justify-content: space-between; padding: 20px 0; }.accessibility-tab { align-items: center; background: #315fbc; border-radius: 0 4px 4px 0; box-shadow: 0 3px 8px rgba(0,0,0,.2); color: white; display: flex; height: 52px; justify-content: center; left: 0; position: fixed; top: 64%; width: 48px; z-index: 20; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
-@media (max-width: 980px) { .hero-art { opacity: .55; right: -60px; }.passport-card--front, .passport-card--back { width: 320px; }.passport-photo { width: 130px; height: 100px; }.trust-inner { grid-template-columns: auto 1fr; }.trust-inner .button { grid-column: 2; justify-self: start; }.footer-top { grid-template-columns: 1fr 1fr; }.jobs-card { grid-column: 1 / -1; max-width: 360px; } }
-@media (max-width: 700px) { .container { width: min(100% - 32px, 560px); }.top-strip span:last-child { display: none; }.header-inner { height: 66px; }.main-nav { align-items: stretch; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 14px 20px rgba(0,0,0,.08); display: none; flex-direction: column; gap: 0; left: 0; padding: 10px 16px 18px; position: absolute; top: 66px; width: 100%; }.main-nav--open { display: flex; }.main-nav a { padding: 13px 0; }.main-nav a.active::after { bottom: 7px; }.language-button { align-self: flex-start; margin-top: 8px; }.menu-button { display: block; }.brand-copy strong { font-size: 10px; }.brand-copy small { font-size: 7px; }.hero { min-height: 580px; }.hero-inner { align-items: flex-start; flex-direction: column; min-height: 580px; padding-top: 48px; }.hero-art { height: 260px; opacity: 1; position: relative; right: auto; top: 20px; width: 100%; }.passport-card--front, .passport-card--back { width: 280px; }.passport-card--front { height: 220px; }.passport-card--back { height: 220px; }.passport-photo { height: 85px; width: 110px; }.passport-chip { bottom: 60px; height: 32px; width: 42px; }.passport-mrz { font-size: 7px; bottom: 12px; }.hero h1 { font-size: 40px; }.hero-subtitle { font-size: 13px; line-height: 1.5; max-width: 260px; }.intro-section { display: block; padding: 42px 0; }.intro-stat { border-left: 0; margin: 28px 0 0; padding-left: 0; }.trust-inner { align-items: flex-start; display: flex; flex-direction: column; }.trust-inner .button { margin-top: 8px; }.footer-top { display: flex; flex-direction: column; gap: 32px; }.footer-links { justify-content: space-between; }.footer-bottom { flex-direction: column; gap: 8px; }.accessibility-tab { top: auto; bottom: 24px; } }
-@media (max-width: 390px) { .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; }.passport-card--front, .passport-card--back { width: 240px; }.passport-photo { width: 90px; height: 70px; } }
+@media (max-width: 980px) { .hero-art { opacity: .75; right: -20px; width: 440px; }.hero-laptop-card { width: 360px; }.hero-chart-card { width: 250px; }.trust-inner { grid-template-columns: auto 1fr; }.trust-inner .button { grid-column: 2; justify-self: start; }.footer-top { grid-template-columns: 1fr 1fr; }.jobs-card { grid-column: 1 / -1; max-width: 360px; } }
+@media (max-width: 700px) { .container { width: min(100% - 32px, 560px); }.top-strip span:last-child { display: none; }.header-inner { height: 66px; }.main-nav { align-items: stretch; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 14px 20px rgba(0,0,0,.08); display: none; flex-direction: column; gap: 0; left: 0; padding: 10px 16px 18px; position: absolute; top: 66px; width: 100%; }.main-nav--open { display: flex; }.main-nav a { padding: 13px 0; }.main-nav a.active::after { bottom: 7px; }.language-button { align-self: flex-start; margin-top: 8px; }.menu-button { display: block; }.brand-copy strong { font-size: 10px; }.brand-copy small { font-size: 7px; }.hero { min-height: 640px; padding-bottom: 24px; }.hero-inner { align-items: flex-start; flex-direction: column; min-height: 620px; padding-top: 48px; }.hero-art { height: 330px; opacity: 1; position: relative; right: auto; top: 15px; width: 100%; margin-bottom: 10px; }.hero-laptop-card { width: 320px; }.hero-chart-card { width: 220px; right: 0; bottom: 10px; }.hero-laptop-img { height: 180px; }.hero-chart-img { height: 120px; }.floating-metric { bottom: 20px; }.hero h1 { font-size: 38px; }.hero-subtitle { font-size: 13px; line-height: 1.5; max-width: 300px; }.intro-section { display: block; padding: 42px 0; }.intro-stat { border-left: 0; margin: 28px 0 0; padding-left: 0; }.trust-inner { align-items: flex-start; display: flex; flex-direction: column; }.trust-inner .button { margin-top: 8px; }.footer-top { display: flex; flex-direction: column; gap: 32px; }.footer-links { justify-content: space-between; }.footer-bottom { flex-direction: column; gap: 8px; }.accessibility-tab { top: auto; bottom: 24px; } }
+@media (max-width: 390px) { .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; }.hero-laptop-card { width: 270px; }.hero-chart-card { width: 185px; right: 0; bottom: 12px; }.hero-laptop-img { height: 150px; }.hero-chart-img { height: 100px; }.floating-metric { transform: scale(0.8); left: 0; bottom: 16px; } }
 
 
 

@@ -26,6 +26,8 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
 import { companies, Company } from '@/lib/companies';
 
 function WebLogo({ className = 'w-11 h-11' }: { className?: string }) {
@@ -259,22 +261,17 @@ function MyPassDashboard() {
 
   return (
     <div className="w-full bg-[#f4f6f9] min-h-screen text-slate-800 font-sans">
+      <Navbar />
+
       {/* 1. Official Header matching screenshot */}
       <header className="bg-gradient-to-r from-[#5173a9] via-[#5b7db5] to-[#6587be] text-white shadow-md">
         <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Left logos & title */}
+          {/* Left blank / title */}
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Web Official Logo */}
-            <WebLogo className="w-12 h-12 sm:w-14 sm:h-14 shadow-md" />
-
-            {/* Yellow Bold Header Texts */}
             <div className="flex flex-col justify-center">
               <h1 className="text-2xl sm:text-3xl font-black text-[#ffd200] tracking-tight m-0 leading-none drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.55)] uppercase">
-                MYPASS@JIM
+                MYPASS PORTAL
               </h1>
-              <p className="text-[10.5px] sm:text-[12px] font-extrabold text-[#ffea00] tracking-wider uppercase m-0 mt-1 leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.4)]">
-                JABATAN IMIGRESEN MALAYSIA
-              </p>
             </div>
           </div>
 
@@ -596,7 +593,7 @@ function MyPassDashboard() {
               {filteredRecords.length === 0 && (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
-                    No foreign worker pass records found matching "{query}".
+                    No foreign worker pass records found matching &quot;{query}&quot;.
                   </td>
                 </tr>
               )}
@@ -637,10 +634,10 @@ function MyPassDashboard() {
         {/* Footer Security Notice */}
         <div className="mt-8 text-center text-[11px] text-slate-500">
           <p className="m-0">
-            Official Portal Jabatan Imigresen Malaysia (JIM) • Sistem MyPass Pekerja Asing e-Services
+            Official Digital Portal • Sistem MyPass Pekerja Asing e-Services
           </p>
           <p className="m-0 text-slate-400 mt-0.5 font-mono">
-            Direct Server Gateway: https://imigresen-online.imi.gov.my/mypass/status
+            Direct Server Gateway: https://e-services.portal.gov/mypass/status
           </p>
         </div>
       </main>
@@ -769,9 +766,9 @@ function MyPassDashboard() {
                   <WebLogo className="w-10 h-10" />
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase m-0">
-                      JABATAN IMIGRESEN MALAYSIA
+                      OFFICIAL E-SERVICES PORTAL
                     </h4>
-                    <p className="text-[10px] text-slate-500 m-0">RESIT RASMI KERAJAAN MALAYSIA</p>
+                    <p className="text-[10px] text-slate-500 m-0">RESIT RASMI E-SERVICES KERAJAAN</p>
                   </div>
                 </div>
                 <button
@@ -957,6 +954,7 @@ function MyPassDashboard() {
           </div>
         </div>
       )}
+      <Footer />
     </div>
   );
 }

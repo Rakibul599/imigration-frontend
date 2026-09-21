@@ -19,20 +19,10 @@ import {
   Sparkles,
   User,
 } from 'lucide-react';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
 import { companies, Company } from '@/lib/companies';
 import { services, Service } from '@/lib/services';
-
-function WebLogo({ className = 'w-11 h-11' }: { className?: string }) {
-  return (
-    <div className={`flex items-center justify-center ${className} bg-white rounded-xl shadow-xs border border-slate-200/80 p-1 shrink-0 overflow-hidden`}>
-      <img
-        src="/images/registration-document.svg"
-        alt="Official Portal Logo"
-        className="w-full h-full object-contain"
-      />
-    </div>
-  );
-}
 
 // Default Credentials for Demo
 const DEFAULT_USER_ID = 'DEMO2026';
@@ -62,7 +52,7 @@ function LoginForm() {
 
   const [selectedService, setSelectedService] = useState<Service>(matchedService);
   const [selectedCompany, setSelectedCompany] = useState<Company>(matchedCompany);
-  const [sector, setSector] = useState<'Housekeeper' | 'Other Sectors'>('Other Sectors');
+  const [role, setRole] = useState<'Admin' | 'Employee'>('Employee');
   const [userId, setUserId] = useState(DEFAULT_USER_ID);
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
@@ -146,13 +136,21 @@ function LoginForm() {
             `/services?company=${encodeURIComponent(selectedCompany.id)}&verifiedService=${encodeURIComponent(selectedService.id)}`
           );
         }, 600);
-      } else {
+      } else if (companyParam) {
         setFeedback({
           type: 'success',
           message: `Authentication verified for ${selectedCompany.name}! Loading digital service cards...`,
         });
         setTimeout(() => {
           router.push(`/services?company=${encodeURIComponent(selectedCompany.id)}`);
+        }, 500);
+      } else {
+        setFeedback({
+          type: 'success',
+          message: `Authentication verified as ${role}! Loading company directory...`,
+        });
+        setTimeout(() => {
+          router.push('/companies');
         }, 500);
       }
     }, 600);
@@ -174,7 +172,7 @@ function LoginForm() {
           Home
         </Link>
         <ChevronRight size={13} />
-        <Link href="/#companies" className="hover:text-blue-600 transition-colors">
+        <Link href="/companies" className="hover:text-blue-600 transition-colors">
           Employers
         </Link>
         <ChevronRight size={13} />
@@ -190,7 +188,7 @@ function LoginForm() {
             <span className="text-slate-800 font-semibold">{selectedService.title} Login</span>
           </>
         ) : (
-          <span className="text-slate-800 font-semibold">Employer Login</span>
+          <span className="text-slate-800 font-semibold">Authentication Portal</span>
         )}
       </div>
 
@@ -313,65 +311,65 @@ function LoginForm() {
             </div>
           )}
 
-          {/* Continued: Housekeeper / Other Sectors */}
+          {/* Role: Admin / Employee Login */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-3.5 flex-wrap py-0.5">
               <label className="text-[13.5px] font-bold text-slate-900 shrink-0">
-                Continued:
+                Login As:
               </label>
-              <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Sector continuation">
+              <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Login Role">
                 <label
                   className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold cursor-pointer border transition-all ${
-                    sector === 'Housekeeper'
+                    role === 'Admin'
                       ? 'border-[#0b4da2] bg-blue-50/90 text-[#0b4da2] shadow-sm ring-1 ring-[#0b4da2]/30'
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50/30'
                   }`}
                 >
                   <input
                     type="radio"
-                    name="sector"
-                    value="Housekeeper"
+                    name="loginRole"
+                    value="Admin"
                     className="sr-only"
-                    checked={sector === 'Housekeeper'}
-                    onChange={() => setSector('Housekeeper')}
+                    checked={role === 'Admin'}
+                    onChange={() => setRole('Admin')}
                   />
                   <span
                     className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      sector === 'Housekeeper' ? 'border-[#0b4da2]' : 'border-slate-400'
+                      role === 'Admin' ? 'border-[#0b4da2]' : 'border-slate-400'
                     }`}
                   >
-                    {sector === 'Housekeeper' && (
+                    {role === 'Admin' && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[#0b4da2]" />
                     )}
                   </span>
-                  <span>Housekeeper</span>
+                  <span>Admin</span>
                 </label>
 
                 <label
                   className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold cursor-pointer border transition-all ${
-                    sector === 'Other Sectors'
+                    role === 'Employee'
                       ? 'border-[#0b4da2] bg-blue-50/90 text-[#0b4da2] shadow-sm ring-1 ring-[#0b4da2]/30'
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50/30'
                   }`}
                 >
                   <input
                     type="radio"
-                    name="sector"
-                    value="Other Sectors"
+                    name="loginRole"
+                    value="Employee"
                     className="sr-only"
-                    checked={sector === 'Other Sectors'}
-                    onChange={() => setSector('Other Sectors')}
+                    checked={role === 'Employee'}
+                    onChange={() => setRole('Employee')}
                   />
                   <span
                     className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      sector === 'Other Sectors' ? 'border-[#0b4da2]' : 'border-slate-400'
+                      role === 'Employee' ? 'border-[#0b4da2]' : 'border-slate-400'
                     }`}
                   >
-                    {sector === 'Other Sectors' && (
+                    {role === 'Employee' && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[#0b4da2]" />
                     )}
                   </span>
-                  <span>Other Sectors</span>
+                  <span>Employee</span>
                 </label>
               </div>
             </div>
@@ -476,11 +474,11 @@ function LoginForm() {
             </Link>
           ) : (
             <Link
-              href="/#companies"
+              href="/companies"
               className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-semibold transition-colors"
             >
               <ArrowLeft size={14} />
-              <span>Return to Employers</span>
+              <span>Return to Companies</span>
             </Link>
           )}
           <span className="flex items-center gap-1 text-slate-400">
@@ -496,49 +494,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="min-h-screen bg-[#f1f4f8] flex flex-col justify-between text-slate-900">
-      {/* Top Strip */}
-      <div className="bg-[#061d4d] text-[#b8c9e6] text-[11px] py-2 px-6 flex justify-between items-center tracking-wide">
-        <span>Official portal of the Malaysian Immigration Department</span>
-        <span className="hidden sm:inline">Last updated: 06 September 2026</span>
-      </div>
-
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-xs">
-        <div className="w-full max-w-[1180px] mx-auto px-6 h-18 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3" aria-label="Immigration Department Home">
-            <WebLogo />
-            <div className="flex flex-col">
-              <strong className="text-[#06245d] text-xs tracking-wider">
-                JABATAN IMIGRESEN MALAYSIA
-              </strong>
-              <small className="text-slate-400 text-[9px] tracking-widest uppercase">
-                IMMIGRATION DEPARTMENT OF MALAYSIA
-              </small>
-            </div>
-          </Link>
-
-          <nav className="flex items-center gap-6" aria-label="Quick navigation">
-            <Link
-              href="/"
-              className="text-xs font-semibold text-slate-600 hover:text-[#0b4da2] transition-colors hidden sm:inline-block"
-            >
-              Home
-            </Link>
-            <Link
-              href="/#companies"
-              className="text-xs font-semibold text-slate-600 hover:text-[#0b4da2] transition-colors"
-            >
-              Employers
-            </Link>
-            <button
-              className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-xs text-slate-700 font-medium cursor-pointer"
-              type="button"
-            >
-              <Globe2 size={13} /> EN <ChevronDown size={11} />
-            </button>
-          </nav>
-        </div>
-      </header>
+      <Navbar />
 
       {/* Main Authentication Area */}
       <div className="flex-1 py-6 sm:py-10 px-4 relative overflow-hidden flex flex-col items-center justify-center">
@@ -567,21 +523,7 @@ export default function LoginPage() {
         </Suspense>
       </div>
 
-      {/* Footer */}
-      <footer className="bg-[#071d49] text-white py-4 px-6">
-        <div className="w-full max-w-[1180px] mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-400">
-          <div className="flex items-center gap-2.5">
-            <WebLogo className="w-9 h-9" />
-            <div>
-              <p className="m-0 font-bold text-white text-xs">JABATAN IMIGRESEN MALAYSIA</p>
-              <p className="m-0 text-[10px] text-slate-400">Official Portal Immigration Department of Malaysia</p>
-            </div>
-          </div>
-          <div className="text-center sm:text-right text-[11px]">
-            <p className="m-0">© 2026 Immigration Department of Malaysia. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </main>
   );
 }

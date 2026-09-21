@@ -11,6 +11,16 @@ export type Company = {
 
 export const companies: Company[] = [
   {
+    id: 'natasha-construction',
+    name: 'NATASHA CONSTRUCTION SDN. BHD.',
+    roc: 'ROC-201801045921',
+    sector: 'Civil & Building Construction',
+    description: 'Specialized structural engineering, residential construction, and infrastructure projects.',
+    logo: '/images/companies/gamuda.svg',
+    tag: 'Active Quota',
+    totalWorkers: 3450,
+  },
+  {
     id: 'sime-darby',
     name: 'Sime Darby Plantation Berhad',
     roc: 'ROC-197001000284',

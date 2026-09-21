@@ -17,20 +17,10 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
+import Navbar from '@/components/Navbar';
+import Footer from '@/components/Footer';
 import { services, Service } from '@/lib/services';
 import { companies, Company } from '@/lib/companies';
-
-function WebLogo({ className = 'w-11 h-11' }: { className?: string }) {
-  return (
-    <div className={`flex items-center justify-center ${className} bg-white rounded-xl shadow-xs border border-slate-200/80 p-1 shrink-0 overflow-hidden`}>
-      <img
-        src="/images/registration-document.svg"
-        alt="Official Portal Logo"
-        className="w-full h-full object-contain"
-      />
-    </div>
-  );
-}
 
 function ServicesContent() {
   const router = useRouter();
@@ -91,7 +81,7 @@ function ServicesContent() {
 
             <div className="flex items-center gap-3 shrink-0">
               <Link
-                href="/#companies"
+                href="/companies"
                 className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2.5 rounded-xl border border-white/25 transition-all cursor-pointer"
               >
                 <Building2 size={15} />
@@ -254,55 +244,7 @@ function ServicesContent() {
 export default function ServicesPage() {
   return (
     <main className="min-h-screen bg-[#f1f4f8] flex flex-col justify-between text-slate-900">
-      {/* Top Strip */}
-      <div className="bg-[#061d4d] text-[#b8c9e6] text-[11px] py-2 px-6 flex justify-between items-center tracking-wide">
-        <span>Official portal of the Malaysian Immigration Department</span>
-        <span className="hidden sm:inline">Foreign Workers Division Management Console</span>
-      </div>
-
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="w-full max-w-[1180px] mx-auto px-6 h-18 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3" aria-label="Immigration Department Home">
-            <WebLogo />
-            <div className="flex flex-col">
-              <strong className="text-[#06245d] text-xs tracking-wider">
-                JABATAN IMIGRESEN MALAYSIA
-              </strong>
-              <small className="text-slate-400 text-[9px] tracking-widest uppercase">
-                IMMIGRATION DEPARTMENT OF MALAYSIA
-              </small>
-            </div>
-          </Link>
-
-          <nav className="flex items-center gap-6" aria-label="Quick navigation">
-            <Link
-              href="/"
-              className="text-xs font-semibold text-slate-600 hover:text-[#0b4da2] transition-colors hidden sm:inline-block"
-            >
-              Home
-            </Link>
-            <Link
-              href="/#companies"
-              className="text-xs font-semibold text-slate-600 hover:text-[#0b4da2] transition-colors"
-            >
-              Employers
-            </Link>
-            <Link
-              href="/services"
-              className="text-xs font-semibold text-[#0b4da2] transition-colors"
-            >
-              Services (Active)
-            </Link>
-            <button
-              className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 text-xs text-slate-700 font-medium cursor-pointer"
-              type="button"
-            >
-              <Globe2 size={13} /> EN <ChevronDown size={11} />
-            </button>
-          </nav>
-        </div>
-      </header>
+      <Navbar />
 
       <Suspense
         fallback={
@@ -314,22 +256,7 @@ export default function ServicesPage() {
         <ServicesContent />
       </Suspense>
 
-      {/* Footer */}
-      <footer className="bg-[#071d49] text-white py-4 px-6">
-        <div className="w-full max-w-[1180px] mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-xs text-slate-400">
-          <div className="flex items-center gap-2.5">
-            <WebLogo className="w-9 h-9" />
-            <div>
-              <p className="m-0 font-bold text-white text-xs">JABATAN IMIGRESEN MALAYSIA</p>
-              <p className="m-0 text-[10px] text-slate-400">Official Portal Immigration Department of Malaysia</p>
-            </div>
-          </div>
-          <div className="text-center sm:text-right text-[11px]">
-            <p className="m-0">© 2026 Immigration Department of Malaysia. All rights reserved.</p>
-            <p className="m-0 text-slate-500 mt-0.5">Foreign Workers Division Employer Gateway</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </main>
   );
 }
