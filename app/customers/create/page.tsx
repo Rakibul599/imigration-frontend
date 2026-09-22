@@ -34,6 +34,8 @@ import {
   CustomerRecord,
   createCustomer,
   fetchCustomerById,
+  getCustomerFromCache,
+  getFileUrl,
   updateCustomer,
 } from '@/lib/customerStorage';
 
@@ -46,6 +48,7 @@ function CreateCustomerContent() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [activeCompany, setActiveCompany] = useState<Company | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(Boolean(editId));
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Form Fields matching screenshot & requirements
@@ -72,6 +75,26 @@ function CreateCustomerContent() {
   const profileInputRef = useRef<HTMLInputElement | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
 
+  const populateFormFields = (cust: CustomerRecord) => {
+    setFullName(cust.full_name || '');
+    setNidNo(cust.nid_no || '');
+    setWorkerPhone(cust.worker_phone || '');
+    setGuardianPhone(cust.guardian_phone || '');
+    setLeavingAddress(cust.leaving_address || '');
+    setEmail(cust.email || '');
+    setUsername(cust.username || '');
+    setPassword(cust.password || '');
+    setBankAccountName(cust.bank_account_name || '');
+    setBankAccountNumber(cust.bank_account_number || '');
+    setRole(cust.role || 'Sales');
+    setPassportNo(cust.passport_no || '');
+    setTotalPayment(cust.total_payment || '');
+    setCompanyId(cust.company_id || companyParam || '');
+    setProfilePic(cust.profile_pic || '');
+    setDocuments(Array.isArray(cust.documents) ? cust.documents : []);
+    setStatus(cust.status || 'active');
+  };
+
   // Load companies & existing customer if editing
   useEffect(() => {
     const comps = getStoredCompanies();
@@ -95,27 +118,25 @@ function CreateCustomerContent() {
 
   useEffect(() => {
     if (editId) {
-      fetchCustomerById(editId).then((cust) => {
-        if (cust) {
-          setFullName(cust.full_name || '');
-          setNidNo(cust.nid_no || '');
-          setWorkerPhone(cust.worker_phone || '');
-          setGuardianPhone(cust.guardian_phone || '');
-          setLeavingAddress(cust.leaving_address || '');
-          setEmail(cust.email || '');
-          setUsername(cust.username || '');
-          setPassword(cust.password || '');
-          setBankAccountName(cust.bank_account_name || '');
-          setBankAccountNumber(cust.bank_account_number || '');
-          setRole(cust.role || 'Sales');
-          setPassportNo(cust.passport_no || '');
-          setTotalPayment(cust.total_payment || '');
-          setCompanyId(cust.company_id || companyParam || '');
-          setProfilePic(cust.profile_pic || '');
-          setDocuments(Array.isArray(cust.documents) ? cust.documents : []);
-          setStatus(cust.status || 'active');
-        }
-      });
+      // 1. Instant zero-lag hydration from local cache
+      const cached = getCustomerFromCache(editId);
+      if (cached) {
+        populateFormFields(cached);
+        setIsLoadingCustomer(false);
+      } else {
+        setIsLoadingCustomer(true);
+      }
+
+      // 2. Fresh background fetch from backend
+      fetchCustomerById(editId)
+        .then((cust) => {
+          if (cust) {
+            populateFormFields(cust);
+          }
+        })
+        .finally(() => {
+          setIsLoadingCustomer(false);
+        });
     }
   }, [editId, companyParam]);
 
@@ -302,10 +323,22 @@ function CreateCustomerContent() {
           </div>
         )}
 
-        {/* The Main Customer Form Container - Matching User Screenshot */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Card 1: User Details (Replicating exact layout from user screenshot) */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-xs">
+        {/* Loading Spinner for Edit State */}
+        {isLoadingCustomer ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-16 text-center shadow-xs flex flex-col items-center justify-center gap-3">
+            <div className="w-8 h-8 border-3 border-[#0b4da2] border-t-transparent rounded-full animate-spin" />
+            <p className="text-xs font-semibold text-slate-700 m-0">
+              Loading customer record #{editId} from database...
+            </p>
+            <p className="text-[11px] text-slate-400 m-0">
+              Please wait while credentials and biometric details are retrieved.
+            </p>
+          </div>
+        ) : (
+          /* The Main Customer Form Container - Matching User Screenshot */
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Card 1: User Details (Replicating exact layout from user screenshot) */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-xs">
             {/* Header matching screenshot */}
             <div className="mb-6 pb-4 border-b border-slate-100 flex items-center justify-between">
               <div>
@@ -323,7 +356,7 @@ function CreateCustomerContent() {
                   title="Upload profile picture"
                 >
                   {profilePic ? (
-                    <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                    <img src={getFileUrl(profilePic)} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     <Camera size={18} className="text-[#0b4da2] group-hover:scale-110 transition-transform" />
                   )}
@@ -653,9 +686,9 @@ function CreateCustomerContent() {
                     className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl shadow-xs text-xs group"
                   >
                     <div className="flex items-center gap-2.5 truncate">
-                      {doc.dataUrl && doc.type?.startsWith('image/') ? (
+                      {(doc.dataUrl || doc.url) && (doc.type?.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(doc.name || doc.url || '')) ? (
                         <img
-                          src={doc.dataUrl}
+                          src={getFileUrl(doc.url || doc.dataUrl)}
                           alt=""
                           className="w-8 h-8 object-cover rounded-md border border-slate-200 shrink-0"
                         />
@@ -709,8 +742,9 @@ function CreateCustomerContent() {
               <Save size={15} />
               <span>{isSubmitting ? 'Saving Customer...' : editId ? 'Save Changes' : 'Create Customer'}</span>
             </button>
-          </div>
-        </form>
+            </div>
+          </form>
+        )}
       </div>
 
       <Footer />

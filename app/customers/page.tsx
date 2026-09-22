@@ -30,7 +30,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { getStoredCompanies } from '@/lib/companyStorage';
 import { Company } from '@/lib/companies';
-import { CustomerRecord, fetchCustomers, deleteCustomer } from '@/lib/customerStorage';
+import { CustomerRecord, fetchCustomers, deleteCustomer, getFileUrl } from '@/lib/customerStorage';
 
 function CustomersContent() {
   const router = useRouter();
@@ -409,7 +409,7 @@ function CustomersContent() {
                               >
                                 {cust.profile_pic ? (
                                   <img
-                                    src={cust.profile_pic}
+                                    src={getFileUrl(cust.profile_pic)}
                                     alt={cust.full_name}
                                     className="w-full h-full object-cover"
                                   />

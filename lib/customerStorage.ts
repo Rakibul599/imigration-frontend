@@ -35,6 +35,53 @@ const LOCAL_STORAGE_KEY = 'agency_customers_cache';
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
 /**
+ * Resolves a file path or URL to an absolute URL accessible by the browser.
+ * If the path is a relative '/storage/...' path from Laravel, it prepends the backend base domain.
+ */
+export function getFileUrl(path?: string): string {
+  if (!path) return '';
+  if (
+    path.startsWith('data:') ||
+    path.startsWith('blob:') ||
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path;
+  }
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const backendBase = (process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api')
+    .replace(/\/api\/?$/, '');
+  return `${backendBase}${cleanPath}`;
+}
+
+function sanitizeForStorage(records: CustomerRecord[]): CustomerRecord[] {
+  return records.map((c) => ({
+    ...c,
+    // Strip heavy base64 dataUrl from documents to prevent QuotaExceededError in localStorage
+    documents: Array.isArray(c.documents)
+      ? c.documents.map(({ dataUrl, ...rest }) => rest)
+      : [],
+    // Prevent giant base64 strings from exhausting localStorage quota
+    profile_pic: c.profile_pic && c.profile_pic.length > 200000 ? '' : c.profile_pic,
+  }));
+}
+
+/**
+ * Synchronously get a customer from localStorage cache for instant zero-lag form hydration
+ */
+export function getCustomerFromCache(id: string | number): CustomerRecord | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (cached) {
+      const list: CustomerRecord[] = JSON.parse(cached);
+      return list.find((c) => String(c.id) === String(id)) || null;
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Fetch all customers from backend API, optionally filtered by company
  */
 export async function fetchCustomers(companyId?: string, search?: string): Promise<CustomerRecord[]> {
@@ -43,23 +90,31 @@ export async function fetchCustomers(companyId?: string, search?: string): Promi
     if (companyId) params.append('company_id', companyId);
     if (search) params.append('search', search);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const url = `${API_BASE}/customers${params.toString() ? `?${params.toString()}` : ''}`;
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
         if (typeof window !== 'undefined') {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+          try {
+            const sanitized = sanitizeForStorage(data);
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
+          } catch {}
         }
         return data;
       }
     }
   } catch (err) {
-    console.warn('Backend API unreachable for customers, using local cache:', err);
+    console.warn('Backend API unreachable or slow for customers, using local cache:', err);
   }
 
   // Fallback to local storage
@@ -90,34 +145,33 @@ export async function fetchCustomers(companyId?: string, search?: string): Promi
 }
 
 /**
- * Fetch single customer by ID
+ * Fetch single customer by ID (Instant cache lookup + fast background revalidate)
  */
 export async function fetchCustomerById(id: string | number): Promise<CustomerRecord | null> {
+  const cachedCustomer = getCustomerFromCache(id);
+
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     const res = await fetch(`${API_BASE}/customers/${id}`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
-      return await res.json();
+      const data = await res.json();
+      updateLocalCache(data, 'update');
+      return data;
     }
   } catch (err) {
-    console.warn('Error fetching customer by id:', err);
+    console.warn('Error or timeout fetching customer by id from backend:', err);
   }
 
-  // Fallback
-  if (typeof window !== 'undefined') {
-    try {
-      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (cached) {
-        const list: CustomerRecord[] = JSON.parse(cached);
-        const found = list.find((c) => String(c.id) === String(id));
-        if (found) return found;
-      }
-    } catch {}
-  }
-
-  return null;
+  // Return cached version if network is slow or offline
+  return cachedCustomer || null;
 }
 
 /**
@@ -236,7 +290,8 @@ function updateLocalCache(customer: CustomerRecord, action: 'create' | 'update')
     } else {
       list = list.map((c) => (String(c.id) === String(customer.id) ? customer : c));
     }
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
+    const sanitized = sanitizeForStorage(list);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
   } catch {}
 }
 

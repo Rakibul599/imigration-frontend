@@ -435,6 +435,46 @@ export default function CompaniesPage() {
           </div>
         )}
 
+        {/* Administrator Full Access Banner */}
+        {!isEmployeeRole && currentUser && (
+          <div className="mb-6 bg-blue-50/90 border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-[#0b4da2] text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-md">
+                    Administrator Full Access Active
+                  </span>
+                  <span className="text-xs text-slate-500 font-mono font-medium">
+                    ID: {currentUser.employee_code || 'ADMIN'}
+                  </span>
+                </div>
+                <div className="text-sm font-bold text-slate-900 mt-1">
+                  Logged in as: {currentUser.name}{' '}
+                  <span className="text-xs font-normal text-slate-500">
+                    ({currentUser.email})
+                  </span>
+                </div>
+                <div className="text-xs text-slate-600 mt-1">
+                  Viewing all <strong>{accessibleCompanies.length}</strong> employer companies. You have full create, edit, and delete permissions.
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#22a34a] hover:bg-[#1b843c] text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer border-0"
+              >
+                <Plus size={14} />
+                <span>Create Company</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Action Feedback Banner */}
         {actionFeedback && (
           <div

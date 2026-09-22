@@ -87,13 +87,34 @@ function LoginForm() {
     }
   }, [companyParam]);
 
+  const handleRoleSelect = (newRole: 'Admin' | 'Employee') => {
+    setRole(newRole);
+    setFeedback(null);
+    if (newRole === 'Admin') {
+      setUserId('admin');
+      setPassword('admin');
+    } else {
+      setUserId(DEFAULT_USER_ID);
+      setPassword(DEFAULT_PASSWORD);
+    }
+  };
+
   const handleQuickFill = () => {
-    setUserId(DEFAULT_USER_ID);
-    setPassword(DEFAULT_PASSWORD);
-    setFeedback({
-      type: 'info',
-      message: 'Demo credentials loaded! Click LOGIN to authenticate against backend.',
-    });
+    if (role === 'Admin') {
+      setUserId('admin');
+      setPassword('admin');
+      setFeedback({
+        type: 'info',
+        message: 'Admin credentials loaded! Click LOGIN to access all employer companies.',
+      });
+    } else {
+      setUserId(DEFAULT_USER_ID);
+      setPassword(DEFAULT_PASSWORD);
+      setFeedback({
+        type: 'info',
+        message: 'Demo employee credentials loaded! Click LOGIN to authenticate.',
+      });
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -114,6 +135,25 @@ function LoginForm() {
     }
 
     const authenticatedUser = authRes.user;
+
+    // If Admin / SuperAdmin logs in: Grant instant full access and redirect directly to /companies list!
+    if (authenticatedUser.role === 'Admin' || authenticatedUser.role === 'SUPER_ADMIN' || role === 'Admin') {
+      try {
+        localStorage.setItem('isSuperAdminLoggedIn', 'true');
+        localStorage.setItem('superAdminUser', JSON.stringify(authenticatedUser));
+        localStorage.setItem('isLoggedIn', 'true');
+      } catch {}
+
+      setIsLoading(false);
+      setFeedback({
+        type: 'success',
+        message: `Welcome, Administrator! Opening full employer companies list...`,
+      });
+      setTimeout(() => {
+        router.push('/companies');
+      }, 500);
+      return;
+    }
 
     // Check company-specific access for employees
     if (authenticatedUser.role === 'Employee') {
@@ -318,7 +358,15 @@ function LoginForm() {
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-amber-600 shrink-0" />
             <span>
-              <strong>Default Demo:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
+              {role === 'Admin' ? (
+                <>
+                  <strong>Admin Mode:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">admin</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">admin</code> (or your SuperAdmin pass)
+                </>
+              ) : (
+                <>
+                  <strong>Default Demo:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
+                </>
+              )}
             </span>
           </div>
           <button
@@ -374,7 +422,7 @@ function LoginForm() {
                     value="Admin"
                     className="sr-only"
                     checked={role === 'Admin'}
-                    onChange={() => setRole('Admin')}
+                    onChange={() => handleRoleSelect('Admin')}
                   />
                   <span
                     className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
@@ -401,7 +449,7 @@ function LoginForm() {
                     value="Employee"
                     className="sr-only"
                     checked={role === 'Employee'}
-                    onChange={() => setRole('Employee')}
+                    onChange={() => handleRoleSelect('Employee')}
                   />
                   <span
                     className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${

@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { CustomerRecord, fetchCustomerById } from '@/lib/customerStorage';
+import { CustomerRecord, fetchCustomerById, getCustomerFromCache, getFileUrl } from '@/lib/customerStorage';
 import { getStoredCompanies } from '@/lib/companyStorage';
 import { Company } from '@/lib/companies';
 
@@ -50,16 +50,24 @@ function CustomerDetailsContent() {
 
   useEffect(() => {
     if (customerId) {
-      setLoading(true);
+      // 1. Instant zero-lag cache hydration
+      const cached = getCustomerFromCache(customerId);
+      if (cached) {
+        setCustomer(cached);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
       fetchCustomerById(customerId)
         .then((data) => {
-          setCustomer(data);
+          if (data) {
+            setCustomer(data);
+          }
           const comps = getStoredCompanies();
-          if (data?.company_id) {
-            const found = comps.find((c) => c.id.toLowerCase() === data.company_id?.toLowerCase());
-            if (found) setActiveCompany(found);
-          } else if (companyParam) {
-            const found = comps.find((c) => c.id.toLowerCase() === companyParam.toLowerCase());
+          const targetCompanyId = data?.company_id || cached?.company_id || companyParam;
+          if (targetCompanyId) {
+            const found = comps.find((c) => c.id.toLowerCase() === targetCompanyId.toLowerCase());
             if (found) setActiveCompany(found);
           }
         })
@@ -205,7 +213,7 @@ function CustomerDetailsContent() {
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-blue-50 border-2 border-blue-200 flex items-center justify-center shrink-0 overflow-hidden font-extrabold text-2xl text-[#0b4da2] shadow-md">
                 {customer.profile_pic ? (
                   <img
-                    src={customer.profile_pic}
+                    src={getFileUrl(customer.profile_pic)}
                     alt={customer.full_name}
                     className="w-full h-full object-cover"
                   />
@@ -453,9 +461,9 @@ function CustomerDetailsContent() {
                     className="flex items-center justify-between p-3 bg-slate-50 hover:bg-blue-50/40 border border-slate-200 rounded-xl transition-colors text-xs"
                   >
                     <div className="flex items-center gap-3 truncate">
-                      {doc.dataUrl && doc.type?.startsWith('image/') ? (
+                      {(doc.dataUrl || doc.url) && (doc.type?.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(doc.name || doc.url || '')) ? (
                         <img
-                          src={doc.dataUrl}
+                          src={getFileUrl(doc.url || doc.dataUrl)}
                           alt=""
                           className="w-9 h-9 object-cover rounded-lg border border-slate-200 shrink-0"
                         />
@@ -475,19 +483,19 @@ function CustomerDetailsContent() {
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {doc.dataUrl && (
+                      {(doc.url || doc.dataUrl) && (
                         <button
                           type="button"
-                          onClick={() => setPreviewDoc({ name: doc.name, url: doc.dataUrl })}
+                          onClick={() => setPreviewDoc({ name: doc.name, url: getFileUrl(doc.url || doc.dataUrl) })}
                           className="px-2.5 py-1.5 bg-white hover:bg-blue-50 text-blue-700 rounded-lg border border-slate-200 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                         >
                           <Eye size={12} />
                           <span>View</span>
                         </button>
                       )}
-                      {doc.url && (
+                      {(doc.url || doc.dataUrl) && (
                         <a
-                          href={doc.url}
+                          href={getFileUrl(doc.url || doc.dataUrl)}
                           download={doc.name}
                           target="_blank"
                           rel="noreferrer"
@@ -546,7 +554,19 @@ function CustomerDetailsContent() {
               </button>
             </div>
             <div className="flex-1 overflow-auto flex items-center justify-center p-2 bg-slate-50 rounded-xl">
-              <img src={previewDoc.url} alt={previewDoc.name} className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-sm" />
+              {previewDoc.url?.toLowerCase().includes('.pdf') ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.name}
+                  className="w-full h-[65vh] rounded-lg border border-slate-200"
+                />
+              ) : (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.name}
+                  className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-sm"
+                />
+              )}
             </div>
             <div className="flex justify-end pt-3">
               <button
