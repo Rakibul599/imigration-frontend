@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Building2,
@@ -23,6 +24,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { companies, Company } from '@/lib/companies';
 import { services, Service } from '@/lib/services';
+import { authenticateEmployee } from '@/lib/auth';
 
 // Default Credentials for Demo
 const DEFAULT_USER_ID = 'DEMO2026';
@@ -57,7 +59,7 @@ function LoginForm() {
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     if (serviceParam) {
@@ -90,14 +92,52 @@ function LoginForm() {
     setPassword(DEFAULT_PASSWORD);
     setFeedback({
       type: 'info',
-      message: 'Demo credentials loaded! Click LOGIN to authenticate.',
+      message: 'Demo credentials loaded! Click LOGIN to authenticate against backend.',
     });
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setFeedback(null);
+
+    // Call backend POST /api/login
+    const authRes = await authenticateEmployee(userId, password, role);
+
+    if (!authRes.success || !authRes.user) {
+      setIsLoading(false);
+      setFeedback({
+        type: 'error',
+        message: authRes.message || 'Authentication failed. Please verify your User ID and password.',
+      });
+      return;
+    }
+
+    const authenticatedUser = authRes.user;
+
+    // Check company-specific access for employees
+    if (authenticatedUser.role === 'Employee') {
+      const allowedCompanies = authenticatedUser.assigned_companies || [];
+
+      // If user came via specific company link or service login
+      if (companyParam || isServiceLogin) {
+        const targetCompanyId = selectedCompany.id.toLowerCase();
+        const hasAccess = allowedCompanies.some(
+          (id) => id.toLowerCase() === targetCompanyId
+        );
+
+        if (!hasAccess) {
+          setIsLoading(false);
+          setFeedback({
+            type: 'error',
+            message: `Access Denied: Your employee profile (${authenticatedUser.name}) does not have permission to access "${selectedCompany.name}". You only have access to: ${
+              allowedCompanies.length > 0 ? allowedCompanies.join(', ') : 'No companies assigned'
+            }.`,
+          });
+          return;
+        }
+      }
+    }
 
     // Store active session in localStorage
     try {
@@ -108,52 +148,51 @@ function LoginForm() {
       localStorage.setItem('isLoggedIn', 'true');
     } catch {}
 
-    setTimeout(() => {
-      setIsLoading(false);
-      if (isServiceLogin) {
-        // If last card (work-information), redirect to the new MYPASS@JIM demo page!
-        const isLastCard =
-          selectedService.id === 'work-information' ||
-          selectedService.id === services[services.length - 1].id;
+    setIsLoading(false);
 
-        if (isLastCard) {
-          setFeedback({
-            type: 'success',
-            message: `Authentication verified for ${selectedService.title} (${selectedCompany.name})! Opening MYPASS@JIM Portal...`,
-          });
-          setTimeout(() => {
-            router.push(`/mypass?company=${encodeURIComponent(selectedCompany.id)}`);
-          }, 600);
-          return;
-        }
+    if (isServiceLogin) {
+      // If last card (work-information), redirect to the MYPASS@JIM demo page!
+      const isLastCard =
+        selectedService.id === 'work-information' ||
+        selectedService.id === services[services.length - 1].id;
 
+      if (isLastCard) {
         setFeedback({
           type: 'success',
-          message: `Authentication verified for ${selectedService.title} (${selectedCompany.name})! Opening authorized portal...`,
+          message: `Authenticated as ${authenticatedUser.name}! Opening MYPASS@JIM Portal...`,
         });
         setTimeout(() => {
-          router.push(
-            `/services?company=${encodeURIComponent(selectedCompany.id)}&verifiedService=${encodeURIComponent(selectedService.id)}`
-          );
-        }, 600);
-      } else if (companyParam) {
-        setFeedback({
-          type: 'success',
-          message: `Authentication verified for ${selectedCompany.name}! Loading digital service cards...`,
-        });
-        setTimeout(() => {
-          router.push(`/services?company=${encodeURIComponent(selectedCompany.id)}`);
+          router.push(`/mypass?company=${encodeURIComponent(selectedCompany.id)}`);
         }, 500);
-      } else {
-        setFeedback({
-          type: 'success',
-          message: `Authentication verified as ${role}! Loading company directory...`,
-        });
-        setTimeout(() => {
-          router.push('/companies');
-        }, 500);
+        return;
       }
-    }, 600);
+
+      setFeedback({
+        type: 'success',
+        message: `Authenticated as ${authenticatedUser.name}! Opening authorized portal...`,
+      });
+      setTimeout(() => {
+        router.push(
+          `/services?company=${encodeURIComponent(selectedCompany.id)}&verifiedService=${encodeURIComponent(selectedService.id)}`
+        );
+      }, 500);
+    } else if (companyParam) {
+      setFeedback({
+        type: 'success',
+        message: `Authenticated as ${authenticatedUser.name}! Loading ${selectedCompany.name}...`,
+      });
+      setTimeout(() => {
+        router.push(`/services?company=${encodeURIComponent(selectedCompany.id)}`);
+      }, 500);
+    } else {
+      setFeedback({
+        type: 'success',
+        message: `Welcome, ${authenticatedUser.name}! Loading your authorized companies...`,
+      });
+      setTimeout(() => {
+        router.push('/companies');
+      }, 500);
+    }
   };
 
   const handleForgotPassword = () => {
@@ -299,11 +338,15 @@ function LoginForm() {
               className={`p-3.5 rounded-xl flex items-start gap-2.5 text-xs font-semibold animate-in fade-in duration-200 ${
                 feedback.type === 'success'
                   ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                  : feedback.type === 'error'
+                  ? 'bg-rose-50 border border-rose-200 text-rose-800'
                   : 'bg-blue-50 border border-blue-200 text-blue-900'
               }`}
             >
               {feedback.type === 'success' ? (
                 <CheckCircle2 size={17} className="text-emerald-600 shrink-0 mt-0.5" />
+              ) : feedback.type === 'error' ? (
+                <AlertCircle size={17} className="text-rose-600 shrink-0 mt-0.5" />
               ) : (
                 <Info size={17} className="text-blue-600 shrink-0 mt-0.5" />
               )}
@@ -486,6 +529,18 @@ function LoginForm() {
             <span>256-bit SSL Protected</span>
           </span>
         </div>
+      </div>
+
+      {/* Super Administrator Portal Entry */}
+      <div className="mt-4 text-center">
+        <Link
+          href="/superadmin/login"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 text-xs font-semibold shadow-md transition-all border border-slate-700/80 no-underline"
+        >
+          <ShieldCheck size={14} className="text-emerald-400" />
+          <span>Super Administrator Access Portal</span>
+          <ArrowRight size={13} />
+        </Link>
       </div>
     </div>
   );

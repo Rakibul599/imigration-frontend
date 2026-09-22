@@ -8,6 +8,13 @@ export type Service = {
 
 export const services: Service[] = [
   {
+    id: 'customer',
+    title: 'Customer',
+    description: 'Manage registered customer profiles, workers & registration',
+    image: '/images/customer.svg',
+    tag: 'Primary',
+  },
+  {
     id: 'special-pass',
     title: 'Special Pass',
     description: 'Apply and manage your special pass',

@@ -8,6 +8,7 @@ import {
   Globe2,
   LogOut,
   Menu,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 
@@ -19,6 +20,7 @@ export default function Navbar() {
   const isAuthPage =
     pathname === '/companies' ||
     pathname.startsWith('/services') ||
+    pathname.startsWith('/customers') ||
     pathname.startsWith('/mypass');
 
   const handleLogout = () => {
@@ -35,6 +37,13 @@ export default function Navbar() {
         <span>Official portal for Foreign Workers &amp; Employer Services</span>
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline">Last updated: 06 September 2026</span>
+          <Link
+            href="/superadmin/login"
+            className="inline-flex items-center gap-1 text-emerald-300 hover:text-white font-semibold transition-colors no-underline text-xs"
+          >
+            <ShieldCheck size={12} />
+            <span>Super Admin</span>
+          </Link>
           {isAuthPage && (
             <button
               onClick={handleLogout}

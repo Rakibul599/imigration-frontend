@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
@@ -14,13 +15,16 @@ import {
   Globe2,
   LogOut,
   Search,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { services, Service } from '@/lib/services';
-import { companies, Company } from '@/lib/companies';
+import { Company } from '@/lib/companies';
+import { getStoredCompanies } from '@/lib/companyStorage';
+import { AuthUser, getCurrentUser, hasCompanyAccess } from '@/lib/auth';
 
 function ServicesContent() {
   const router = useRouter();
@@ -28,18 +32,36 @@ function ServicesContent() {
   const companyParam = searchParams.get('company');
   const verifiedServiceParam = searchParams.get('verifiedService');
 
+  const allCompanies = typeof window !== 'undefined' ? getStoredCompanies() : [];
   const activeCompany =
-    companies.find(
+    allCompanies.find(
       (c) =>
         c.id.toLowerCase() === (companyParam || '').toLowerCase() ||
         c.name.toLowerCase().includes((companyParam || '').toLowerCase())
-    ) || companies[0];
+    ) || allCompanies[0] || {
+      id: 'default-company',
+      name: 'AUTHORIZED EMPLOYER ENTITY',
+      roc: 'ROC-202600000000',
+      sector: 'General Services',
+      description: 'Authorized registered company.',
+      logo: '/images/companies/gamuda.svg',
+      tag: 'Verified JIM',
+      totalWorkers: 1000,
+    };
 
   const verifiedService = services.find(
     (s) => s.id.toLowerCase() === (verifiedServiceParam || '').toLowerCase()
   );
 
   const [query, setQuery] = useState('');
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    setCurrentUser(getCurrentUser());
+  }, []);
+
+  const isEmployee = currentUser?.role === 'Employee';
+  const hasAccess = !isEmployee || hasCompanyAccess(activeCompany.id);
 
   const filteredServices = services.filter((service) =>
     service.title.toLowerCase().includes(query.toLowerCase()) ||
@@ -48,6 +70,25 @@ function ServicesContent() {
 
   return (
     <div className="w-full">
+      {/* Access Restriction Warning for unauthorized employee */}
+      {isEmployee && !hasAccess && (
+        <div className="bg-rose-600 text-white py-3 px-6 shadow-md">
+          <div className="max-w-[1180px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 font-semibold">
+              <ShieldAlert size={18} className="shrink-0" />
+              <span>
+                Access Restricted: Your employee profile ({currentUser?.name}) does not have clearance for &quot;{activeCompany.name}&quot;. You only have access to your assigned companies.
+              </span>
+            </div>
+            <Link
+              href="/companies"
+              className="bg-white text-rose-700 hover:bg-rose-50 px-3.5 py-1.5 rounded-lg font-bold transition-colors shrink-0 text-center no-underline"
+            >
+              Switch to Assigned Company
+            </Link>
+          </div>
+        </div>
+      )}
       {/* Active Employer Banner Bar */}
       <section className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white py-8 sm:py-10 shadow-md">
         <div className="w-full max-w-[1180px] mx-auto px-6">
@@ -148,10 +189,10 @@ function ServicesContent() {
                 </span>
               </div>
               <h2 className="text-[#1a283c] text-3xl md:text-4xl font-extrabold tracking-tight m-0">
-                Digital Immigration Services (10)
+                Digital Immigration & Employer Services ({services.length})
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Click any service below to open the official login portal and manage foreign worker records for {activeCompany.name}.
+                Select any digital service below to manage profiles, workers, documents, and records for {activeCompany.name}.
               </p>
             </div>
             <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 w-full sm:w-72 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-sm">
@@ -170,9 +211,23 @@ function ServicesContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
             {filteredServices.map((service, index) => {
               const isCardVerified = verifiedServiceParam === service.id;
+              const cardHref =
+                service.id === 'customer'
+                  ? `/customers?company=${encodeURIComponent(activeCompany.id)}`
+                  : service.id === 'work-information'
+                  ? `/mypass?company=${encodeURIComponent(activeCompany.id)}`
+                  : `/services?company=${encodeURIComponent(activeCompany.id)}&verifiedService=${encodeURIComponent(service.id)}`;
+
+              const actionText =
+                service.id === 'customer'
+                  ? 'Open Customers'
+                  : service.id === 'work-information'
+                  ? 'Open MYPASS@JIM'
+                  : 'Access Service';
+
               return (
                 <Link
-                  href={`/login?service=${encodeURIComponent(service.id)}&company=${encodeURIComponent(activeCompany.id)}`}
+                  href={cardHref}
                   id={`service-card-${index}`}
                   key={service.title}
                   style={{ animationDelay: `${index * 50}ms` }}
@@ -206,7 +261,7 @@ function ServicesContent() {
                         )}
                         {isCardVerified && (
                           <span className="inline-flex items-center gap-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase pointer-events-none">
-                            <CheckCircle2 size={10} className="text-emerald-600" /> Authenticated
+                            <CheckCircle2 size={10} className="text-emerald-600" /> Active
                           </span>
                         )}
                       </div>
@@ -222,7 +277,7 @@ function ServicesContent() {
                       Official Portal
                     </span>
                     <span className="inline-flex items-center gap-1 font-semibold text-[#0b4da2] group-hover:translate-x-1 transition-transform">
-                      {isCardVerified ? 'Re-login Portal' : 'Login Portal'} <ArrowRight size={14} />
+                      {actionText} <ArrowRight size={14} />
                     </span>
                   </div>
                 </Link>
