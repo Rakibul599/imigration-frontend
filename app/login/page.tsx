@@ -61,6 +61,17 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
 
+  const errorParam = searchParams.get('error');
+
+  useEffect(() => {
+    if (errorParam === 'auth_required') {
+      setFeedback({
+        type: 'error',
+        message: 'Security Clearance Required: Please log in with your credentials to access the Company Directory & Services.',
+      });
+    }
+  }, [errorParam]);
+
   useEffect(() => {
     if (serviceParam) {
       const found = services.find(

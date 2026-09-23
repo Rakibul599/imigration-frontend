@@ -55,10 +55,38 @@ function ServicesContent() {
 
   const [query, setQuery] = useState('');
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   useEffect(() => {
-    setCurrentUser(getCurrentUser());
-  }, []);
+    const user = getCurrentUser();
+    const loggedIn =
+      typeof window !== 'undefined' && localStorage.getItem('isLoggedIn') === 'true';
+
+    if (!user || !loggedIn) {
+      router.replace('/login?redirect=/services&error=auth_required');
+      return;
+    }
+    setCurrentUser(user);
+    setIsAuthChecking(false);
+  }, [router]);
+
+  if (isAuthChecking || !currentUser) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col justify-center items-center text-slate-800 p-6 font-sans">
+        <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200/80 max-w-sm w-full text-center flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center animate-spin">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-800 m-0">Verifying Authorization...</h2>
+            <p className="text-xs text-slate-500 m-0 mt-1">
+              Authentication required to access Employer Services. Redirecting to login...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const isEmployee = currentUser?.role === 'Employee';
   const hasAccess = !isEmployee || hasCompanyAccess(activeCompany.id);

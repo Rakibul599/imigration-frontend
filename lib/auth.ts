@@ -44,6 +44,20 @@ export function getCurrentUser(): AuthUser | null {
 }
 
 /**
+ * Check if a user is currently authenticated
+ */
+export function isAuthenticated(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const user = getCurrentUser();
+    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    return Boolean(user && loggedIn);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Save current authenticated user to localStorage and dispatch update event
  */
 export function setCurrentUser(user: AuthUser, token?: string): void {

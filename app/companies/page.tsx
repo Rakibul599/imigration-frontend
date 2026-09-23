@@ -139,6 +139,7 @@ function BackgroundCanvas() {
 export default function CompaniesPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [companyList, setCompanyList] = useState<Company[]>([]);
   const [sortAsc, setSortAsc] = useState(true);
@@ -154,7 +155,17 @@ export default function CompaniesPage() {
 
   // Sync with persistent company storage, backend MySQL, and auth
   useEffect(() => {
-    setCurrentUser(getCurrentUser());
+    const user = getCurrentUser();
+    const loggedIn =
+      typeof window !== 'undefined' && localStorage.getItem('isLoggedIn') === 'true';
+
+    if (!user || !loggedIn) {
+      router.replace('/login?redirect=/companies&error=auth_required');
+      return;
+    }
+
+    setCurrentUser(user);
+    setIsAuthChecking(false);
     setCompanyList(getStoredCompanies());
     fetchCompaniesFromBackend()
       .then((list) => {
@@ -167,7 +178,12 @@ export default function CompaniesPage() {
     });
 
     const handleAuth = () => {
-      setCurrentUser(getCurrentUser());
+      const updatedUser = getCurrentUser();
+      if (!updatedUser) {
+        router.replace('/login?redirect=/companies&error=auth_required');
+        return;
+      }
+      setCurrentUser(updatedUser);
     };
     window.addEventListener('portal-auth-change', handleAuth);
     window.addEventListener('storage', handleAuth);
@@ -177,7 +193,7 @@ export default function CompaniesPage() {
       window.removeEventListener('portal-auth-change', handleAuth);
       window.removeEventListener('storage', handleAuth);
     };
-  }, []);
+  }, [router]);
 
   // Permission evaluation
   const isEmployeeRole = currentUser?.role === 'Employee';
@@ -301,6 +317,24 @@ export default function CompaniesPage() {
     logoutUser();
     router.push('/login');
   };
+
+  if (isAuthChecking || !currentUser) {
+    return (
+      <main className="min-h-screen bg-[#f8fafc] flex flex-col justify-center items-center text-slate-800 p-6 font-sans">
+        <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200/80 max-w-sm w-full text-center flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center animate-spin">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-800 m-0">Verifying Security Clearance...</h2>
+            <p className="text-xs text-slate-500 m-0 mt-1">
+              Authentication required to access Company Directory. Redirecting to login...
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col justify-between relative overflow-x-hidden font-sans">
