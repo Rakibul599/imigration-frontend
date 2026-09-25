@@ -1,26 +1,44 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import Select2Search, { Select2Option } from '@/components/Select2Search';
 import {
   AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
   BookOpen,
   Briefcase,
   Building2,
   CheckCircle2,
+  Coins,
+  CreditCard,
   Edit2,
   ExternalLink,
+  Eye,
   Filter,
-  Plus,
   RotateCcw,
   Search,
   ShieldCheck,
   Sparkles,
   Trash2,
+  TrendingUp,
+  UserCheck,
   Users,
+  UserX,
+  Wallet,
   X,
 } from 'lucide-react';
-import { Company } from '@/lib/companies';
+import {
+  Company,
+  resolveFileUrl,
+  getCompanyActiveWorkers,
+  getCompanyInactiveWorkers,
+  getCompanyIncomeWallet,
+  getCompanyCostWallet,
+  getCompanyProfitWallet,
+  getCompanyWorkerWallet,
+} from '@/lib/companies';
 import {
   deleteStoredCompany,
   fetchCompaniesFromBackend,
@@ -44,7 +62,7 @@ const SECTOR_OPTIONS = [
 
 const TAG_OPTIONS = [
   'Verified JIM',
-  'Active Quota',
+  'Verified Entity',
   'Tier 1 Employer',
   'Govt Certified',
   'Major Sponsor',
@@ -66,7 +84,6 @@ export default function SuperAdminCompaniesPage() {
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const [viewingCompany, setViewingCompany] = useState<Company | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -107,7 +124,7 @@ export default function SuperAdminCompaniesPage() {
     setFormRoc(`ROC-${new Date().getFullYear()}${Math.floor(10000000 + Math.random() * 90000000)}`);
     setFormSector(SECTOR_OPTIONS[0]);
     setFormCustomSector('');
-    setFormTag('Active Quota');
+    setFormTag('Verified Entity');
     setFormWorkers(1500);
     setFormLogo(LOGO_PRESETS[0].path);
     setFormDescription('Newly registered employer entity within the Malaysian Immigration portal.');
@@ -200,10 +217,33 @@ export default function SuperAdminCompaniesPage() {
   });
 
   const totalWorkersCount = companies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
+  const totalActiveWorkers = companies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
+  const totalInactiveWorkers = companies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
+  const totalWorkerWallet = companies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
+  const totalIncomeWallet = companies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
+  const totalCostWallet = companies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
+  const totalProfitWallet = companies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
   const distinctSectors = new Set(companies.map((c) => c.sector)).size;
 
+  const sectorFilterOptions: Select2Option[] = useMemo(() => [
+    { value: 'ALL', label: `All Sectors (${companies.length})`, badge: 'ALL' },
+    ...SECTOR_OPTIONS.map((sec) => ({
+      value: sec,
+      label: sec,
+      badge: `${companies.filter((c) => c.sector === sec).length}`,
+    })),
+  ], [companies]);
+
+  const modalSectorOptions: Select2Option[] = useMemo(() => [
+    ...SECTOR_OPTIONS.map((sec) => ({
+      value: sec,
+      label: sec,
+    })),
+    { value: 'OTHER', label: 'Other (Specify Below)' },
+  ], []);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full min-w-0">
       {/* Toast Notification */}
       {notification && (
         <div
@@ -249,77 +289,151 @@ export default function SuperAdminCompaniesPage() {
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-xs transition-colors cursor-pointer"
             >
               <RotateCcw size={14} />
-              <span className="hidden sm:inline">Reset Defaults</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-sm transition-all cursor-pointer border-0"
-            >
-              <Plus size={16} />
-              <span>Create New Company</span>
+              <span>Reset Defaults</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* White KPI Stat Cards */}
+      {/* 1. Primary Workforce & Registered Companies KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
-            <Building2 size={22} />
+        {/* Clickable Registered Companies Card */}
+        <Link
+          href="/superadmin/companies/registered"
+          title="Click to open Registered Companies List Page"
+          className="bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md rounded-xl p-4 shadow-xs flex items-center justify-between gap-3.5 transition-all group no-underline text-inherit cursor-pointer"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] group-hover:bg-[#0b4da2] group-hover:text-white flex items-center justify-center shrink-0 border border-blue-100 transition-colors">
+              <Building2 size={22} />
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0 group-hover:text-[#0b4da2] transition-colors">
+                Registered Companies
+              </p>
+              <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
+                {companies.length}
+              </p>
+              <span className="text-[10px] text-blue-600 font-semibold inline-flex items-center gap-1 mt-0.5">
+                <span>View Company List</span>
+                <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+              </span>
+            </div>
           </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Registered Companies
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {companies.length}
-            </p>
-          </div>
-        </div>
+        </Link>
 
+        {/* Total Active Foreign Worker */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-            <Users size={22} />
+            <UserCheck size={22} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Foreign Worker Quota
+              Total Active Foreign Worker
             </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {totalWorkersCount.toLocaleString()}
+            <p className="text-xl font-bold text-emerald-600 m-0 mt-0.5 font-mono">
+              {totalActiveWorkers.toLocaleString()}
             </p>
+            <span className="text-[10px] text-slate-400">Approved &amp; Active Permits</span>
           </div>
         </div>
 
+        {/* Total Inactive Foreign Worker */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
-            <Briefcase size={22} />
+          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+            <UserX size={22} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
+              Total Inactive Foreign Worker
+            </p>
+            <p className="text-xl font-bold text-slate-700 m-0 mt-0.5 font-mono">
+              {totalInactiveWorkers.toLocaleString()}
+            </p>
+            <span className="text-[10px] text-slate-400">Expired / Renewal Pending</span>
+          </div>
+        </div>
+
+        {/* Foreign Worker Wallet */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
+            <Wallet size={22} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
+              Foreign Worker Wallet
+            </p>
+            <p className="text-xl font-bold text-purple-700 m-0 mt-0.5 font-mono">
+              RM {totalWorkerWallet.toLocaleString()}
+            </p>
+            <span className="text-[10px] text-slate-400">Total Worker Funds Pool</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Financial Treasury Wallets Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Income Wallet */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-100">
+            <ArrowUpRight size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
+              Total Income Wallet
+            </p>
+            <p className="text-lg font-bold text-blue-700 m-0 mt-0.5 font-mono">
+              RM {totalIncomeWallet.toLocaleString()}
+            </p>
+            <span className="text-[10px] text-slate-400">Gross Service Inflow</span>
+          </div>
+        </div>
+
+        {/* Total Cost Wallet */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+            <ArrowDownRight size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
+              Total Cost Wallet
+            </p>
+            <p className="text-lg font-bold text-rose-700 m-0 mt-0.5 font-mono">
+              RM {totalCostWallet.toLocaleString()}
+            </p>
+            <span className="text-[10px] text-slate-400">Operational &amp; Levy Outflow</span>
+          </div>
+        </div>
+
+        {/* Total Profit Wallet */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+            <TrendingUp size={20} />
+          </div>
+          <div>
+            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
+              Total Profit Wallet
+            </p>
+            <p className="text-lg font-bold text-emerald-700 m-0 mt-0.5 font-mono">
+              RM {totalProfitWallet.toLocaleString()}
+            </p>
+            <span className="text-[10px] text-slate-400">Net Retained Margin</span>
+          </div>
+        </div>
+
+        {/* Covered Sectors & DB */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+            <Briefcase size={20} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
               Covered Sectors
             </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {distinctSectors}
+            <p className="text-lg font-bold text-slate-900 m-0 mt-0.5">
+              {distinctSectors} Sectors Active
             </p>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
-            <ShieldCheck size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Backend Database
-            </p>
-            <p className="text-xs font-bold text-emerald-700 m-0 mt-1 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Laravel API • MySQL Connected
-            </p>
+            <span className="text-[10px] text-emerald-600 font-semibold">● MySQL Database Live</span>
           </div>
         </div>
       </div>
@@ -349,143 +463,165 @@ export default function SuperAdminCompaniesPage() {
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Filter size={15} className="text-slate-500 shrink-0" />
-            <select
+          <div className="w-full sm:w-56">
+            <Select2Search
+              options={sectorFilterOptions}
               value={selectedSector}
-              onChange={(e) => setSelectedSector(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer w-full sm:w-auto shadow-xs"
-            >
-              <option value="ALL">All Sectors ({companies.length})</option>
-              {SECTOR_OPTIONS.map((sec) => (
-                <option key={sec} value={sec}>
-                  {sec}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedSector(val)}
+              placeholder="Filter Sector..."
+              searchPlaceholder="Search sectors..."
+              icon={<Filter size={14} className="text-slate-400" />}
+            />
           </div>
         </div>
       </div>
 
-      {/* The Signature Table Matching User's Frontend Screenshot */}
-      <div className="bg-white border border-slate-300 rounded-sm shadow-xs overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-[#22a34a] text-white text-xs font-bold">
-              <th className="py-3 px-4 border-r border-green-600/60 w-[45%]">
-                Company Name
-              </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[20%]">
-                ROC &amp; Sector Remark
-              </th>
-              <th className="py-3 px-4 border-r border-green-600/60 text-center w-[15%]">
-                Workers Quota
-              </th>
-              <th className="py-3 px-4 text-right w-[20%]">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 text-xs">
-            {filteredCompanies.map((company) => (
-              <tr
-                key={company.id}
-                className="hover:bg-blue-50/40 transition-colors group"
-              >
-                {/* Company Name with Logo */}
-                <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-white p-1 flex items-center justify-center shrink-0 border border-slate-200 shadow-xs">
-                      <img
-                        src={company.logo || '/images/companies/gamuda.svg'}
-                        alt={company.name}
-                        className="max-h-full max-w-full object-contain"
-                        onError={(e) => {
-                          (e.target as HTMLElement).setAttribute('src', '/images/companies/gamuda.svg');
-                        }}
-                      />
+      {/* The Signature Table Matching User's Required Columns */}
+      <div className="w-full max-w-full overflow-hidden bg-white border border-slate-300 rounded-sm shadow-xs">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#22a34a] text-white text-xs font-bold whitespace-nowrap">
+                <th className="py-3 px-4 border-r border-green-600/60 min-w-[200px]">
+                  Company Name
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 min-w-[130px]">
+                  ROC
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-center min-w-[130px]">
+                  Total Active Worker
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-center min-w-[130px]">
+                  Total Inactive Worker
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-right min-w-[135px]">
+                  Total Income Wallet
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-right min-w-[130px]">
+                  Total Cost Wallet
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-right min-w-[135px]">
+                  Total Profit Wallet
+                </th>
+                <th className="py-3 px-4 text-right min-w-[105px]">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-xs">
+              {filteredCompanies.map((company) => (
+                <tr
+                  key={company.id}
+                  className="hover:bg-blue-50/40 transition-colors group"
+                >
+                  {/* 1. Company Name with Logo */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-white p-1 flex items-center justify-center shrink-0 border border-slate-200 shadow-xs">
+                        <img
+                          src={resolveFileUrl(company.logo) || '/images/companies/gamuda.svg'}
+                          alt={company.name}
+                          className="max-h-full max-w-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLElement).setAttribute('src', '/images/companies/gamuda.svg');
+                          }}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <Link
+                          href={`/superadmin/companies/${encodeURIComponent(company.id)}`}
+                          className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-bold text-xs tracking-tight block truncate no-underline"
+                          title={company.name}
+                        >
+                          {company.name}
+                        </Link>
+                        <span className="text-[10px] text-slate-400 truncate block">
+                          {company.sector}
+                        </span>
+                      </div>
                     </div>
-                    <div>
+                  </td>
+
+                  {/* 2. ROC */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">
+                    {company.roc}
+                  </td>
+
+                  {/* 3. Total Active Worker */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold font-mono bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {getCompanyActiveWorkers(company).toLocaleString()}
+                    </span>
+                  </td>
+
+                  {/* 4. Total Inactive Worker */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold font-mono bg-slate-100 text-slate-600 border border-slate-200">
+                      {getCompanyInactiveWorkers(company).toLocaleString()}
+                    </span>
+                  </td>
+
+                  {/* 5. Total Income Wallet */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-right whitespace-nowrap font-mono font-bold text-xs text-blue-700">
+                    RM {getCompanyIncomeWallet(company).toLocaleString()}
+                  </td>
+
+                  {/* 6. Total Cost Wallet */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-right whitespace-nowrap font-mono font-semibold text-xs text-rose-700">
+                    RM {getCompanyCostWallet(company).toLocaleString()}
+                  </td>
+
+                  {/* 7. Total Profit Wallet */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-right whitespace-nowrap font-mono font-bold text-xs text-emerald-700">
+                    RM {getCompanyProfitWallet(company).toLocaleString()}
+                  </td>
+
+                  {/* 8. Action Buttons */}
+                  <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* View Full Company Profile Page */}
+                      <Link
+                        href={`/superadmin/companies/${encodeURIComponent(company.id)}`}
+                        title="View Full Company & Directors Profile"
+                        className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-blue-50 flex items-center justify-center text-slate-600 hover:text-[#0b4da2] transition-colors shadow-2xs no-underline"
+                      >
+                        <Eye size={15} />
+                      </Link>
+
+                      {/* Edit Company */}
+                      <Link
+                        href={`/superadmin/companies/create?id=${encodeURIComponent(company.id)}`}
+                        title="Edit Company Details"
+                        className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors shadow-2xs no-underline"
+                      >
+                        <Edit2 size={14} />
+                      </Link>
+
+                      {/* Delete Company */}
                       <button
                         type="button"
-                        onClick={() => setViewingCompany(company)}
-                        className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-semibold text-[13px] tracking-tight block text-left bg-transparent border-0 p-0 cursor-pointer"
+                        onClick={() => setDeleteConfirmId(company.id)}
+                        title="Delete Company Record"
+                        className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-red-50 flex items-center justify-center text-slate-600 hover:text-red-600 transition-colors cursor-pointer shadow-2xs"
                       >
-                        {company.name}
+                        <Trash2 size={14} />
                       </button>
-                      <span className="inline-block text-[11px] font-mono text-slate-500 mt-0.5">
-                        {company.roc}
-                      </span>
                     </div>
-                  </div>
-                </td>
+                  </td>
+                </tr>
+              ))}
 
-                {/* Sector Remark & Tag */}
-                <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-slate-600">
-                  <div className="space-y-1">
-                    <span className="text-slate-700 text-[11px] font-medium block">
-                      {company.sector}
-                    </span>
-                    <span className="inline-block text-[10px] font-semibold bg-emerald-100/70 text-emerald-800 px-2 py-0.5 rounded">
-                      {company.tag || 'Verified JIM'}
-                    </span>
-                  </div>
-                </td>
-
-                {/* Quota */}
-                <td className="py-3.5 px-4 border-r border-slate-200 text-center align-middle">
-                  <strong className="text-slate-800 text-xs block font-mono">
-                    {company.totalWorkers ? company.totalWorkers.toLocaleString() : '0'}
-                  </strong>
-                  <span className="text-[10px] text-slate-400">workers</span>
-                </td>
-
-                {/* Action Buttons matching screenshot style */}
-                <td className="py-3 px-4 align-middle text-right">
-                  <div className="flex items-center justify-end gap-1.5">
-                    {/* View Company Card inside Admin */}
-                    <button
-                      type="button"
-                      onClick={() => setViewingCompany(company)}
-                      title="View Company Details Card"
-                      className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors shadow-2xs cursor-pointer"
-                    >
-                      <BookOpen size={15} />
-                    </button>
-
-                    {/* Edit Company */}
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(company)}
-                      title="Edit Company Details"
-                      className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-
-                    {/* Delete Company */}
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmId(company.id)}
-                      title="Delete Company Record"
-                      className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-red-50 flex items-center justify-center text-slate-600 hover:text-red-600 transition-colors cursor-pointer shadow-2xs"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            {filteredCompanies.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-10 text-center text-slate-400 font-medium">
-                  No company found matching &quot;{searchTerm}&quot;.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              {filteredCompanies.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-10 text-center text-slate-400 font-medium">
+                    No company found matching &quot;{searchTerm}&quot;.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* CREATE / EDIT MODAL matching companies/page.tsx Modal */}
@@ -512,7 +648,7 @@ export default function SuperAdminCompaniesPage() {
                 </h2>
                 <p className="text-xs text-slate-500 m-0">
                   {editingCompany
-                    ? 'Update registered organization details and quota.'
+                    ? 'Update registered organization details and workforce.'
                     : 'Register a new employer organization in the Malaysian Immigration database.'}
                 </p>
               </div>
@@ -550,7 +686,7 @@ export default function SuperAdminCompaniesPage() {
 
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Foreign Worker Quota
+                    Foreign Worker
                   </label>
                   <input
                     type="number"
@@ -566,18 +702,13 @@ export default function SuperAdminCompaniesPage() {
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
                   Industry / Sector
                 </label>
-                <select
+                <Select2Search
+                  options={modalSectorOptions}
                   value={formSector}
-                  onChange={(e) => setFormSector(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 cursor-pointer bg-white"
-                >
-                  {SECTOR_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                  <option value="OTHER">Other (Specify Below)</option>
-                </select>
+                  onChange={(val) => setFormSector(val)}
+                  placeholder="Select Industry Sector..."
+                  searchPlaceholder="Search sectors..."
+                />
                 {formSector === 'OTHER' && (
                   <input
                     type="text"
@@ -703,107 +834,6 @@ export default function SuperAdminCompaniesPage() {
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border-0 shadow-xs"
               >
                 {isLoading ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* IN-ADMIN COMPANY DETAILS VIEW CARD MODAL */}
-      {viewingCompany && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setViewingCompany(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Header: Company Avatar & Identifiers */}
-            <div className="flex items-start gap-4 mb-5 pb-5 border-b border-slate-200">
-              <div className="w-16 h-16 rounded-2xl bg-white p-2 flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
-                <img
-                  src={viewingCompany.logo || '/images/companies/gamuda.svg'}
-                  alt={viewingCompany.name}
-                  className="max-h-full max-w-full object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLElement).setAttribute('src', '/images/companies/gamuda.svg');
-                  }}
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                    {viewingCompany.tag || 'Verified JIM'}
-                  </span>
-                  <span className="text-slate-500 font-mono text-[11px]">
-                    {viewingCompany.roc}
-                  </span>
-                </div>
-                <h2 className="text-base font-bold text-slate-900 m-0 leading-tight">
-                  {viewingCompany.name}
-                </h2>
-                <p className="text-xs text-[#0b4da2] font-semibold m-0 mt-0.5">
-                  {viewingCompany.sector}
-                </p>
-              </div>
-            </div>
-
-            {/* Two Column Metric Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-medium">
-                  Foreign Worker Quota
-                </span>
-                <span className="text-lg font-bold text-slate-900 font-mono mt-0.5 block">
-                  {viewingCompany.totalWorkers ? viewingCompany.totalWorkers.toLocaleString() : '0'}
-                </span>
-                <span className="text-[10px] text-emerald-600 font-semibold">Active Authorized Permits</span>
-              </div>
-
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <span className="text-[11px] text-slate-500 block font-medium">
-                  Database Identifier
-                </span>
-                <span className="text-xs font-bold text-slate-900 mt-1 block truncate font-mono">
-                  {viewingCompany.id}
-                </span>
-                <span className="text-[10px] text-blue-600 font-semibold">MySQL Record Connected</span>
-              </div>
-            </div>
-
-            {/* Scope & Description Card */}
-            <div className="mb-5 bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wide block mb-1">
-                Company Scope &amp; Remarks
-              </span>
-              <p className="text-xs text-slate-600 m-0 leading-relaxed">
-                {viewingCompany.description || 'Newly registered employer entity within the portal.'}
-              </p>
-            </div>
-
-            {/* Actions inside Modal */}
-            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => {
-                  const toEdit = viewingCompany;
-                  setViewingCompany(null);
-                  openEditModal(toEdit);
-                }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                <Edit2 size={13} />
-                <span>Edit Company</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setViewingCompany(null)}
-                className="px-5 py-2 bg-[#0b4da2] hover:bg-[#083c80] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer border-0 shadow-xs"
-              >
-                Close Card
               </button>
             </div>
           </div>

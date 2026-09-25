@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  BookOpen,
   Building2,
   ChevronRight,
   ExternalLink,
@@ -140,7 +139,7 @@ export default function SuperAdminLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden">
       {/* Top Strip matching official frontend */}
       <div className="top-strip z-50">
         <span>Official Super Administrator Portal</span>
@@ -156,7 +155,7 @@ export default function SuperAdminLayout({
         </div>
       </div>
 
-      <div className="flex-1 flex relative">
+      <div className="flex-1 flex relative min-w-0 max-w-full">
         {/* Mobile Backdrop */}
         {mobileMenuOpen && (
           <div
@@ -221,7 +220,8 @@ export default function SuperAdminLayout({
                   const Icon = link.icon;
                   const isActive =
                     pathname === link.href ||
-                    (link.href !== '/superadmin' && pathname.startsWith(link.href));
+                    (link.href === '/superadmin/companies' && pathname.startsWith('/superadmin/companies')) ||
+                    (link.href !== '/superadmin' && link.href !== '/superadmin/companies' && pathname.startsWith(link.href));
 
                   return (
                     <Link
@@ -358,7 +358,7 @@ export default function SuperAdminLayout({
 
         {/* Main Content Area */}
         <div
-          className={`flex-1 flex flex-col min-h-[calc(100vh-32px)] transition-all duration-300 ${
+          className={`flex-1 flex flex-col min-h-[calc(100vh-32px)] min-w-0 max-w-full overflow-x-hidden transition-all duration-300 ${
             sidebarOpen ? 'lg:pl-64' : 'lg:pl-20'
           }`}
         >
@@ -401,7 +401,7 @@ export default function SuperAdminLayout({
           </header>
 
           {/* White/Light Page Body */}
-          <main className="flex-1 p-4 sm:p-8 bg-[#f8fafc]">{children}</main>
+          <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-4 sm:p-8 bg-[#f8fafc]">{children}</main>
 
           {/* White Footer */}
           <footer className="border-t border-slate-200 bg-white py-4 px-8 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">

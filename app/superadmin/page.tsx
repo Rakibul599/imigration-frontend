@@ -13,7 +13,7 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import { Company } from '@/lib/companies';
+import { Company, resolveFileUrl } from '@/lib/companies';
 import {
   fetchCompaniesFromBackend,
   getStoredCompanies,
@@ -51,7 +51,7 @@ export default function SuperAdminDashboard() {
             Central Management Panel
           </h1>
           <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed m-0 mb-6">
-            Authorized administrative gateway for managing employer records, quotas, and verified company directory. Integrated with Laravel 11 Backend &amp; MySQL.
+            Authorized administrative gateway for managing employer records, foreign worker permits, and verified company directory. Integrated with Laravel 11 Backend &amp; MySQL.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Link
@@ -77,12 +77,16 @@ export default function SuperAdminDashboard() {
 
       {/* KPI Cards (Pure White) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <Link
+          href="/superadmin/companies/registered"
+          title="Open Registered Companies Directory"
+          className="bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md rounded-xl p-5 shadow-xs transition-all group no-underline text-inherit block cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors">
               Registered Companies
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] group-hover:bg-[#0b4da2] group-hover:text-white flex items-center justify-center transition-colors">
               <Building2 size={16} />
             </div>
           </div>
@@ -91,14 +95,14 @@ export default function SuperAdminDashboard() {
           </div>
           <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium">
             <TrendingUp size={12} />
-            <span>Active registered employers</span>
+            <span>Active registered employers • View Directory →</span>
           </div>
-        </div>
+        </Link>
 
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
-              Total Quota
+              Total Foreign Workers
             </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Users size={16} />
@@ -169,7 +173,7 @@ export default function SuperAdminDashboard() {
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-white p-1 flex items-center justify-center shrink-0 border border-slate-200 shadow-2xs">
                   <img
-                    src={company.logo || '/images/companies/gamuda.svg'}
+                    src={resolveFileUrl(company.logo) || '/images/companies/gamuda.svg'}
                     alt={company.name}
                     className="max-h-full max-w-full object-contain"
                   />

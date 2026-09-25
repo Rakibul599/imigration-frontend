@@ -186,7 +186,7 @@ function ServicesContent() {
                     </span>
                   </h4>
                   <p className="text-xs text-emerald-800 m-0 mt-0.5">
-                    Full digital quota and worker records synchronized for {activeCompany.name} ({activeCompany.roc}).
+                    Full digital workforce and worker records synchronized for {activeCompany.name} ({activeCompany.roc}).
                   </p>
                 </div>
               </div>

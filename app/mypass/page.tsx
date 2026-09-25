@@ -365,7 +365,7 @@ function MyPassDashboard() {
                 </span>
               </div>
               <p className="text-slate-500 m-0 mt-0.5">
-                Active Employer Quota: Foreign Worker Temporary Employment Pass (e-PLKS) Records
+                Active Employer Roster: Foreign Worker Temporary Employment Pass (e-PLKS) Records
               </p>
             </div>
           </div>

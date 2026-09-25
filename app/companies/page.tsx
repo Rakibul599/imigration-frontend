@@ -537,7 +537,7 @@ export default function CompaniesPage() {
             <div className="flex items-center gap-2.5">
               <Sparkles className="text-blue-600 shrink-0" size={18} />
               <span>
-                <strong>Subscription Portal Active:</strong> Enterprise multi-entity license valid through 2026. All company quotas and foreign worker biometric records verified.
+                <strong>Subscription Portal Active:</strong> Enterprise multi-entity license valid through 2026. All company workforce allocations and foreign worker biometric records verified.
               </span>
             </div>
             <button
@@ -885,7 +885,7 @@ export default function CompaniesPage() {
                   <strong className="text-slate-800">{showSettingsModal.sector}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Quota Status:</span>
+                  <span className="text-slate-500">Permit Status:</span>
                   <span className="text-emerald-700 font-semibold bg-emerald-100/70 px-2 py-0.5 rounded">
                     {showSettingsModal.tag || 'Verified JIM'}
                   </span>

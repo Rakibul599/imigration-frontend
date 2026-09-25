@@ -7,7 +7,8 @@ const STORAGE_EVENT = 'agency_companies_updated';
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
 /**
- * Fetch companies directly from the Laravel backend database.
+ * Fetch companies directly from the Laravel backend database,
+ * merging with localStorage so local custom directors, files, and contact info are preserved.
  */
 export async function fetchCompaniesFromBackend(): Promise<Company[]> {
   try {
@@ -19,8 +20,30 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          const current = getStoredCompanies();
+          const merged = data.map((bComp: Company) => {
+            const local = current.find((c) => c.id === bComp.id);
+            if (local) {
+              return {
+                ...local,
+                ...bComp,
+                directors: bComp.directors && bComp.directors.length > 0 ? bComp.directors : (local.directors || []),
+                address: bComp.address || local.address,
+                phone: bComp.phone || local.phone,
+                email: bComp.email || local.email,
+                currency: bComp.currency || local.currency,
+                language: bComp.language || local.language,
+                bankName: bComp.bankName || local.bankName,
+                bankAccountNo: bComp.bankAccountNo || local.bankAccountNo,
+              };
+            }
+            return bComp;
+          });
+          const localOnly = current.filter((c) => !data.some((b: Company) => b.id === c.id));
+          const finalList = [...merged, ...localOnly];
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(finalList));
           window.dispatchEvent(new Event(STORAGE_EVENT));
+          return finalList;
         }
         return data;
       }
@@ -60,7 +83,51 @@ export function getStoredCompanies(): Company[] {
 }
 
 /**
- * Save a new company to backend API and local storage.
+ * Find a single company by ID or ROC from localStorage.
+ */
+export function getCompanyById(id: string): Company | null {
+  if (!id) return null;
+  const list = getStoredCompanies();
+  const normalized = decodeURIComponent(id).trim().toLowerCase();
+  return (
+    list.find(
+      (c) =>
+        c.id.toLowerCase() === normalized ||
+        c.roc.toLowerCase() === normalized ||
+        c.id === id ||
+        c.roc === id
+    ) || null
+  );
+}
+
+/**
+ * Convert any File (Image, PDF, Document) to Base64 with metadata for local storage.
+ */
+export function fileToBase64(file: File): Promise<{
+  fileName: string;
+  fileSize: string;
+  fileType: string;
+  fileData: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const sizeInKb = Math.round(file.size / 1024);
+      const sizeStr = sizeInKb > 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${sizeInKb} KB`;
+      resolve({
+        fileName: file.name,
+        fileSize: sizeStr,
+        fileType: file.type || 'application/octet-stream',
+        fileData: reader.result as string,
+      });
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Save a new company to local storage and optionally backend API.
  */
 export async function saveStoredCompany(newCompany: Company): Promise<Company[]> {
   const current = getStoredCompanies();
@@ -68,6 +135,8 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
   const companyToSave: Company = {
     ...newCompany,
     id: sanitizedId,
+    createdAt: newCompany.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   const existingIdx = current.findIndex((c) => c.id === companyToSave.id);
@@ -81,11 +150,15 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
 
   // Update localStorage immediately for fast UI response
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new Event(STORAGE_EVENT));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event(STORAGE_EVENT));
+    } catch (storageErr) {
+      console.error('LocalStorage quota exceeded or error saving company:', storageErr);
+    }
   }
 
-  // Persist to Laravel backend MySQL
+  // Persist to Laravel backend MySQL and Disk Storage
   try {
     const res = await fetch(`${API_BASE}/companies`, {
       method: 'POST',
@@ -94,6 +167,7 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
         Accept: 'application/json',
       },
       body: JSON.stringify({
+        id: companyToSave.id,
         name: companyToSave.name,
         roc: companyToSave.roc,
         sector: companyToSave.sector,
@@ -101,11 +175,22 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
         logo: companyToSave.logo,
         tag: companyToSave.tag,
         totalWorkers: companyToSave.totalWorkers,
+        address: companyToSave.address,
+        phone: companyToSave.phone,
+        email: companyToSave.email,
+        currency: companyToSave.currency,
+        language: companyToSave.language,
+        bankName: companyToSave.bankName,
+        bankAccountNo: companyToSave.bankAccountNo,
+        directors: companyToSave.directors,
       }),
     });
     if (res.ok) {
       const saved = await res.json();
-      const finalUpdated = updated.map((c) => (c.id === companyToSave.id ? saved : c));
+      // Update with server disk paths returned by backend
+      const finalUpdated = updated.map((c) =>
+        c.id === companyToSave.id ? { ...companyToSave, ...saved, db_id: saved.db_id } : c
+      );
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(finalUpdated));
         window.dispatchEvent(new Event(STORAGE_EVENT));
@@ -120,34 +205,61 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
 }
 
 /**
- * Update an existing company in backend API and local storage.
+ * Update an existing company in local storage and backend API.
  */
 export async function updateStoredCompany(company: Company): Promise<Company[]> {
   const current = getStoredCompanies();
-  const updated = current.map((c) => (c.id === company.id ? company : c));
+  const companyToSave = {
+    ...company,
+    updatedAt: new Date().toISOString(),
+  };
+  const updated = current.map((c) => (c.id === companyToSave.id ? companyToSave : c));
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new Event(STORAGE_EVENT));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event(STORAGE_EVENT));
+    } catch (storageErr) {
+      console.error('LocalStorage error updating company:', storageErr);
+    }
   }
 
   try {
-    await fetch(`${API_BASE}/companies/${encodeURIComponent(company.id)}`, {
+    const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(companyToSave.id)}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        name: company.name,
-        roc: company.roc,
-        sector: company.sector,
-        description: company.description,
-        logo: company.logo,
-        tag: company.tag,
-        totalWorkers: company.totalWorkers,
+        name: companyToSave.name,
+        roc: companyToSave.roc,
+        sector: companyToSave.sector,
+        description: companyToSave.description,
+        logo: companyToSave.logo,
+        tag: companyToSave.tag,
+        totalWorkers: companyToSave.totalWorkers,
+        address: companyToSave.address,
+        phone: companyToSave.phone,
+        email: companyToSave.email,
+        currency: companyToSave.currency,
+        language: companyToSave.language,
+        bankName: companyToSave.bankName,
+        bankAccountNo: companyToSave.bankAccountNo,
+        directors: companyToSave.directors,
       }),
     });
+    if (res.ok) {
+      const saved = await res.json();
+      const finalUpdated = updated.map((c) =>
+        c.id === companyToSave.id ? { ...companyToSave, ...saved, db_id: saved.db_id } : c
+      );
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(finalUpdated));
+        window.dispatchEvent(new Event(STORAGE_EVENT));
+      }
+      return finalUpdated;
+    }
   } catch (err) {
     console.warn('Backend update failed, updated in local cache:', err);
   }

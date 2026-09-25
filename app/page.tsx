@@ -165,8 +165,8 @@ export default function Home() {
       <section className="intro-section" id="information">
         <div className="container intro-content">
           <div className="section-kicker">ENTERPRISE DIRECTORY & LEDGER</div>
-          <h2>Verified Employers & Corporate Accounts.<br /><span>Direct Quota & Payroll Access.</span></h2>
-          <p>Sign in to your registered Malaysian corporate account to manage ledger books, quotas, foreign worker permits, and medical records.</p>
+          <h2>Verified Employers & Corporate Accounts.<br /><span>Direct Workforce & Payroll Access.</span></h2>
+          <p>Sign in to your registered Malaysian corporate account to manage ledger books, workforce allocation, foreign worker permits, and medical records.</p>
         </div>
         <div className="intro-stat">
           <strong>7+</strong>
@@ -180,7 +180,7 @@ export default function Home() {
           <div>
             <p className="section-kicker">OFFICIAL AND SECURE</p>
             <h2>Your company records are protected.</h2>
-            <p>Direct integration with official regulatory departments for verified employer quota & foreign worker processing.</p>
+            <p>Direct integration with official regulatory departments for verified employer & foreign worker processing.</p>
           </div>
           <a href="#contact" className="button button--outline">Security information <ArrowUpRight size={17} /></a>
         </div>

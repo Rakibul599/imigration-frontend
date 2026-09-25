@@ -253,7 +253,7 @@ export default function SuperAdminLoginPage() {
             <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-3.5 flex items-start gap-3 text-xs text-blue-900 leading-relaxed mt-1">
               <Info size={19} className="text-blue-600 shrink-0 mt-0.5" />
               <p className="m-0 text-blue-900 font-normal">
-                This console allows privileged administrative access to manage employer organizations, foreign worker quotas, and system configurations.
+                This console allows privileged administrative access to manage employer organizations, foreign workers, and system configurations.
               </p>
             </div>
           </form>
