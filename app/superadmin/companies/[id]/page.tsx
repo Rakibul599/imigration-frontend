@@ -40,6 +40,7 @@ import {
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
 import ExcelSheetEditorModal from '@/components/ExcelSheetEditorModal';
+import WordDocumentEditorModal from '@/components/WordDocumentEditorModal';
 
 export default function SuperAdminCompanyDetailsPage() {
   const router = useRouter();
@@ -49,6 +50,7 @@ export default function SuperAdminCompanyDetailsPage() {
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedExcelDoc, setSelectedExcelDoc] = useState<DirectorExcelDocument | null>(null);
+  const [selectedWordDoc, setSelectedWordDoc] = useState<DirectorExcelDocument | null>(null);
   const [previewFile, setPreviewFile] = useState<{
     name: string;
     url: string;
@@ -617,49 +619,80 @@ export default function SuperAdminCompanyDetailsPage() {
                       </div>
                     ))}
 
-                    {/* Excel Spreadsheets & Documents */}
-                    {dir.excelDocuments && dir.excelDocuments.map((xDoc, xIdx) => (
-                      <div
-                        key={xDoc.id || xIdx}
-                        className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between gap-3 text-xs"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <FileSpreadsheet size={18} className="text-emerald-700 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-semibold block text-slate-800 truncate">
-                              {xDoc.name || 'Excel Spreadsheet'}
-                            </span>
-                            <span className="text-[11px] text-slate-500 block truncate">
-                              {xDoc.fileName} {xDoc.fileSize ? `(${xDoc.fileSize})` : ''}
-                            </span>
-                          </div>
-                        </div>
+                    {/* Excel Spreadsheets & Word Documents */}
+                    {dir.excelDocuments &&
+                      dir.excelDocuments.map((xDoc, xIdx) => {
+                        const isWord =
+                          xDoc.category === 'word' ||
+                          xDoc.fileName?.toLowerCase().endsWith('.docx') ||
+                          xDoc.fileName?.toLowerCase().endsWith('.doc');
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Eye Icon to View Spreadsheet */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedExcelDoc(xDoc)}
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border border-emerald-300"
-                            title="View Spreadsheet in Microsoft Excel"
+                        return (
+                          <div
+                            key={xDoc.id || xIdx}
+                            className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                              isWord ? 'bg-blue-50/60 border-blue-200' : 'bg-emerald-50/70 border-emerald-200'
+                            }`}
                           >
-                            <Eye size={12} />
-                            <span>View</span>
-                          </button>
+                            <div className="flex items-center gap-2.5 truncate">
+                              {isWord ? (
+                                <div className="w-6 h-6 rounded bg-[#2b579a] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-2xs">
+                                  W
+                                </div>
+                              ) : (
+                                <FileSpreadsheet size={18} className="text-emerald-700 shrink-0" />
+                              )}
+                              <div className="truncate">
+                                <span className="font-semibold block text-slate-800 truncate">
+                                  {xDoc.name || (isWord ? 'Word Document' : 'Excel Spreadsheet')}
+                                </span>
+                                <span className="text-[11px] text-slate-500 block truncate">
+                                  {xDoc.fileName} {xDoc.fileSize ? `(${xDoc.fileSize})` : ''}{' '}
+                                  {isWord ? '• Word Document' : '• Spreadsheet'}
+                                </span>
+                              </div>
+                            </div>
 
-                          {xDoc.fileData && (
-                            <a
-                              href={resolveFileUrl(xDoc.fileData)}
-                              download={xDoc.fileName}
-                              className="px-2.5 py-1.5 rounded-lg bg-white text-emerald-800 hover:bg-emerald-50 font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border border-emerald-300 no-underline"
-                            >
-                              <Download size={12} />
-                              <span>Download</span>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Eye Icon to View Document */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isWord) {
+                                    setSelectedWordDoc(xDoc);
+                                  } else {
+                                    setSelectedExcelDoc(xDoc);
+                                  }
+                                }}
+                                className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border ${
+                                  isWord
+                                    ? 'bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-300'
+                                    : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-300'
+                                }`}
+                                title={isWord ? 'View Document in Microsoft Word' : 'View Spreadsheet in Microsoft Excel'}
+                              >
+                                <Eye size={12} />
+                                <span>View</span>
+                              </button>
+
+                              {xDoc.fileData && (
+                                <a
+                                  href={resolveFileUrl(xDoc.fileData)}
+                                  download={xDoc.fileName}
+                                  className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border no-underline bg-white ${
+                                    isWord
+                                      ? 'text-blue-800 hover:bg-blue-50 border-blue-300'
+                                      : 'text-emerald-800 hover:bg-emerald-50 border-emerald-300'
+                                  }`}
+                                >
+                                  <Download size={12} />
+                                  <span>Download</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               </div>
@@ -765,6 +798,16 @@ export default function SuperAdminCompanyDetailsPage() {
           onClose={() => setSelectedExcelDoc(null)}
           onSave={() => setSelectedExcelDoc(null)}
           initialDocument={selectedExcelDoc}
+        />
+      )}
+
+      {/* Word Document Viewer Modal */}
+      {selectedWordDoc && (
+        <WordDocumentEditorModal
+          isOpen={!!selectedWordDoc}
+          onClose={() => setSelectedWordDoc(null)}
+          onSave={() => setSelectedWordDoc(null)}
+          initialDocument={selectedWordDoc}
         />
       )}
     </div>

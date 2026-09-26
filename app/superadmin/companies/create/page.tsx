@@ -54,7 +54,9 @@ import Select2Search from '@/components/Select2Search';
 import { ALL_WORLD_LANGUAGES } from '@/lib/languages';
 import { ALL_WORLD_CURRENCIES } from '@/lib/currencies';
 import ExcelSheetEditorModal from '@/components/ExcelSheetEditorModal';
+import WordDocumentEditorModal from '@/components/WordDocumentEditorModal';
 import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -156,6 +158,14 @@ function CreateCompanyFormContent() {
   // Excel Modal State
   const [isExcelEditorOpen, setIsExcelEditorOpen] = useState(false);
   const [editingExcelInfo, setEditingExcelInfo] = useState<{
+    directorIndex: number;
+    docIndex: number | null;
+    doc: DirectorExcelDocument | null;
+  } | null>(null);
+
+  // Word Modal State
+  const [isWordEditorOpen, setIsWordEditorOpen] = useState(false);
+  const [editingWordInfo, setEditingWordInfo] = useState<{
     directorIndex: number;
     docIndex: number | null;
     doc: DirectorExcelDocument | null;
@@ -384,7 +394,7 @@ function CreateCompanyFormContent() {
     });
   };
 
-  // Excel Handlers (Upload / Create / Edit)
+  // Office Documents Handlers (Upload / Create / Edit for Excel & Word)
   const handleExcelFileUpload = async (directorIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -392,8 +402,74 @@ function CreateCompanyFormContent() {
     try {
       const fileName = file.name;
       const sizeKB = (file.size / 1024).toFixed(1);
-      const isCsv = fileName.toLowerCase().endsWith('.csv');
+      const lowerName = fileName.toLowerCase();
+      const isDocx = lowerName.endsWith('.docx') || lowerName.endsWith('.doc');
+      const isCsv = lowerName.endsWith('.csv');
+      const docTitle = fileName.replace(/\.[^/.]+$/, '').trim() || (isDocx ? 'Word_Document' : 'Spreadsheet');
 
+      if (isDocx) {
+        // Microsoft Word document (.docx / .doc)
+        let htmlContent = '';
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          if (lowerName.endsWith('.docx')) {
+            const res = await mammoth.convertToHtml({ arrayBuffer });
+            htmlContent = res.value || '';
+          }
+        } catch (docxErr) {
+          console.warn('Word docx parsing warning:', docxErr);
+        }
+
+        if (!htmlContent.trim()) {
+          htmlContent = `
+            <h1 style="color: #2b579a; font-size: 20pt; font-weight: bold; margin-bottom: 8pt;">
+              ${docTitle}
+            </h1>
+            <p style="color: #555; font-size: 11pt; line-height: 1.6; margin-bottom: 12pt;">
+              <strong>Document Reference:</strong> ${fileName}<br />
+              <strong>File Format:</strong> Microsoft Word Document (.docx)
+            </p>
+            <hr style="border: 0; border-top: 1px solid #d4d4d4; margin: 16pt 0;" />
+            <p style="font-size: 11pt; line-height: 1.8; color: #222;">
+              This official document has been attached to the director profile. You can view, format, and edit this document directly using the built-in Microsoft Word editor.
+            </p>
+          `;
+        }
+
+        const converted = await fileToBase64(file);
+        const newWordDoc: DirectorExcelDocument = {
+          id: `word-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          name: docTitle,
+          fileName,
+          fileSize: `${sizeKB} KB`,
+          fileType: file.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          fileData: converted.fileData,
+          category: 'word',
+          htmlContent,
+          headers: [],
+          rows: [],
+          updatedAt: new Date().toISOString(),
+        };
+
+        setDirectors((prev) => {
+          const copy = [...prev];
+          const cur = copy[directorIndex].excelDocuments ? [...copy[directorIndex].excelDocuments!] : [];
+          const existingIdx = cur.findIndex(
+            (d) => d.fileName.toLowerCase() === fileName.toLowerCase() || d.name.toLowerCase() === docTitle.toLowerCase()
+          );
+          if (existingIdx >= 0) {
+            cur[existingIdx] = { ...newWordDoc, id: cur[existingIdx].id };
+          } else {
+            cur.push(newWordDoc);
+          }
+          copy[directorIndex].excelDocuments = cur;
+          return copy;
+        });
+
+        return;
+      }
+
+      // Handle Excel / CSV
       let headers: string[] = [];
       let rows: string[][] = [];
 
@@ -454,7 +530,6 @@ function CreateCompanyFormContent() {
       }
 
       const converted = await fileToBase64(file);
-      const docTitle = fileName.replace(/\.[^/.]+$/, '').trim() || 'Imported_Spreadsheet';
 
       const newDoc: DirectorExcelDocument = {
         id: `excel-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -463,6 +538,7 @@ function CreateCompanyFormContent() {
         fileSize: `${sizeKB} KB`,
         fileType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         fileData: converted.fileData,
+        category: 'excel',
         headers,
         rows: rows.length > 0 ? rows : [['', '', '', '']],
         updatedAt: new Date().toISOString(),
@@ -484,8 +560,8 @@ function CreateCompanyFormContent() {
         return copy;
       });
     } catch (err) {
-      console.error('Error reading excel file:', err);
-      alert('Could not parse Excel spreadsheet. Please ensure the file is a valid .xlsx or .csv document.');
+      console.error('Error reading document file:', err);
+      alert('Could not parse document. Please ensure the file is a valid .xlsx, .csv, or .docx file.');
     } finally {
       e.target.value = '';
     }
@@ -538,6 +614,54 @@ function CreateCompanyFormContent() {
 
     setIsExcelEditorOpen(false);
     setEditingExcelInfo(null);
+  };
+
+  const handleOpenCreateWord = (directorIndex: number) => {
+    setEditingWordInfo({
+      directorIndex,
+      docIndex: null,
+      doc: null,
+    });
+    setIsWordEditorOpen(true);
+  };
+
+  const handleOpenEditWord = (directorIndex: number, docIndex: number) => {
+    const dir = directors[directorIndex];
+    const doc = dir.excelDocuments ? dir.excelDocuments[docIndex] : null;
+    if (!doc) return;
+    setEditingWordInfo({
+      directorIndex,
+      docIndex,
+      doc,
+    });
+    setIsWordEditorOpen(true);
+  };
+
+  const handleSaveWordDoc = (doc: DirectorExcelDocument) => {
+    if (!editingWordInfo) return;
+    const { directorIndex, docIndex } = editingWordInfo;
+
+    setDirectors((prev) => {
+      const copy = [...prev];
+      const cur = copy[directorIndex].excelDocuments ? [...copy[directorIndex].excelDocuments!] : [];
+      if (docIndex !== null && docIndex >= 0 && docIndex < cur.length) {
+        cur[docIndex] = doc;
+      } else {
+        const existingIdx = cur.findIndex(
+          (d) => d.id === doc.id || d.fileName.toLowerCase() === doc.fileName.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          cur[existingIdx] = doc;
+        } else {
+          cur.push(doc);
+        }
+      }
+      copy[directorIndex].excelDocuments = cur;
+      return copy;
+    });
+
+    setIsWordEditorOpen(false);
+    setEditingWordInfo(null);
   };
 
   const handleDeleteExcelDoc = (directorIndex: number, docIndex: number) => {
@@ -1406,37 +1530,36 @@ function CreateCompanyFormContent() {
                       No additional documents uploaded for this director. Click &quot;+ Add Document&quot; if needed.
                     </div>
                   )}
-                </div>
-
-                {/* EXCEL SPREADSHEETS & DATA SHEETS SECTION */}
+                          {/* EXCEL SPREADSHEETS & DOCUMENTS SECTION */}
                 <div className="pt-4 border-t border-slate-200 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <FileSpreadsheet size={15} className="text-emerald-600" />
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1 pr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
                         <h4 className="text-xs font-bold text-slate-800 m-0">Excel Spreadsheets &amp; Documents</h4>
-                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                          {director.excelDocuments?.length || 0} Sheets
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                          {director.excelDocuments?.length || 0} Files
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 m-0 mt-0.5">
-                        Upload Excel/CSV files or create and edit spreadsheet tables directly in the browser.
+                        Upload Excel (.xlsx, .csv) or Word (.docx, .doc) files, or create &amp; edit spreadsheets and documents directly in the browser.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0 flex-nowrap">
                       <button
                         type="button"
                         onClick={() => document.getElementById(`excel-file-input-${dIndex}`)?.click()}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-300 shadow-2xs cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                        title="Upload Excel (.xlsx, .xls, .csv) or Microsoft Word (.docx, .doc) file"
                       >
-                        <UploadCloud size={13} />
-                        <span>Upload Excel (.xlsx, .csv)</span>
+                        <UploadCloud size={13} className="text-[#2b579a]" />
+                        <span>Upload Document (.xlsx, .docx, .csv)</span>
                       </button>
                       <input
                         id={`excel-file-input-${dIndex}`}
                         type="file"
-                        accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        accept=".xlsx,.xls,.csv,.docx,.doc,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => handleExcelFileUpload(dIndex, e)}
                         className="hidden"
@@ -1445,97 +1568,154 @@ function CreateCompanyFormContent() {
                       <button
                         type="button"
                         onClick={() => handleOpenCreateExcel(dIndex)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                        title="Create a new spreadsheet"
                       >
                         <Plus size={13} />
-                        <span>+ Create Excel Sheet</span>
+                        <span>Excel Sheet</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCreateWord(dIndex)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-[#2b579a] hover:bg-[#1f3f72] text-white shadow-2xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                        title="Create a new Microsoft Word document"
+                      >
+                        <Plus size={13} />
+                        <span>Word Doc</span>
                       </button>
                     </div>
                   </div>
 
                   {director.excelDocuments && director.excelDocuments.length > 0 ? (
                     <div className="space-y-2">
-                      {director.excelDocuments.map((xDoc, xIndex) => (
-                        <div
-                          key={xDoc.id || xIndex}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/40 p-3 rounded-xl border border-emerald-200 hover:border-emerald-300 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
-                              <FileSpreadsheet size={18} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-800 m-0 truncate">
-                                {xDoc.name || xDoc.fileName}
-                              </p>
-                              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
-                                <span className="font-mono text-emerald-800 font-semibold">{xDoc.fileName}</span>
-                                <span>•</span>
-                                <span className="text-slate-400">{xDoc.fileSize || 'Spreadsheet'}</span>
-                                {xDoc.headers && xDoc.rows && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="text-emerald-700 font-medium">
-                                      {xDoc.headers.length} Cols • {xDoc.rows.length} Rows
-                                    </span>
-                                  </>
-                                )}
+                      {director.excelDocuments.map((xDoc, xIndex) => {
+                        const isWord =
+                          xDoc.category === 'word' ||
+                          xDoc.fileName?.toLowerCase().endsWith('.docx') ||
+                          xDoc.fileName?.toLowerCase().endsWith('.doc');
+
+                        return (
+                          <div
+                            key={xDoc.id || xIndex}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border transition-colors ${
+                              isWord
+                                ? 'bg-blue-50/40 border-blue-200 hover:border-blue-300'
+                                : 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border shadow-2xs ${
+                                  isWord
+                                    ? 'bg-[#2b579a] text-white border-blue-800 font-bold text-sm'
+                                    : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                }`}
+                              >
+                                {isWord ? <span>W</span> : <FileSpreadsheet size={18} />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-bold text-slate-800 m-0 truncate">
+                                    {xDoc.name || xDoc.fileName}
+                                  </p>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      isWord
+                                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    }`}
+                                  >
+                                    {isWord ? 'Word' : 'Excel'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                                  <span className={`font-mono font-semibold ${isWord ? 'text-blue-800' : 'text-emerald-800'}`}>
+                                    {xDoc.fileName}
+                                  </span>
+                                  <span>•</span>
+                                  <span className="text-slate-400">{xDoc.fileSize || (isWord ? 'Word Document' : 'Spreadsheet')}</span>
+                                  {!isWord && xDoc.headers && xDoc.rows && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-emerald-700 font-medium">
+                                        {xDoc.headers.length} Cols • {xDoc.rows.length} Rows
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                            {/* Eye Icon to View Spreadsheet */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditExcel(dIndex, xIndex)}
-                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer transition-colors"
-                              title="View Spreadsheet in Microsoft Excel"
-                            >
-                              <Eye size={14} />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditExcel(dIndex, xIndex)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
-                              title="Open in spreadsheet editor to view and edit cells"
-                            >
-                              <Edit2 size={13} className="text-blue-600" />
-                              <span>Edit Sheet</span>
-                            </button>
-
-                            {xDoc.fileData && (
-                              <a
-                                href={xDoc.fileData}
-                                download={xDoc.fileName}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors no-underline cursor-pointer"
-                                title="Download Excel/CSV File"
+                            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                              {/* Eye Icon to View Document */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isWord) {
+                                    handleOpenEditWord(dIndex, xIndex);
+                                  } else {
+                                    handleOpenEditExcel(dIndex, xIndex);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-lg border cursor-pointer transition-colors ${
+                                  isWord
+                                    ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'
+                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+                                }`}
+                                title={isWord ? 'View Document in Microsoft Word' : 'View Spreadsheet in Microsoft Excel'}
                               >
-                                <Download size={13} className="text-emerald-600" />
-                                <span>Download</span>
-                              </a>
-                            )}
+                                <Eye size={14} />
+                              </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteExcelDoc(dIndex, xIndex)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border-0 bg-transparent cursor-pointer transition-colors"
-                              title="Delete Excel Sheet"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isWord) {
+                                    handleOpenEditWord(dIndex, xIndex);
+                                  } else {
+                                    handleOpenEditExcel(dIndex, xIndex);
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                                title={isWord ? 'Open in Microsoft Word Editor' : 'Open in Spreadsheet Editor'}
+                              >
+                                <Edit2 size={13} className={isWord ? 'text-blue-600' : 'text-emerald-600'} />
+                                <span>{isWord ? 'Edit Doc' : 'Edit Sheet'}</span>
+                              </button>
+
+                              {xDoc.fileData && (
+                                <a
+                                  href={xDoc.fileData}
+                                  download={xDoc.fileName}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors no-underline cursor-pointer"
+                                  title={`Download ${xDoc.fileName}`}
+                                >
+                                  <Download size={13} className={isWord ? 'text-blue-600' : 'text-emerald-600'} />
+                                  <span>Download</span>
+                                </a>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteExcelDoc(dIndex, xIndex)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border-0 bg-transparent cursor-pointer transition-colors"
+                                title="Delete Document"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-400 italic bg-white/60 p-3 rounded-xl border border-dashed border-slate-200 text-center flex items-center justify-center gap-2">
                       <FileSpreadsheet size={15} className="text-slate-300" />
-                      <span>No Excel spreadsheet added yet. You can upload an Excel file or click &quot;+ Create Excel Sheet&quot; to build a spreadsheet table.</span>
+                      <span>No spreadsheets or Word documents added yet. You can upload an Excel/Word file or create a new sheet/doc.</span>
                     </div>
                   )}
-                </div>
+                </div>              </div>
               </div>
             ))}
           </div>
@@ -1637,6 +1817,17 @@ function CreateCompanyFormContent() {
         }}
         onSave={handleSaveExcelDoc}
         initialDocument={editingExcelInfo?.doc}
+      />
+
+      {/* WORD DOCUMENT EDITOR MODAL */}
+      <WordDocumentEditorModal
+        isOpen={isWordEditorOpen}
+        onClose={() => {
+          setIsWordEditorOpen(false);
+          setEditingWordInfo(null);
+        }}
+        onSave={handleSaveWordDoc}
+        initialDocument={editingWordInfo?.doc}
       />
     </div>
   );

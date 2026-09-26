@@ -41,13 +41,15 @@ export type DirectorDocument = {
 
 export type DirectorExcelDocument = {
   id: string;
-  name: string; // Sheet title / remark
+  name: string; // Document title / remark
   fileName: string;
   fileSize?: string;
   fileType?: string;
   fileData?: string; // Data URL or storage URL
-  headers: string[]; // e.g. ["Item", "Cost", "Quantity"]
-  rows: string[][]; // e.g. [["Permit Renewal", "1200", "5"]]
+  category?: 'excel' | 'word'; // 'excel' | 'word'
+  htmlContent?: string; // Formatted HTML extracted from Word (.docx)
+  headers?: string[]; // e.g. ["Item", "Cost", "Quantity"] (Excel)
+  rows?: string[][]; // e.g. [["Permit Renewal", "1200", "5"]] (Excel)
   updatedAt: string;
 };
 
