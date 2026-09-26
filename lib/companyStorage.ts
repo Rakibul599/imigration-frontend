@@ -34,6 +34,7 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
                 currency: bComp.currency || local.currency,
                 language: bComp.language || local.language,
                 bankName: bComp.bankName || local.bankName,
+                bankAccountName: bComp.bankAccountName || local.bankAccountName,
                 bankAccountNo: bComp.bankAccountNo || local.bankAccountNo,
               };
             }
@@ -181,6 +182,7 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
         currency: companyToSave.currency,
         language: companyToSave.language,
         bankName: companyToSave.bankName,
+        bankAccountName: companyToSave.bankAccountName,
         bankAccountNo: companyToSave.bankAccountNo,
         directors: companyToSave.directors,
       }),
@@ -245,6 +247,7 @@ export async function updateStoredCompany(company: Company): Promise<Company[]> 
         currency: companyToSave.currency,
         language: companyToSave.language,
         bankName: companyToSave.bankName,
+        bankAccountName: companyToSave.bankAccountName,
         bankAccountNo: companyToSave.bankAccountNo,
         directors: companyToSave.directors,
       }),

@@ -37,11 +37,12 @@ import {
   UploadCloud,
   UserCheck,
   UserPlus,
+  Edit2,
   Users,
   Wallet,
   X,
 } from 'lucide-react';
-import { Company, CompanyDirector, DirectorDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
+import { Company, CompanyDirector, DirectorDocument, DirectorExcelDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
 import {
   fileToBase64,
   getCompanyById,
@@ -52,6 +53,8 @@ import {
 import Select2Search from '@/components/Select2Search';
 import { ALL_WORLD_LANGUAGES } from '@/lib/languages';
 import { ALL_WORLD_CURRENCIES } from '@/lib/currencies';
+import ExcelSheetEditorModal from '@/components/ExcelSheetEditorModal';
+import * as XLSX from 'xlsx';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -99,15 +102,6 @@ const BANK_PRESETS = [
   'Other Corporate Bank',
 ];
 
-const LOGO_PRESETS = [
-  { label: 'Gamuda', path: '/images/companies/gamuda.svg' },
-  { label: 'Sime Darby', path: '/images/companies/sime-darby.svg' },
-  { label: 'Top Glove', path: '/images/companies/top-glove.svg' },
-  { label: 'Genting', path: '/images/companies/genting.svg' },
-  { label: 'IOI Group', path: '/images/companies/ioi-group.svg' },
-  { label: 'Sunway', path: '/images/companies/sunway.svg' },
-];
-
 function createEmptyDirector(index = 1): CompanyDirector {
   return {
     id: `dir-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -119,10 +113,13 @@ function createEmptyDirector(index = 1): CompanyDirector {
     socsoNo: '',
     epfNo: '',
     carPlateNo: '',
+    carPlates: [''],
     carPurchaseType: 'emi',
     carAmount: '',
+    carTotalPayment: '',
     basicSalary: '',
     otherDocuments: [],
+    excelDocuments: [],
   };
 }
 
@@ -137,10 +134,11 @@ function CreateCompanyFormContent() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [logo, setLogo] = useState<string>(LOGO_PRESETS[0].path);
+  const [logo, setLogo] = useState<string>('');
   const [currency, setCurrency] = useState('MYR');
   const [language, setLanguage] = useState('English');
   const [bankName, setBankName] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
   const [bankAccountNo, setBankAccountNo] = useState('');
   const [sector, setSector] = useState(SECTOR_OPTIONS[0]);
   const [totalWorkers, setTotalWorkers] = useState<number>(0);
@@ -154,6 +152,14 @@ function CreateCompanyFormContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ name: string; url: string; type?: string } | null>(null);
+
+  // Excel Modal State
+  const [isExcelEditorOpen, setIsExcelEditorOpen] = useState(false);
+  const [editingExcelInfo, setEditingExcelInfo] = useState<{
+    directorIndex: number;
+    docIndex: number | null;
+    doc: DirectorExcelDocument | null;
+  } | null>(null);
 
   // Generate random default ROC on new company
   useEffect(() => {
@@ -172,10 +178,11 @@ function CreateCompanyFormContent() {
         setAddress(comp.address || '');
         setPhone(comp.phone || '');
         setEmail(comp.email || '');
-        setLogo(comp.logo || LOGO_PRESETS[0].path);
+        setLogo(comp.logo || '');
         setCurrency(comp.currency || 'MYR');
         setLanguage(comp.language || 'English');
         setBankName(comp.bankName || '');
+        setBankAccountName(comp.bankAccountName || '');
         setBankAccountNo(comp.bankAccountNo || '');
         setSector(comp.sector || SECTOR_OPTIONS[0]);
         setTotalWorkers(comp.totalWorkers || 0);
@@ -183,7 +190,17 @@ function CreateCompanyFormContent() {
         setTag(comp.tag || 'Verified JIM');
 
         if (comp.directors && comp.directors.length > 0) {
-          setDirectors(comp.directors);
+          setDirectors(
+            comp.directors.map((d) => ({
+              ...d,
+              carTotalPayment: d.carTotalPayment || '',
+              carPlates:
+                Array.isArray(d.carPlates) && d.carPlates.length > 0
+                  ? d.carPlates
+                  : (d.carPlateNo ? d.carPlateNo.split(',').map((p) => p.trim()).filter(Boolean) : ['']),
+              excelDocuments: Array.isArray(d.excelDocuments) ? d.excelDocuments : [],
+            }))
+          );
         }
       }
     }
@@ -319,6 +336,219 @@ function CreateCompanyFormContent() {
     });
   };
 
+  // Car Plate Handlers (Multiple Add)
+  const handleAddCarPlate = (directorIndex: number) => {
+    setDirectors((prev) => {
+      const copy = [...prev];
+      const dir = copy[directorIndex];
+      const currentPlates = Array.isArray(dir.carPlates) ? [...dir.carPlates] : [dir.carPlateNo || ''];
+      copy[directorIndex] = {
+        ...dir,
+        carPlates: [...currentPlates, ''],
+      };
+      return copy;
+    });
+  };
+
+  const handleUpdateCarPlate = (directorIndex: number, plateIndex: number, value: string) => {
+    setDirectors((prev) => {
+      const copy = [...prev];
+      const dir = copy[directorIndex];
+      const currentPlates = Array.isArray(dir.carPlates) ? [...dir.carPlates] : [dir.carPlateNo || ''];
+      currentPlates[plateIndex] = value.toUpperCase();
+      copy[directorIndex] = {
+        ...dir,
+        carPlates: currentPlates,
+        carPlateNo: currentPlates.filter(Boolean).join(', '),
+      };
+      return copy;
+    });
+  };
+
+  const handleRemoveCarPlate = (directorIndex: number, plateIndex: number) => {
+    setDirectors((prev) => {
+      const copy = [...prev];
+      const dir = copy[directorIndex];
+      const currentPlates = Array.isArray(dir.carPlates) ? [...dir.carPlates] : [dir.carPlateNo || ''];
+      if (currentPlates.length <= 1) {
+        currentPlates[0] = '';
+      } else {
+        currentPlates.splice(plateIndex, 1);
+      }
+      copy[directorIndex] = {
+        ...dir,
+        carPlates: currentPlates,
+        carPlateNo: currentPlates.filter(Boolean).join(', '),
+      };
+      return copy;
+    });
+  };
+
+  // Excel Handlers (Upload / Create / Edit)
+  const handleExcelFileUpload = async (directorIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileName = file.name;
+      const sizeKB = (file.size / 1024).toFixed(1);
+      const isCsv = fileName.toLowerCase().endsWith('.csv');
+
+      let headers: string[] = [];
+      let rows: string[][] = [];
+
+      if (isCsv) {
+        // Read CSV
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        const parsedRows = lines.map((line) => {
+          const cells: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+              inQuotes = !inQuotes;
+            } else if (ch === ',' && !inQuotes) {
+              cells.push(current.trim());
+              current = '';
+            } else {
+              current += ch;
+            }
+          }
+          cells.push(current.trim());
+          return cells;
+        });
+
+        if (parsedRows.length > 0) {
+          headers = parsedRows[0].map((h, i) => (h ? h.trim() : `Col ${String.fromCharCode(65 + (i % 26))}`));
+          rows = parsedRows.slice(1);
+        }
+      } else {
+        // Read real Excel (.xlsx / .xls) with SheetJS
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0] || 'Sheet1';
+        const worksheet = workbook.Sheets[sheetName];
+
+        const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+        if (rawData && rawData.length > 0) {
+          // Find first non-empty row as header
+          const firstRow = rawData[0];
+          headers = firstRow.map((cell: any, i: number) => {
+            const str = cell !== undefined && cell !== null ? String(cell).trim() : '';
+            return str || `Col ${String.fromCharCode(65 + (i % 26))}`;
+          });
+
+          // Subsequent rows as data
+          rows = rawData.slice(1).map((r: any[]) => {
+            return headers.map((_, i) => (r[i] !== undefined && r[i] !== null ? String(r[i]).trim() : ''));
+          });
+        }
+      }
+
+      if (headers.length === 0) {
+        headers = ['A', 'B', 'C', 'D'];
+        rows = [['', '', '', '']];
+      }
+
+      const converted = await fileToBase64(file);
+      const docTitle = fileName.replace(/\.[^/.]+$/, '').trim() || 'Imported_Spreadsheet';
+
+      const newDoc: DirectorExcelDocument = {
+        id: `excel-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: docTitle,
+        fileName,
+        fileSize: `${sizeKB} KB`,
+        fileType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileData: converted.fileData,
+        headers,
+        rows: rows.length > 0 ? rows : [['', '', '', '']],
+        updatedAt: new Date().toISOString(),
+      };
+
+      setDirectors((prev) => {
+        const copy = [...prev];
+        const cur = copy[directorIndex].excelDocuments ? [...copy[directorIndex].excelDocuments!] : [];
+        // Prevent duplicate file: if same fileName or title already exists, update it
+        const existingIdx = cur.findIndex(
+          (d) => d.fileName.toLowerCase() === fileName.toLowerCase() || d.name.toLowerCase() === docTitle.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          cur[existingIdx] = { ...newDoc, id: cur[existingIdx].id };
+        } else {
+          cur.push(newDoc);
+        }
+        copy[directorIndex].excelDocuments = cur;
+        return copy;
+      });
+    } catch (err) {
+      console.error('Error reading excel file:', err);
+      alert('Could not parse Excel spreadsheet. Please ensure the file is a valid .xlsx or .csv document.');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleOpenCreateExcel = (directorIndex: number) => {
+    setEditingExcelInfo({
+      directorIndex,
+      docIndex: null,
+      doc: null,
+    });
+    setIsExcelEditorOpen(true);
+  };
+
+  const handleOpenEditExcel = (directorIndex: number, docIndex: number) => {
+    const dir = directors[directorIndex];
+    const doc = dir.excelDocuments ? dir.excelDocuments[docIndex] : null;
+    if (!doc) return;
+    setEditingExcelInfo({
+      directorIndex,
+      docIndex,
+      doc,
+    });
+    setIsExcelEditorOpen(true);
+  };
+
+  const handleSaveExcelDoc = (doc: DirectorExcelDocument) => {
+    if (!editingExcelInfo) return;
+    const { directorIndex, docIndex } = editingExcelInfo;
+
+    setDirectors((prev) => {
+      const copy = [...prev];
+      const cur = copy[directorIndex].excelDocuments ? [...copy[directorIndex].excelDocuments!] : [];
+      if (docIndex !== null && docIndex >= 0 && docIndex < cur.length) {
+        cur[docIndex] = doc;
+      } else {
+        // Prevent accidental duplicate file: check by id or fileName
+        const existingIdx = cur.findIndex(
+          (d) => d.id === doc.id || d.fileName.toLowerCase() === doc.fileName.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          cur[existingIdx] = doc;
+        } else {
+          cur.push(doc);
+        }
+      }
+      copy[directorIndex].excelDocuments = cur;
+      return copy;
+    });
+
+    setIsExcelEditorOpen(false);
+    setEditingExcelInfo(null);
+  };
+
+  const handleDeleteExcelDoc = (directorIndex: number, docIndex: number) => {
+    setDirectors((prev) => {
+      const copy = [...prev];
+      if (!copy[directorIndex].excelDocuments) return copy;
+      copy[directorIndex].excelDocuments = copy[directorIndex].excelDocuments!.filter((_, i) => i !== docIndex);
+      return copy;
+    });
+  };
+
   // Submit Handler: Saves to LocalStorage & navigates to list page
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -350,7 +580,7 @@ function CreateCompanyFormContent() {
         sector,
         tag,
         totalWorkers: Number(totalWorkers) || 0,
-        logo: logo || LOGO_PRESETS[0].path,
+        logo: logo || '',
         description: description.trim() || 'Verified registered employer organization within the Malaysian Immigration portal.',
         address: address.trim(),
         phone: phone.trim(),
@@ -358,20 +588,30 @@ function CreateCompanyFormContent() {
         currency,
         language,
         bankName,
+        bankAccountName: bankAccountName.trim(),
         bankAccountNo: bankAccountNo.trim(),
-        directors: directors.map((dir) => ({
-          ...dir,
-          name: dir.name.trim(),
-          nidNo: dir.nidNo.trim(),
-          passportNo: dir.passportNo.trim(),
-          phone: dir.phone.trim(),
-          email: dir.email.trim(),
-          socsoNo: dir.socsoNo.trim(),
-          epfNo: dir.epfNo.trim(),
-          carPlateNo: dir.carPlateNo.trim(),
-          carAmount: dir.carAmount || '0',
-          basicSalary: dir.basicSalary || '0',
-        })),
+        directors: directors.map((dir) => {
+          const cleanPlates = Array.isArray(dir.carPlates)
+            ? dir.carPlates.map((p) => p.trim()).filter(Boolean)
+            : (dir.carPlateNo ? [dir.carPlateNo.trim()] : []);
+          return {
+            ...dir,
+            name: dir.name.trim(),
+            nidNo: dir.nidNo.trim(),
+            passportNo: dir.passportNo.trim(),
+            phone: dir.phone.trim(),
+            email: dir.email.trim(),
+            socsoNo: dir.socsoNo.trim(),
+            epfNo: dir.epfNo.trim(),
+            carPlateNo: cleanPlates.length > 0 ? cleanPlates.join(', ') : dir.carPlateNo.trim(),
+            carPlates: cleanPlates.length > 0 ? cleanPlates : (dir.carPlateNo.trim() ? [dir.carPlateNo.trim()] : ['']),
+            carAmount: dir.carAmount || '0',
+            carTotalPayment: dir.carPurchaseType === 'emi' ? (dir.carTotalPayment || '0') : '0',
+            basicSalary: dir.basicSalary || '0',
+            otherDocuments: dir.otherDocuments || [],
+            excelDocuments: dir.excelDocuments || [],
+          };
+        }),
       };
 
       if (editId) {
@@ -570,20 +810,27 @@ function CreateCompanyFormContent() {
 
           <div className="flex flex-col sm:flex-row items-center gap-6">
             {/* Logo Preview Box */}
-            <div className="w-24 h-24 rounded-2xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center p-2 shrink-0 shadow-2xs relative overflow-hidden group">
-              <img
-                src={resolveFileUrl(logo) || '/images/companies/gamuda.svg'}
-                alt="Logo Preview"
-                className="max-h-full max-w-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLElement).setAttribute('src', '/images/companies/gamuda.svg');
-                }}
-              />
+            <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-300 flex items-center justify-center p-2 shrink-0 shadow-2xs relative overflow-hidden group">
+              {logo ? (
+                <img
+                  src={resolveFileUrl(logo)}
+                  alt="Logo Preview"
+                  className="max-h-full max-w-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-slate-400 text-center">
+                  <Building2 size={28} className="text-slate-300 mb-1" />
+                  <span className="text-[10px] font-semibold">No Logo</span>
+                </div>
+              )}
             </div>
 
-            {/* Upload Button & Presets */}
-            <div className="flex-1 space-y-3 w-full">
-              <div>
+            {/* Upload Button */}
+            <div className="flex-1 space-y-2 w-full">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => document.getElementById('company-logo-upload-input')?.click()}
@@ -600,29 +847,21 @@ function CreateCompanyFormContent() {
                   onChange={handleLogoUpload}
                   className="hidden"
                 />
-                <span className="text-[11px] text-slate-400 ml-3">PNG, JPG, or SVG up to 2MB</span>
+                {logo && (
+                  <button
+                    type="button"
+                    onClick={() => setLogo('')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 transition-colors cursor-pointer border border-slate-200"
+                    title="Remove uploaded logo"
+                  >
+                    <Trash2 size={13} />
+                    <span>Remove Logo</span>
+                  </button>
+                )}
               </div>
-
-              {/* Preset Selector */}
-              <div>
-                <span className="text-[11px] text-slate-500 block mb-1.5 font-medium">Or pick a standard corporate preset:</span>
-                <div className="flex flex-wrap gap-2">
-                  {LOGO_PRESETS.map((preset) => (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => setLogo(preset.path)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] border transition-all cursor-pointer ${
-                        logo === preset.path
-                          ? 'border-[#0b4da2] bg-blue-50 text-[#0b4da2] font-bold shadow-2xs'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <p className="text-[11px] text-slate-400 m-0">
+                Upload official company crest or logo (PNG, JPG, or SVG up to 2MB).
+              </p>
             </div>
           </div>
         </div>
@@ -639,7 +878,7 @@ function CreateCompanyFormContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {/* Currency Selection (Select2 Searchable) */}
             <div>
               <Select2Search
@@ -678,6 +917,23 @@ function CreateCompanyFormContent() {
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
                   placeholder="e.g. Maybank, CIMB Bank, Public Bank"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Company Account Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Account Name
+              </label>
+              <div className="relative">
+                <UserCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={bankAccountName}
+                  onChange={(e) => setBankAccountName(e.target.value)}
+                  placeholder="e.g. GAMUDA BERHAD HOLDINGS"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                 />
               </div>
@@ -948,20 +1204,50 @@ function CreateCompanyFormContent() {
                     />
                   </div>
 
-                  {/* Car Plate No */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Car Plate No
-                    </label>
-                    <div className="relative">
-                      <Car size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input
-                        type="text"
-                        value={director.carPlateNo}
-                        onChange={(e) => handleUpdateDirector(dIndex, 'carPlateNo', e.target.value)}
-                        placeholder="WYY 8888"
-                        className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono uppercase text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
+                  {/* Car Plate No - Multiple Add */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-700 m-0">
+                        Car Plate No
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleAddCarPlate(dIndex)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      >
+                        <Plus size={11} />
+                        <span>+ Add Plate</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {((director.carPlates && director.carPlates.length > 0)
+                        ? director.carPlates
+                        : [director.carPlateNo || '']
+                      ).map((plate, pIndex, arr) => (
+                        <div key={pIndex} className="flex items-center gap-1.5">
+                          <div className="relative flex-1">
+                            <Car size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                              type="text"
+                              value={plate}
+                              onChange={(e) => handleUpdateCarPlate(dIndex, pIndex, e.target.value)}
+                              placeholder={pIndex === 0 ? 'e.g. WYY 8888' : `Plate ${pIndex + 1} (e.g. VAA 1234)`}
+                              className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono uppercase text-slate-800 focus:outline-none focus:border-blue-500"
+                            />
+                          </div>
+                          {arr.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCarPlate(dIndex, pIndex)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border-0 bg-transparent cursor-pointer transition-colors"
+                              title="Delete Car Plate"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -999,7 +1285,7 @@ function CreateCompanyFormContent() {
                   {/* Car Amount */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Car {director.carPurchaseType === 'cash' ? 'Cash Total' : 'Monthly EMI'} Amount ({currency})
+                      {director.carPurchaseType === 'cash' ? `Car Cash Total Amount (${currency})` : `Monthly EMI Amount (${currency})`}
                     </label>
                     <input
                       type="number"
@@ -1010,6 +1296,28 @@ function CreateCompanyFormContent() {
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
+
+                  {/* Total Payment - ONLY FOR EMI */}
+                  {director.carPurchaseType === 'emi' && (
+                    <div className="animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700 m-0">
+                          Total Payment ({currency})
+                        </label>
+                        <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                          EMI Total
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={director.carTotalPayment || ''}
+                        onChange={(e) => handleUpdateDirector(dIndex, 'carTotalPayment', e.target.value)}
+                        placeholder="e.g. 185000"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* OTHER DOCUMENTS UPLOAD (MULTIPLE NAME + FILE UPLOAD) */}
@@ -1096,6 +1404,135 @@ function CreateCompanyFormContent() {
                   ) : (
                     <div className="text-[11px] text-slate-400 italic bg-white/60 p-3 rounded-xl border border-dashed border-slate-200 text-center">
                       No additional documents uploaded for this director. Click &quot;+ Add Document&quot; if needed.
+                    </div>
+                  )}
+                </div>
+
+                {/* EXCEL SPREADSHEETS & DATA SHEETS SECTION */}
+                <div className="pt-4 border-t border-slate-200 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <FileSpreadsheet size={15} className="text-emerald-600" />
+                        <h4 className="text-xs font-bold text-slate-800 m-0">Excel Spreadsheets &amp; Documents</h4>
+                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          {director.excelDocuments?.length || 0} Sheets
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+                        Upload Excel/CSV files or create and edit spreadsheet tables directly in the browser.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById(`excel-file-input-${dIndex}`)?.click()}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-50 text-emerald-700 border border-emerald-300 shadow-2xs cursor-pointer transition-colors"
+                      >
+                        <UploadCloud size={13} />
+                        <span>Upload Excel (.xlsx, .csv)</span>
+                      </button>
+                      <input
+                        id={`excel-file-input-${dIndex}`}
+                        type="file"
+                        accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => handleExcelFileUpload(dIndex, e)}
+                        className="hidden"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCreateExcel(dIndex)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer transition-colors"
+                      >
+                        <Plus size={13} />
+                        <span>+ Create Excel Sheet</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {director.excelDocuments && director.excelDocuments.length > 0 ? (
+                    <div className="space-y-2">
+                      {director.excelDocuments.map((xDoc, xIndex) => (
+                        <div
+                          key={xDoc.id || xIndex}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-50/40 p-3 rounded-xl border border-emerald-200 hover:border-emerald-300 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                              <FileSpreadsheet size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 m-0 truncate">
+                                {xDoc.name || xDoc.fileName}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                                <span className="font-mono text-emerald-800 font-semibold">{xDoc.fileName}</span>
+                                <span>•</span>
+                                <span className="text-slate-400">{xDoc.fileSize || 'Spreadsheet'}</span>
+                                {xDoc.headers && xDoc.rows && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-emerald-700 font-medium">
+                                      {xDoc.headers.length} Cols • {xDoc.rows.length} Rows
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                            {/* Eye Icon to View Spreadsheet */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditExcel(dIndex, xIndex)}
+                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 cursor-pointer transition-colors"
+                              title="View Spreadsheet in Microsoft Excel"
+                            >
+                              <Eye size={14} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditExcel(dIndex, xIndex)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              title="Open in spreadsheet editor to view and edit cells"
+                            >
+                              <Edit2 size={13} className="text-blue-600" />
+                              <span>Edit Sheet</span>
+                            </button>
+
+                            {xDoc.fileData && (
+                              <a
+                                href={xDoc.fileData}
+                                download={xDoc.fileName}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors no-underline cursor-pointer"
+                                title="Download Excel/CSV File"
+                              >
+                                <Download size={13} className="text-emerald-600" />
+                                <span>Download</span>
+                              </a>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteExcelDoc(dIndex, xIndex)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border-0 bg-transparent cursor-pointer transition-colors"
+                              title="Delete Excel Sheet"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 italic bg-white/60 p-3 rounded-xl border border-dashed border-slate-200 text-center flex items-center justify-center gap-2">
+                      <FileSpreadsheet size={15} className="text-slate-300" />
+                      <span>No Excel spreadsheet added yet. You can upload an Excel file or click &quot;+ Create Excel Sheet&quot; to build a spreadsheet table.</span>
                     </div>
                   )}
                 </div>
@@ -1190,6 +1627,17 @@ function CreateCompanyFormContent() {
           </div>
         </div>
       )}
+
+      {/* EXCEL SHEET SPREADSHEET EDITOR MODAL */}
+      <ExcelSheetEditorModal
+        isOpen={isExcelEditorOpen}
+        onClose={() => {
+          setIsExcelEditorOpen(false);
+          setEditingExcelInfo(null);
+        }}
+        onSave={handleSaveExcelDoc}
+        initialDocument={editingExcelInfo?.doc}
+      />
     </div>
   );
 }

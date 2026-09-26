@@ -11,6 +11,7 @@ import {
   Briefcase,
   Building2,
   CheckCircle2,
+  Clock,
   Coins,
   CreditCard,
   Edit2,
@@ -38,6 +39,7 @@ import {
   getCompanyCostWallet,
   getCompanyProfitWallet,
   getCompanyWorkerWallet,
+  getCompanyPendingWallet,
 } from '@/lib/companies';
 import {
   deleteStoredCompany,
@@ -82,6 +84,8 @@ export default function SuperAdminCompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
+  const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
+  const [syncTableWithCardFilter, setSyncTableWithCardFilter] = useState<boolean>(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -204,7 +208,7 @@ export default function SuperAdminCompaniesPage() {
     }
   };
 
-  // Filtered List
+  // Filtered List for Table
   const filteredCompanies = companies.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -213,16 +217,45 @@ export default function SuperAdminCompaniesPage() {
       (c.tag && c.tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesSector = selectedSector === 'ALL' || c.sector === selectedSector;
-    return matchesSearch && matchesSector;
+    const matchesCardCompany = !syncTableWithCardFilter || selectedCompanyCardId === 'ALL' || c.id === selectedCompanyCardId;
+    return matchesSearch && matchesSector && matchesCardCompany;
   });
 
-  const totalWorkersCount = companies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
-  const totalActiveWorkers = companies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
-  const totalInactiveWorkers = companies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
-  const totalWorkerWallet = companies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
-  const totalIncomeWallet = companies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
-  const totalCostWallet = companies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
-  const totalProfitWallet = companies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
+  // Selected companies for KPI Cards calculation
+  const selectedCardCompanies = useMemo(() => {
+    if (selectedCompanyCardId === 'ALL') return companies;
+    return companies.filter((c) => c.id === selectedCompanyCardId);
+  }, [companies, selectedCompanyCardId]);
+
+  const selectedSingleCompany = useMemo(() => {
+    if (selectedCompanyCardId === 'ALL') return null;
+    return companies.find((c) => c.id === selectedCompanyCardId) || null;
+  }, [companies, selectedCompanyCardId]);
+
+  // Options for Company Select2 dropdown under header
+  const companyCardFilterOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'ALL',
+      label: `All Companies (${companies.length})`,
+      subLabel: 'Aggregated totals across all registered employers',
+      badge: 'ALL',
+    },
+    ...companies.map((c) => ({
+      value: c.id,
+      label: c.name,
+      subLabel: c.sector,
+      badge: c.roc,
+    })),
+  ], [companies]);
+
+  const totalWorkersCount = selectedCardCompanies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
+  const totalActiveWorkers = selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
+  const totalInactiveWorkers = selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
+  const totalWorkerWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
+  const totalIncomeWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
+  const totalCostWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
+  const totalProfitWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
+  const totalPendingWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyPendingWallet(c), 0);
   const distinctSectors = new Set(companies.map((c) => c.sector)).size;
 
   const sectorFilterOptions: Select2Option[] = useMemo(() => [
@@ -272,8 +305,10 @@ export default function SuperAdminCompaniesPage() {
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight m-0">
                 Super Admin — Employer Companies Registry
               </h1>
-              <span className="bg-blue-100 text-[#0b4da2] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                {companies.length} Active
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full transition-colors ${
+                selectedSingleCompany ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-[#0b4da2]'
+              }`}>
+                {selectedSingleCompany ? '1 Company Selected' : `${companies.length} Active`}
               </span>
             </div>
             <p className="text-xs text-slate-500 m-0">
@@ -293,34 +328,123 @@ export default function SuperAdminCompaniesPage() {
             </button>
           </div>
         </div>
+
+        {/* Company Select2 Filter for Cards Information */}
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap">
+              <Building2 size={16} className="text-[#0b4da2]" />
+              <span>Filter Cards by Company:</span>
+            </div>
+            <div className="w-full sm:w-80 md:w-96">
+              <Select2Search
+                options={companyCardFilterOptions}
+                value={selectedCompanyCardId}
+                onChange={(val) => setSelectedCompanyCardId(val)}
+                placeholder="All Companies (Aggregated)"
+                searchPlaceholder="Search company by name, ROC, sector..."
+                icon={<Building2 size={14} className="text-slate-400" />}
+              />
+            </div>
+            {selectedCompanyCardId !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedCompanyCardId('ALL')}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer w-fit"
+                title="Reset card metrics to all companies"
+              >
+                <X size={13} />
+                <span>Reset to All</span>
+              </button>
+            )}
+          </div>
+
+          {selectedSingleCompany && (
+            <div className="flex items-center gap-3">
+              <label className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={syncTableWithCardFilter}
+                  onChange={(e) => setSyncTableWithCardFilter(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-3.5 h-3.5 cursor-pointer"
+                />
+                Filter table below as well
+              </label>
+              <span className="hidden lg:inline text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Viewing: {selectedSingleCompany.name}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 1. Primary Workforce & Registered Companies KPI Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Clickable Registered Companies Card */}
-        <Link
-          href="/superadmin/companies/registered"
-          title="Click to open Registered Companies List Page"
-          className="bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md rounded-xl p-4 shadow-xs flex items-center justify-between gap-3.5 transition-all group no-underline text-inherit cursor-pointer"
-        >
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] group-hover:bg-[#0b4da2] group-hover:text-white flex items-center justify-center shrink-0 border border-blue-100 transition-colors">
-              <Building2 size={22} />
-            </div>
-            <div>
-              <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0 group-hover:text-[#0b4da2] transition-colors">
-                Registered Companies
-              </p>
-              <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-                {companies.length}
-              </p>
-              <span className="text-[10px] text-blue-600 font-semibold inline-flex items-center gap-1 mt-0.5">
-                <span>View Company List</span>
-                <span className="group-hover:translate-x-0.5 transition-transform">→</span>
-              </span>
+        {/* Clickable Registered Companies / Selected Company Card */}
+        {selectedSingleCompany ? (
+          <div className="bg-white border border-blue-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-3.5 transition-all">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
+                {selectedSingleCompany.logo ? (
+                  <img
+                    src={resolveFileUrl(selectedSingleCompany.logo)}
+                    alt={selectedSingleCompany.name}
+                    className="max-h-8 max-w-8 object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <Building2 size={22} />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-blue-600 font-semibold uppercase tracking-wider m-0 truncate">
+                  Selected Company
+                </p>
+                <p className="text-base font-bold text-slate-900 m-0 mt-0.5 truncate" title={selectedSingleCompany.name}>
+                  {selectedSingleCompany.name}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {selectedSingleCompany.roc}
+                  </span>
+                  <Link
+                    href={`/superadmin/companies/${encodeURIComponent(selectedSingleCompany.id)}`}
+                    className="text-[10px] text-blue-600 font-semibold hover:underline inline-flex items-center gap-0.5"
+                  >
+                    <span>View Profile</span>
+                    <span>→</span>
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
-        </Link>
+        ) : (
+          <Link
+            href="/superadmin/companies/registered"
+            title="Click to open Registered Companies List Page"
+            className="bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md rounded-xl p-4 shadow-xs flex items-center justify-between gap-3.5 transition-all group no-underline text-inherit cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] group-hover:bg-[#0b4da2] group-hover:text-white flex items-center justify-center shrink-0 border border-blue-100 transition-colors">
+                <Building2 size={22} />
+              </div>
+              <div>
+                <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0 group-hover:text-[#0b4da2] transition-colors">
+                  Registered Companies
+                </p>
+                <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
+                  {companies.length}
+                </p>
+                <span className="text-[10px] text-blue-600 font-semibold inline-flex items-center gap-1 mt-0.5">
+                  <span>View Company List</span>
+                  <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                </span>
+              </div>
+            </div>
+          </Link>
+        )}
 
         {/* Total Active Foreign Worker */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
@@ -334,7 +458,9 @@ export default function SuperAdminCompaniesPage() {
             <p className="text-xl font-bold text-emerald-600 m-0 mt-0.5 font-mono">
               {totalActiveWorkers.toLocaleString()}
             </p>
-            <span className="text-[10px] text-slate-400">Approved &amp; Active Permits</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Active for this Company' : 'Approved & Active Permits'}
+            </span>
           </div>
         </div>
 
@@ -350,90 +476,102 @@ export default function SuperAdminCompaniesPage() {
             <p className="text-xl font-bold text-slate-700 m-0 mt-0.5 font-mono">
               {totalInactiveWorkers.toLocaleString()}
             </p>
-            <span className="text-[10px] text-slate-400">Expired / Renewal Pending</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Inactive for this Company' : 'Expired / Renewal Pending'}
+            </span>
           </div>
         </div>
 
-        {/* Foreign Worker Wallet */}
+        {/* Total Target Foreigner Wallet */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
             <Wallet size={22} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Foreign Worker Wallet
+              Total Target Foreigner Wallet
             </p>
             <p className="text-xl font-bold text-purple-700 m-0 mt-0.5 font-mono">
               RM {totalWorkerWallet.toLocaleString()}
             </p>
-            <span className="text-[10px] text-slate-400">Total Worker Funds Pool</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Worker Target for this Company' : 'Total Worker Target Pool'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* 2. Financial Treasury Wallets Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Income Wallet */}
+        {/* Total Deposit Wallet */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 border border-blue-100">
             <ArrowUpRight size={20} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Total Income Wallet
+              Total Deposit Wallet
             </p>
             <p className="text-lg font-bold text-blue-700 m-0 mt-0.5 font-mono">
               RM {totalIncomeWallet.toLocaleString()}
             </p>
-            <span className="text-[10px] text-slate-400">Gross Service Inflow</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Deposit Inflow for this Company' : 'Total Received Inflow'}
+            </span>
           </div>
         </div>
 
-        {/* Total Cost Wallet */}
+        {/* Total Foreigner Cost Wallet */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
             <ArrowDownRight size={20} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Total Cost Wallet
+              Total Foreigner Cost Wallet
             </p>
             <p className="text-lg font-bold text-rose-700 m-0 mt-0.5 font-mono">
               RM {totalCostWallet.toLocaleString()}
             </p>
-            <span className="text-[10px] text-slate-400">Operational &amp; Levy Outflow</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Cost & Levy for this Company' : 'Operational & Levy Outflow'}
+            </span>
           </div>
         </div>
 
-        {/* Total Profit Wallet */}
+        {/* Total Foreigner Profit Wallet */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
             <TrendingUp size={20} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Total Profit Wallet
+              Total Foreigner Profit Wallet
             </p>
             <p className="text-lg font-bold text-emerald-700 m-0 mt-0.5 font-mono">
               RM {totalProfitWallet.toLocaleString()}
             </p>
-            <span className="text-[10px] text-slate-400">Net Retained Margin</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Retained Margin for this Company' : 'Net Retained Margin'}
+            </span>
           </div>
         </div>
 
-        {/* Covered Sectors & DB */}
+        {/* Total Foreigner Pending Wallet */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
-            <Briefcase size={20} />
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+            <Clock size={20} />
           </div>
           <div>
             <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Covered Sectors
+              Total Foreigner Pending Wallet
             </p>
-            <p className="text-lg font-bold text-slate-900 m-0 mt-0.5">
-              {distinctSectors} Sectors Active
+            <p className="text-lg font-bold text-amber-700 m-0 mt-0.5 font-mono">
+              RM {totalPendingWallet.toLocaleString()}
             </p>
-            <span className="text-[10px] text-emerald-600 font-semibold">● MySQL Database Live</span>
+            <span className="text-[10px] text-slate-400">
+              {selectedSingleCompany ? 'Pending Amount for this Company' : 'Pending Approvals & Dues'}
+            </span>
           </div>
         </div>
       </div>
@@ -462,7 +600,20 @@ export default function SuperAdminCompaniesPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {selectedSingleCompany && syncTableWithCardFilter && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 text-[#0b4da2] border border-blue-200 text-xs font-semibold">
+              <span className="truncate max-w-[160px] sm:max-w-[220px]">Company: {selectedSingleCompany.name}</span>
+              <button
+                type="button"
+                onClick={() => setSyncTableWithCardFilter(false)}
+                title="Show all companies in table while keeping cards filtered"
+                className="text-blue-500 hover:text-blue-700 bg-transparent border-0 cursor-pointer p-0 ml-1"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           <div className="w-full sm:w-56">
             <Select2Search
               options={sectorFilterOptions}

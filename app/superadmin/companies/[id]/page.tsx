@@ -32,13 +32,14 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { Company, CompanyDirector, DirectorDocument, resolveFileUrl } from '@/lib/companies';
+import { Company, CompanyDirector, DirectorDocument, DirectorExcelDocument, resolveFileUrl } from '@/lib/companies';
 import {
   fetchCompaniesFromBackend,
   getCompanyById,
   getStoredCompanies,
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
+import ExcelSheetEditorModal from '@/components/ExcelSheetEditorModal';
 
 export default function SuperAdminCompanyDetailsPage() {
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function SuperAdminCompanyDetailsPage() {
 
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedExcelDoc, setSelectedExcelDoc] = useState<DirectorExcelDocument | null>(null);
   const [previewFile, setPreviewFile] = useState<{
     name: string;
     url: string;
@@ -364,6 +366,15 @@ export default function SuperAdminCompanyDetailsPage() {
                 </span>
               </div>
 
+              {company.bankAccountName && (
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Company Account Name</span>
+                  <span className="text-sm font-bold text-slate-900 mt-0.5 block">
+                    {company.bankAccountName}
+                  </span>
+                </div>
+              )}
+
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <span className="text-[10px] text-slate-500 font-semibold uppercase block">Bank Account Number</span>
                 <span className="text-sm font-bold font-mono text-slate-900 mt-0.5 block tracking-wider">
@@ -472,8 +483,22 @@ export default function SuperAdminCompanyDetailsPage() {
 
                   {/* Vehicle Information */}
                   <div className="bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">Car Plate Number</span>
-                    <span className="text-slate-800 font-mono font-bold block mt-0.5">{dir.carPlateNo || 'N/A'}</span>
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">Car Plate Number(s)</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {dir.carPlates && dir.carPlates.filter(Boolean).length > 0 ? (
+                        dir.carPlates.filter(Boolean).map((plate, pIdx) => (
+                          <span
+                            key={pIdx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono font-bold text-xs text-slate-800"
+                          >
+                            <Car size={12} className="text-slate-500" />
+                            {plate}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-800 font-mono font-bold block">{dir.carPlateNo || 'N/A'}</span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="bg-white p-3 rounded-xl border border-slate-200">
@@ -483,14 +508,25 @@ export default function SuperAdminCompanyDetailsPage() {
                     </span>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-slate-200 sm:col-span-2">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200">
                     <span className="text-[10px] text-slate-400 font-semibold uppercase block">
-                      Car {dir.carPurchaseType === 'cash' ? 'Cash Total' : 'Monthly EMI'} Amount
+                      {dir.carPurchaseType === 'cash' ? 'Car Cash Total' : 'Monthly EMI Amount'}
                     </span>
                     <span className="text-slate-800 font-bold font-mono block mt-0.5">
                       {dir.carAmount ? `${currency} ${Number(dir.carAmount).toLocaleString()}` : 'N/A'}
                     </span>
                   </div>
+
+                  {dir.carPurchaseType === 'emi' && (
+                    <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200">
+                      <span className="text-[10px] text-blue-600 font-semibold uppercase block">
+                        Total Payment (EMI Commitment)
+                      </span>
+                      <span className="text-blue-900 font-bold font-mono block mt-0.5">
+                        {dir.carTotalPayment ? `${currency} ${Number(dir.carTotalPayment).toLocaleString()}` : 'N/A'}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Uploaded Documents for this Director */}
@@ -578,6 +614,50 @@ export default function SuperAdminCompanyDetailsPage() {
                             <span>View</span>
                           </button>
                         )}
+                      </div>
+                    ))}
+
+                    {/* Excel Spreadsheets & Documents */}
+                    {dir.excelDocuments && dir.excelDocuments.map((xDoc, xIdx) => (
+                      <div
+                        key={xDoc.id || xIdx}
+                        className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <FileSpreadsheet size={18} className="text-emerald-700 shrink-0" />
+                          <div className="truncate">
+                            <span className="font-semibold block text-slate-800 truncate">
+                              {xDoc.name || 'Excel Spreadsheet'}
+                            </span>
+                            <span className="text-[11px] text-slate-500 block truncate">
+                              {xDoc.fileName} {xDoc.fileSize ? `(${xDoc.fileSize})` : ''}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Eye Icon to View Spreadsheet */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExcelDoc(xDoc)}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border border-emerald-300"
+                            title="View Spreadsheet in Microsoft Excel"
+                          >
+                            <Eye size={12} />
+                            <span>View</span>
+                          </button>
+
+                          {xDoc.fileData && (
+                            <a
+                              href={resolveFileUrl(xDoc.fileData)}
+                              download={xDoc.fileName}
+                              className="px-2.5 py-1.5 rounded-lg bg-white text-emerald-800 hover:bg-emerald-50 font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border border-emerald-300 no-underline"
+                            >
+                              <Download size={12} />
+                              <span>Download</span>
+                            </a>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -676,6 +756,16 @@ export default function SuperAdminCompanyDetailsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Excel Sheet Viewer Modal */}
+      {selectedExcelDoc && (
+        <ExcelSheetEditorModal
+          isOpen={!!selectedExcelDoc}
+          onClose={() => setSelectedExcelDoc(null)}
+          onSave={() => setSelectedExcelDoc(null)}
+          initialDocument={selectedExcelDoc}
+        />
       )}
     </div>
   );

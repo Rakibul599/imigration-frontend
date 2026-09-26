@@ -39,6 +39,18 @@ export type DirectorDocument = {
   uploadedAt: string;
 };
 
+export type DirectorExcelDocument = {
+  id: string;
+  name: string; // Sheet title / remark
+  fileName: string;
+  fileSize?: string;
+  fileType?: string;
+  fileData?: string; // Data URL or storage URL
+  headers: string[]; // e.g. ["Item", "Cost", "Quantity"]
+  rows: string[][]; // e.g. [["Permit Renewal", "1200", "5"]]
+  updatedAt: string;
+};
+
 export type CompanyDirector = {
   id: string;
   name: string;
@@ -51,10 +63,13 @@ export type CompanyDirector = {
   socsoNo: string;
   epfNo: string;
   carPlateNo: string;
+  carPlates?: string[]; // Multiple car plate numbers (+add)
   carPurchaseType: 'cash' | 'emi' | ''; // EMI or Cash
-  carAmount: string | number; // EMI/Cash Amount
+  carAmount: string | number; // EMI/Cash Monthly Amount
+  carTotalPayment?: string | number; // Total Payment (only for EMI scheme)
   basicSalary: string | number; // Basic Salary
   otherDocuments: DirectorDocument[]; // Multiple documents (name + file upload)
+  excelDocuments?: DirectorExcelDocument[]; // Excel spreadsheets (upload / create / edit)
 };
 
 export type Company = {
@@ -74,6 +89,7 @@ export type Company = {
   costWallet?: number; // Total Cost Wallet (MYR)
   profitWallet?: number; // Total Profit Wallet (MYR)
   workerWallet?: number; // Foreign Worker Wallet (MYR)
+  pendingWallet?: number; // Total Foreigner Pending Wallet (MYR)
 
   // Additional comprehensive company fields
   address?: string; // Company Address
@@ -82,6 +98,7 @@ export type Company = {
   currency?: string; // Currency selection (e.g. MYR, USD)
   language?: string; // Language selection (e.g. English, Malay)
   bankName?: string; // Bank name
+  bankAccountName?: string; // Company Account Name
   bankAccountNo?: string; // Company Bank Account No
   directors?: CompanyDirector[]; // Multiple Directors / CEOs
   createdAt?: string;
@@ -122,6 +139,12 @@ export function getCompanyWorkerWallet(c: Company): number {
   if (typeof c.workerWallet === 'number') return c.workerWallet;
   const active = getCompanyActiveWorkers(c);
   return active * 135 + 4500;
+}
+
+export function getCompanyPendingWallet(c: Company): number {
+  if (typeof c.pendingWallet === 'number') return c.pendingWallet;
+  const inactive = getCompanyInactiveWorkers(c);
+  return inactive * 180 + 3500;
 }
 
 export const companies: Company[] = [
