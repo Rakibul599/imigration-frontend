@@ -19,15 +19,48 @@ jobs:
           script: |
             set -e
 
-            # NVM ও Node পাথ লোড করা
+            # ১. NVM ও Node.js লোড বা অটো-ইনস্টল করা
             export NVM_DIR="$HOME/.nvm"
+            if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+              if [ -s "/home/acco1122/.nvm/nvm.sh" ]; then
+                export NVM_DIR="/home/acco1122/.nvm"
+              else
+                echo "NVM not found. Automatically installing NVM..."
+                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+                export NVM_DIR="$HOME/.nvm"
+              fi
+            fi
+
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            export PATH="$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -n 1)/bin:$PATH:/usr/local/bin:/usr/bin"
+
+            # যদি Node না থাকে, Node.js 20 ইনস্টল করা
+            if ! command -v node &> /dev/null; then
+              echo "Node.js not detected. Installing Node.js 20 LTS via NVM..."
+              nvm install 20
+              nvm use 20
+              nvm alias default 20
+            fi
+
+            # পাথ নিশ্চিত করা
+            CURRENT_NODE_VERSION="$(nvm current 2>/dev/null || echo '')"
+            if [ -n "$CURRENT_NODE_VERSION" ] && [ -d "$NVM_DIR/versions/node/$CURRENT_NODE_VERSION/bin" ]; then
+              export PATH="$NVM_DIR/versions/node/$CURRENT_NODE_VERSION/bin:$PATH"
+            fi
+            export PATH="$PATH:/usr/local/bin:/usr/bin"
+
+            echo "Node version: $(node -v)"
+            echo "NPM version: $(npm -v)"
+
+            # PM2 না থাকলে ইনস্টল করা
+            if ! command -v pm2 &> /dev/null; then
+              echo "Installing PM2 for process management..."
+              npm install -g pm2 || true
+            fi
 
             # গিট সেফ ডিরেক্টরি পারমিশন নিশ্চিত করা
             git config --global --add safe.directory '*'
 
-            # প্রজেক্ট ডিরেক্টরিতে যাওয়া (CloudPanel htdocs)
+            # ২. প্রজেক্ট ডিরেক্টরিতে যাওয়া (CloudPanel htdocs)
             if [ -d "$HOME/htdocs/acco.ink" ]; then
               cd "$HOME/htdocs/acco.ink"
             elif [ -d "/home/acco1122/htdocs/acco.ink" ]; then
@@ -37,7 +70,7 @@ jobs:
               exit 1
             fi
 
-            # গিট রিপোজিটরি সেটআপ / সিঙ্ক
+            # ৩. গিট রিপোজিটরি সেটআপ / সিঙ্ক
             if [ ! -d ".git" ]; then
               echo "Repository not initialized in site directory. Initializing..."
               rm -rf index.html default.html
@@ -52,22 +85,20 @@ jobs:
               git pull origin main
             fi
 
-            # প্রোডাকশন এনভায়রনমেন্ট ভ্যারিয়েবল সেট করা (Backend API URL)
+            # ৪. প্রোডাকশন এনভায়রনমেন্ট ভ্যারিয়েবল সেট করা (Backend API URL)
             echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.production
             echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.local
 
-            # ডিপেন্ডেন্সি ইন্সটল করা
+            # ৫. ডিপেন্ডেন্সি ইন্সটল করা
             npm install --legacy-peer-deps --prefer-offline --no-audit
 
-            # Next.js অ্যাপ্লিকেশন বিল্ড করা
+            # ৬. Next.js অ্যাপ্লিকেশন বিল্ড করা
             npm run build
 
-            # PM2 বা অ্যাপ্লিকেশন রিস্টার্ট করা
+            # ৭. PM2 দিয়ে অ্যাপ্লিকেশন স্টার্ট / রিস্টার্ট করা
             if command -v pm2 &> /dev/null; then
               pm2 restart acco-frontend || pm2 start npm --name "acco-frontend" -- start
               pm2 save || true
-            else
-              echo "Notice: PM2 is not installed globally. Starting or managing via CloudPanel runner."
             fi
 
             echo "Frontend successfully deployed to acco.ink!"
