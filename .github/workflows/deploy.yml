@@ -1,0 +1,73 @@
+name: Deploy Frontend to CloudPanel
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Frontend to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST || '161.97.133.74' }}
+          username: ${{ secrets.SSH_USER || 'acco-fe-ssh' }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+
+            # NVM ও Node পাথ লোড করা
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            export PATH="$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node 2>/dev/null | tail -n 1)/bin:$PATH:/usr/local/bin:/usr/bin"
+
+            # গিট সেফ ডিরেক্টরি পারমিশন নিশ্চিত করা
+            git config --global --add safe.directory '*'
+
+            # প্রজেক্ট ডিরেক্টরিতে যাওয়া (CloudPanel htdocs)
+            if [ -d "$HOME/htdocs/acco.ink" ]; then
+              cd "$HOME/htdocs/acco.ink"
+            elif [ -d "/home/acco1122/htdocs/acco.ink" ]; then
+              cd "/home/acco1122/htdocs/acco.ink"
+            else
+              echo "Target directory for acco.ink not found!"
+              exit 1
+            fi
+
+            # গিট রিপোজিটরি সেটআপ / সিঙ্ক
+            if [ ! -d ".git" ]; then
+              echo "Repository not initialized in site directory. Initializing..."
+              rm -rf index.html default.html
+              git init
+              git remote add origin https://github.com/Rakibul599/imigration-frontend.git
+              git fetch origin main
+              git checkout -f -B main origin/main
+            else
+              git remote set-url origin https://github.com/Rakibul599/imigration-frontend.git || true
+              git restore . || true
+              git clean -fd || true
+              git pull origin main
+            fi
+
+            # প্রোডাকশন এনভায়রনমেন্ট ভ্যারিয়েবল সেট করা (Backend API URL)
+            echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.production
+            echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.local
+
+            # ডিপেন্ডেন্সি ইন্সটল করা
+            npm install --legacy-peer-deps --prefer-offline --no-audit
+
+            # Next.js অ্যাপ্লিকেশন বিল্ড করা
+            npm run build
+
+            # PM2 বা অ্যাপ্লিকেশন রিস্টার্ট করা
+            if command -v pm2 &> /dev/null; then
+              pm2 restart acco-frontend || pm2 start npm --name "acco-frontend" -- start
+              pm2 save || true
+            else
+              echo "Notice: PM2 is not installed globally. Starting or managing via CloudPanel runner."
+            fi
+
+            echo "Frontend successfully deployed to acco.ink!"
