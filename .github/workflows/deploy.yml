@@ -51,12 +51,6 @@ jobs:
             echo "Node version: $(node -v)"
             echo "NPM version: $(npm -v)"
 
-            # PM2 না থাকলে ইনস্টল করা
-            if ! command -v pm2 &> /dev/null; then
-              echo "Installing PM2 for process management..."
-              npm install -g pm2 || true
-            fi
-
             # গিট সেফ ডিরেক্টরি পারমিশন নিশ্চিত করা
             git config --global --add safe.directory '*'
 
@@ -89,16 +83,20 @@ jobs:
             echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.production
             echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.local
 
-            # ৫. ডিপেন্ডেন্সি ইন্সটল করা
+            # ৫. ডিপেন্ডেন্সি ইন্সটল করা (PM2 সহ)
             npm install --legacy-peer-deps --prefer-offline --no-audit
 
             # ৬. Next.js অ্যাপ্লিকেশন বিল্ড করা
             npm run build
 
-            # ৭. PM2 দিয়ে অ্যাপ্লিকেশন স্টার্ট / রিস্টার্ট করা
-            if command -v pm2 &> /dev/null; then
-              pm2 restart acco-frontend || pm2 start npm --name "acco-frontend" -- start
-              pm2 save || true
+            # ৭. PM2 দিয়ে অ্যাপ্লিকেশন পোর্ট ৩০০০ এ চালু / রিস্টার্ট করা
+            export PM2_BIN="./node_modules/.bin/pm2"
+            if [ ! -f "$PM2_BIN" ]; then
+              PM2_BIN="npx pm2"
             fi
 
-            echo "Frontend successfully deployed to acco.ink!"
+            echo "Starting / Reloading Next.js application on port 3000..."
+            $PM2_BIN restart acco-frontend || PORT=3000 $PM2_BIN start npm --name "acco-frontend" -- start
+            $PM2_BIN save || true
+
+            echo "Frontend successfully deployed and running on acco.ink!"
