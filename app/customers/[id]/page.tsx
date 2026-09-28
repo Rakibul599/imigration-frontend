@@ -192,14 +192,6 @@ function CustomerDetailsContent() {
               <Printer size={14} />
               <span>Print Dossier</span>
             </button>
-
-            <Link
-              href={`/customers/create?id=${customer.id}&company=${encodeURIComponent(activeCompany?.id || companyParam || 'gamuda')}`}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#0b4da2] hover:bg-[#083c80] text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer no-underline"
-            >
-              <Edit2 size={14} />
-              <span>Edit Customer</span>
-            </Link>
           </div>
         </div>
 
@@ -211,9 +203,9 @@ function CustomerDetailsContent() {
             <div className="flex items-start sm:items-center gap-5">
               {/* Profile Avatar */}
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-blue-50 border-2 border-blue-200 flex items-center justify-center shrink-0 overflow-hidden font-extrabold text-2xl text-[#0b4da2] shadow-md">
-                {customer.profile_pic ? (
+                {customer.profile_pic || customer.profile_image ? (
                   <img
-                    src={getFileUrl(customer.profile_pic)}
+                    src={getFileUrl(customer.profile_pic || customer.profile_image)}
                     alt={customer.full_name}
                     className="w-full h-full object-cover"
                   />
@@ -512,12 +504,6 @@ function CustomerDetailsContent() {
               <div className="text-center py-8 text-slate-400 text-xs">
                 <FileCheck size={28} className="mx-auto text-slate-300 mb-2" />
                 <p className="m-0 font-medium">No biometric documents attached to this profile.</p>
-                <Link
-                  href={`/customers/create?id=${customer.id}&company=${encodeURIComponent(activeCompany?.id || companyParam || 'gamuda')}`}
-                  className="mt-2 inline-block text-blue-600 hover:underline font-semibold"
-                >
-                  Upload Documents Now
-                </Link>
               </div>
             )}
           </div>

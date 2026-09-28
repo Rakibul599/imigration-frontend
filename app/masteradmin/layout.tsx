@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -14,10 +14,8 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   Shield,
   ShieldAlert,
-  ShieldCheck,
   UserCheck,
   Users,
   X,
@@ -27,8 +25,9 @@ import {
   getStoredCompanies,
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
+import { getMasterAdminUser, logoutMasterAdmin, AuthUser } from '@/lib/auth';
 
-export default function SuperAdminLayout({
+export default function MasterAdminLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -36,111 +35,114 @@ export default function SuperAdminLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const isLoginPage = pathname === '/superadmin/login';
+  const isLoginPage = pathname === '/masteradmin/login';
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [companyCount, setCompanyCount] = useState<number>(0);
+  const [isAuth, setIsAuth] = useState<boolean | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
-  const [masterAdminCount, setMasterAdminCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
-  const [passwordCount, setPasswordCount] = useState<number>(0);
 
-  // Check superadmin authentication
+  // Check master admin auth
   useEffect(() => {
     if (isLoginPage) {
-      setIsAuthenticated(true);
+      setIsAuth(true);
       return;
     }
 
     try {
-      const loggedIn = localStorage.getItem('isSuperAdminLoggedIn');
-      if (loggedIn === 'true') {
-        setIsAuthenticated(true);
+      const loggedIn = localStorage.getItem('isMasterAdminLoggedIn');
+      const user = getMasterAdminUser();
+
+      if (loggedIn === 'true' && user) {
+        setIsAuth(true);
+        setCurrentUser(user);
       } else {
-        setIsAuthenticated(false);
-        router.push('/superadmin/login');
+        setIsAuth(false);
+        router.push('/masteradmin/login');
       }
     } catch {
-      setIsAuthenticated(true);
+      setIsAuth(true);
     }
   }, [pathname, isLoginPage, router]);
 
-  // Load companies & backend data
+  // Load companies and filter permitted count
   useEffect(() => {
-    const updateCount = () => {
-      const list = getStoredCompanies();
-      setCompanyCount(list.length);
+    if (isLoginPage) return;
+
+    const calculatePermitted = () => {
+      const all = getStoredCompanies();
+      const user = getMasterAdminUser();
+      if (!user) {
+        setPermittedCompanyCount(0);
+        return;
+      }
+      const allowed = Array.isArray(user.assigned_companies) ? user.assigned_companies : [];
+      const permitted = all.filter((c) =>
+        allowed.some((id) => id.toLowerCase() === c.id.toLowerCase())
+      );
+      setPermittedCompanyCount(permitted.length);
     };
-    updateCount();
-    fetchCompaniesFromBackend().then((list) => {
-      setCompanyCount(list.length);
+
+    calculatePermitted();
+    fetchCompaniesFromBackend().then(() => {
+      calculatePermitted();
     }).catch(() => {});
 
-    const unsub = subscribeToCompanyChanges(updateCount);
+    const unsub = subscribeToCompanyChanges(calculatePermitted);
     return unsub;
-  }, []);
+  }, [isLoginPage]);
 
-  // Fetch counts from backend
+  // Fetch employees count in scope
   useEffect(() => {
     if (isLoginPage) return;
     const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
-    
-    // Fetch employees count
     fetch(`${apiBase}/employees`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setEmployeeCount(data.length);
+          const user = getMasterAdminUser();
+          const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+          const inScope = data.filter((emp) => {
+            const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+            return emp.role === 'Admin' || assigned.some((cId: string) => scope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
+          });
+          setEmployeeCount(inScope.length);
         }
       })
       .catch(() => {});
 
-    // Fetch master admins count
-    fetch(`${apiBase}/master-admins`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setMasterAdminCount(data.length);
-        }
-      })
-      .catch(() => {});
-
-    // Fetch customers count
+    // Fetch customers count in scope
     fetch(`${apiBase}/customers`)
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setCustomerCount(data.length);
-        }
-      })
-      .catch(() => {});
-
-    // Fetch passwords count
-    fetch(`${apiBase}/passwords`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data && typeof data.total === 'number') {
-          setPasswordCount(data.total);
+          const user = getMasterAdminUser();
+          const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+          const inScope = data.filter((cust) => {
+            const cId = cust.company_id;
+            return Boolean(cId && scope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
+          });
+          setCustomerCount(inScope.length);
         }
       })
       .catch(() => {});
   }, [pathname, isLoginPage]);
 
-  // If this is the login page, render children directly without admin sidebar
   if (isLoginPage) {
     return <>{children}</>;
   }
 
   // Loading state while checking auth
-  if (isAuthenticated === false) {
+  if (isAuth === false) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center text-slate-600 font-sans">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-3 border-[#0b4da2] border-t-transparent rounded-full animate-spin" />
           <span className="text-xs font-semibold text-slate-700">
-            Verifying Super Admin Authorization...
+            Verifying Master Administrator Authorization...
           </span>
         </div>
       </div>
@@ -148,59 +150,52 @@ export default function SuperAdminLayout({
   }
 
   const handleLogout = () => {
-    try {
-      localStorage.removeItem('isSuperAdminLoggedIn');
-      localStorage.removeItem('superAdminUser');
-    } catch {}
-    router.push('/superadmin/login');
+    logoutMasterAdmin();
+    router.push('/masteradmin/login');
   };
 
   const navLinks = [
     {
       name: 'Companies Management',
-      href: '/superadmin/companies',
+      href: '/masteradmin/companies',
       icon: Building2,
-      badge: companyCount > 0 ? `${companyCount}` : undefined,
-    },
-    {
-      name: 'Master Admin Permission',
-      href: '/superadmin/master-admins',
-      icon: ShieldAlert,
-      badge: masterAdminCount > 0 ? `${masterAdminCount}` : undefined,
+      badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
     },
     {
       name: 'Employees & Permissions',
-      href: '/superadmin/employees',
+      href: '/masteradmin/employees',
       icon: Users,
       badge: employeeCount > 0 ? `${employeeCount}` : undefined,
     },
     {
       name: 'Customer Management',
-      href: '/superadmin/customers',
+      href: '/masteradmin/customers',
       icon: UserCheck,
       badge: customerCount > 0 ? `${customerCount}` : undefined,
     },
     {
       name: 'Dashboard Overview',
-      href: '/superadmin',
+      href: '/masteradmin',
       icon: LayoutDashboard,
       badge: 'Live',
     },
     {
-      name: 'Password Management',
-      href: '/superadmin/passwords',
+      name: 'Change Password',
+      href: '/masteradmin/change-password',
       icon: KeyRound,
-      badge: passwordCount > 0 ? `${passwordCount}` : undefined,
+      badge: 'Account',
     },
   ];
+
+  const assignedList = currentUser?.assigned_companies || [];
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden">
       {/* Top Strip matching official frontend */}
       <div className="top-strip z-50">
-        <span>Official Super Administrator Portal</span>
+        <span>Official Master Administrator Portal</span>
         <div className="flex items-center gap-4">
-          <span className="hidden sm:inline">Server: Laravel 11 API (MySQL Connected)</span>
+          <span className="hidden sm:inline">Scope: {assignedList.length} Permitted Companies</span>
           <button
             onClick={handleLogout}
             className="inline-flex items-center gap-1 text-yellow-300 hover:text-white font-semibold transition-colors cursor-pointer border-0 bg-transparent text-xs"
@@ -234,12 +229,12 @@ export default function SuperAdminLayout({
           <div className="h-16 border-b border-slate-200 flex items-center justify-between px-4 bg-white">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="w-10 h-10 rounded-xl bg-[#0b4da2] text-white flex items-center justify-center shrink-0 shadow-sm">
-                <ShieldCheck size={22} className="text-yellow-400" />
+                <ShieldAlert size={22} className="text-yellow-400" />
               </div>
               {sidebarOpen && (
                 <div className="truncate">
                   <h2 className="text-xs font-bold text-slate-900 uppercase tracking-tight m-0 leading-tight">
-                    Super Admin
+                    Master Admin
                   </h2>
                   <p className="text-[11px] text-[#0b4da2] font-semibold m-0 leading-tight">
                     Control Console
@@ -254,6 +249,7 @@ export default function SuperAdminLayout({
             >
               <X size={18} />
             </button>
+
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="hidden lg:flex text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer bg-transparent border-0 transition-colors"
@@ -276,8 +272,8 @@ export default function SuperAdminLayout({
                   const Icon = link.icon;
                   const isActive =
                     pathname === link.href ||
-                    (link.href === '/superadmin/companies' && pathname.startsWith('/superadmin/companies')) ||
-                    (link.href !== '/superadmin' && link.href !== '/superadmin/companies' && pathname.startsWith(link.href));
+                    (link.href === '/masteradmin/companies' && pathname.startsWith('/masteradmin/companies')) ||
+                    (link.href !== '/masteradmin' && pathname.startsWith(link.href));
 
                   return (
                     <Link
@@ -317,7 +313,7 @@ export default function SuperAdminLayout({
               </nav>
             </div>
 
-            {/* Public Links */}
+            {/* Public Portals Link matching Super Admin */}
             <div>
               {sidebarOpen && (
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
@@ -373,7 +369,7 @@ export default function SuperAdminLayout({
             </div>
           </div>
 
-          {/* User Profile & Sign Out at Bottom */}
+          {/* User Profile & Sign Out at Bottom matching Super Admin */}
           <div className="p-3 border-t border-slate-200 bg-slate-50">
             <div
               className={`flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200 shadow-xs ${
@@ -381,20 +377,20 @@ export default function SuperAdminLayout({
               }`}
             >
               <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#0b4da2] flex items-center justify-center font-bold text-xs shrink-0">
-                SA
+                MA
               </div>
               {sidebarOpen && (
                 <div className="flex-1 truncate">
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs font-bold text-slate-900 m-0 truncate">
-                      Super Admin
+                      {currentUser?.name || 'Master Admin'}
                     </p>
-                    <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 py-0.2 rounded">
-                      ROOT
+                    <span className="text-[9px] bg-blue-100 text-[#0b4da2] font-bold px-1 py-0.2 rounded">
+                      SCOPE: {assignedList.length}
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 m-0 truncate">
-                    superadmin@admin.com
+                  <p className="text-[10px] text-slate-500 m-0 truncate font-mono">
+                    @{currentUser?.username || currentUser?.employee_code || 'masteradmin'}
                   </p>
                 </div>
               )}
@@ -418,7 +414,7 @@ export default function SuperAdminLayout({
             sidebarOpen ? 'lg:pl-64' : 'lg:pl-20'
           }`}
         >
-          {/* White Header Top Bar */}
+          {/* Header Bar */}
           <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between sticky top-[32px] z-30 shadow-xs">
             <div className="flex items-center gap-3">
               <button
@@ -429,20 +425,20 @@ export default function SuperAdminLayout({
               </button>
 
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500 font-medium">Super Admin Console</span>
+                <span className="text-slate-500 font-medium">Master Admin Console</span>
                 <ChevronRight size={13} className="text-slate-400" />
                 <span className="text-[#0b4da2] font-bold capitalize">
-                  {pathname === '/superadmin'
+                  {pathname === '/masteradmin'
                     ? 'Dashboard Overview'
-                    : pathname.replace('/superadmin/', '').replace('-', ' ')}
+                    : pathname.replace('/masteradmin/', '').replace('-', ' ')}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs px-3 py-1.5 rounded-full font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Backend MySQL Active</span>
+              <div className="hidden sm:flex items-center gap-2 bg-blue-50 border border-blue-200 text-[#0b4da2] text-xs px-3 py-1.5 rounded-full font-semibold">
+                <span className="w-2 h-2 rounded-full bg-[#0b4da2] animate-pulse" />
+                <span>{assignedList.length} Assigned Companies</span>
               </div>
 
               <Link
@@ -456,13 +452,17 @@ export default function SuperAdminLayout({
             </div>
           </header>
 
-          {/* White/Light Page Body */}
-          <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-4 sm:p-8 bg-[#f8fafc]">{children}</main>
+          {/* Main Page Content */}
+          <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-4 sm:p-8 bg-[#f8fafc]">
+            {children}
+          </main>
 
-          {/* White Footer */}
+          {/* Footer */}
           <footer className="border-t border-slate-200 bg-white py-4 px-8 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
-            <span>Super Administrator Management Portal</span>
-            <span className="font-mono text-[11px] text-slate-400">Laravel 11 REST API • MySQL Connected</span>
+            <span>Master Administrator Management Console</span>
+            <span className="font-mono text-[11px] text-slate-400">
+              Restricted Multi-Tenant Access • Company Creation Disabled
+            </span>
           </footer>
         </div>
       </div>

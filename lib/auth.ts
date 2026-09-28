@@ -9,15 +9,18 @@ export interface EmployeePermissions {
 export interface AuthUser {
   id: number | string;
   employee_code: string;
+  username?: string;
   name: string;
   email: string;
-  role: 'Employee' | 'Admin' | 'SUPER_ADMIN';
+  role: 'Employee' | 'Admin' | 'SUPER_ADMIN' | 'MasterAdmin' | string;
   assigned_companies: string[];
   permissions: EmployeePermissions;
 }
 
 const STORAGE_KEY = 'portal_current_user';
 const TOKEN_KEY = 'portal_auth_token';
+const MASTER_ADMIN_STORAGE_KEY = 'masterAdminUser';
+const MASTER_ADMIN_LOGGED_KEY = 'isMasterAdminLoggedIn';
 
 /**
  * Get the backend API base URL
@@ -92,12 +95,163 @@ export function logoutUser(): void {
 }
 
 /**
+ * Get current Master Admin user from localStorage
+ */
+export function getMasterAdminUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(MASTER_ADMIN_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if Master Admin is authenticated
+ */
+export function isMasterAdminAuthenticated(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const logged = localStorage.getItem(MASTER_ADMIN_LOGGED_KEY) === 'true';
+    const user = getMasterAdminUser();
+    return Boolean(logged && user);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Save Master Admin session
+ */
+export function setMasterAdminUser(user: AuthUser, token?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(MASTER_ADMIN_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(MASTER_ADMIN_LOGGED_KEY, 'true');
+    if (token) {
+      localStorage.setItem('masterAdminToken', token);
+    }
+    // Also sync portal session for cross-component access
+    setCurrentUser(user, token);
+  } catch (err) {
+    console.error('Failed to set Master Admin session', err);
+  }
+}
+
+/**
+ * Log out Master Admin
+ */
+export function logoutMasterAdmin(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(MASTER_ADMIN_STORAGE_KEY);
+    localStorage.removeItem(MASTER_ADMIN_LOGGED_KEY);
+    localStorage.removeItem('masterAdminToken');
+    logoutUser();
+  } catch (err) {
+    console.error('Failed to logout Master Admin', err);
+  }
+}
+
+/**
+ * Authenticate Master Admin against Laravel backend POST /api/masteradmin/login
+ */
+export async function authenticateMasterAdmin(
+  username: string,
+  password: string
+): Promise<{ success: boolean; message: string; user?: AuthUser; token?: string }> {
+  const apiUrl = getBackendApiUrl();
+  try {
+    const res = await fetch(`${apiUrl}/masteradmin/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        username: username.trim(),
+        password,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return {
+        success: false,
+        message: data.message || 'Master Admin authentication failed.',
+      };
+    }
+    const user: AuthUser = {
+      id: data.user.id,
+      employee_code: data.user.username,
+      username: data.user.username,
+      name: data.user.name,
+      email: data.user.email,
+      role: 'MasterAdmin',
+      assigned_companies: Array.isArray(data.user.assigned_companies) ? data.user.assigned_companies : [],
+      permissions: {
+        can_create: false,
+        can_edit: true,
+        can_delete: false,
+      },
+    };
+    setMasterAdminUser(user, data.token);
+    return {
+      success: true,
+      message: data.message || 'Master Admin authenticated successfully.',
+      user,
+      token: data.token,
+    };
+  } catch (err) {
+    console.error('Master admin auth error:', err);
+    // Offline fallback for demo
+    if (username.trim().toLowerCase() === 'masteradmin' && (password === 'password123' || password === 'admin')) {
+      const demoMasterAdmin: AuthUser = {
+        id: 1,
+        employee_code: 'masteradmin',
+        username: 'masteradmin',
+        name: 'Tan Sri Syed Mokhtar',
+        email: 'syed@masteradmin.com',
+        role: 'MasterAdmin',
+        assigned_companies: ['gamuda', 'top-glove', 'sime-darby'],
+        permissions: {
+          can_create: false,
+          can_edit: true,
+          can_delete: false,
+        },
+      };
+      setMasterAdminUser(demoMasterAdmin);
+      return {
+        success: true,
+        message: 'Master Admin authenticated (offline fallback).',
+        user: demoMasterAdmin,
+      };
+    }
+    return {
+      success: false,
+      message: 'Unable to connect to authentication server.',
+    };
+  }
+}
+
+/**
  * Check if the currently logged-in user has access to a specific company ID
  */
 export function hasCompanyAccess(companyId: string): boolean {
-  const user = getCurrentUser();
+  const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return true; // Unauthenticated public view
   if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
+
+  // For MasterAdmin, strictly check assigned_companies
+  if (user.role === 'MasterAdmin') {
+    if (!Array.isArray(user.assigned_companies) || user.assigned_companies.length === 0) {
+      return false;
+    }
+    return user.assigned_companies.some(
+      (id) => id.toLowerCase() === companyId.toLowerCase()
+    );
+  }
 
   // For Employee, strictly check assigned_companies
   if (user.role === 'Employee') {
@@ -112,11 +266,13 @@ export function hasCompanyAccess(companyId: string): boolean {
 }
 
 /**
- * Check if the user has permission to create a company
+ * Check if the user has permission to create a company.
+ * Master Admin CANNOT create any company!
  */
 export function canCreate(): boolean {
-  const user = getCurrentUser();
+  const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
+  if (user.role === 'MasterAdmin') return false; // Masteradmin CANNOT create companies!
   if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
   return Boolean(user.permissions?.can_create);
 }
@@ -125,9 +281,9 @@ export function canCreate(): boolean {
  * Check if the user has permission to edit a company
  */
 export function canEdit(): boolean {
-  const user = getCurrentUser();
+  const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
-  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
+  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin' || user.role === 'MasterAdmin') return true;
   return Boolean(user.permissions?.can_edit);
 }
 
@@ -135,8 +291,9 @@ export function canEdit(): boolean {
  * Check if the user has permission to delete a company
  */
 export function canDelete(): boolean {
-  const user = getCurrentUser();
+  const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
+  if (user.role === 'MasterAdmin') return false;
   if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
   return Boolean(user.permissions?.can_delete);
 }

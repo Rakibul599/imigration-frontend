@@ -11,32 +11,52 @@ export interface CustomerDocument {
 export interface CustomerRecord {
   id: number;
   full_name: string;
-  nid_no: string;
-  worker_phone?: string;
-  guardian_phone?: string;
-  leaving_address?: string;
-  email: string;
-  username?: string;
-  password?: string;
-  bank_account_name?: string;
-  bank_account_number?: string;
-  role: string; // 'Sales' | 'Worker' | 'Customer' | 'Agent'
   passport_no?: string;
-  total_payment?: string;
+  passport_file?: string;
+  nid_no: string;
+  nid_file?: string;
+  date_of_birth?: string;
+  country?: string;
+  passport_issue_date?: string;
+  passport_expire_date?: string;
+  leaving_address?: string;
+  phone?: string;
+  email: string;
+  working_sector?: string;
+  working_address?: string;
+  basic_salary?: string;
+  overtime?: string; // "our time"
   company_id?: string;
-  profile_pic?: string;
   documents?: CustomerDocument[];
   status: 'active' | 'pending' | 'inactive';
   created_at?: string;
   updated_at?: string;
+  // Legacy fields for backward compatibility
+  worker_phone?: string;
+  guardian_phone?: string;
+  username?: string;
+  password?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  total_payment?: string;
+  role: string;
+  profile_pic?: string;
+  profile_image?: string;
+}
+
+export interface WorkingSector {
+  id: number;
+  name: string;
+  description?: string;
+  status?: string;
 }
 
 const LOCAL_STORAGE_KEY = 'agency_customers_cache';
+const SECTORS_CACHE_KEY = 'agency_working_sectors_cache';
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
 /**
  * Resolves a file path or URL to an absolute URL accessible by the browser.
- * If the path is a relative '/storage/...' path from Laravel, it prepends the backend base domain.
  */
 export function getFileUrl(path?: string): string {
   if (!path) return '';
@@ -61,13 +81,14 @@ function sanitizeForStorage(records: CustomerRecord[]): CustomerRecord[] {
     documents: Array.isArray(c.documents)
       ? c.documents.map(({ dataUrl, ...rest }) => rest)
       : [],
-    // Prevent giant base64 strings from exhausting localStorage quota
     profile_pic: c.profile_pic && c.profile_pic.length > 200000 ? '' : c.profile_pic,
+    passport_file: c.passport_file && c.passport_file.length > 200000 ? '' : c.passport_file,
+    nid_file: c.nid_file && c.nid_file.length > 200000 ? '' : c.nid_file,
   }));
 }
 
 /**
- * Synchronously get a customer from localStorage cache for instant zero-lag form hydration
+ * Synchronously get a customer from localStorage cache
  */
 export function getCustomerFromCache(id: string | number): CustomerRecord | null {
   if (typeof window === 'undefined') return null;
@@ -82,13 +103,14 @@ export function getCustomerFromCache(id: string | number): CustomerRecord | null
 }
 
 /**
- * Fetch all customers from backend API, optionally filtered by company
+ * Fetch all customers from backend API
  */
-export async function fetchCustomers(companyId?: string, search?: string): Promise<CustomerRecord[]> {
+export async function fetchCustomers(companyId?: string, search?: string, sector?: string): Promise<CustomerRecord[]> {
   try {
     const params = new URLSearchParams();
     if (companyId) params.append('company_id', companyId);
     if (search) params.append('search', search);
+    if (sector && sector !== 'ALL') params.append('sector', sector);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -132,9 +154,13 @@ export async function fetchCustomers(companyId?: string, search?: string): Promi
             (c) =>
               c.full_name.toLowerCase().includes(s) ||
               c.nid_no.toLowerCase().includes(s) ||
-              c.email.toLowerCase().includes(s) ||
-              c.role.toLowerCase().includes(s)
+              (c.passport_no && c.passport_no.toLowerCase().includes(s)) ||
+              (c.email && c.email.toLowerCase().includes(s)) ||
+              (c.phone && c.phone.toLowerCase().includes(s))
           );
+        }
+        if (sector && sector !== 'ALL') {
+          list = list.filter((c) => c.working_sector === sector);
         }
         return list;
       }
@@ -145,7 +171,7 @@ export async function fetchCustomers(companyId?: string, search?: string): Promi
 }
 
 /**
- * Fetch single customer by ID (Instant cache lookup + fast background revalidate)
+ * Fetch single customer by ID
  */
 export async function fetchCustomerById(id: string | number): Promise<CustomerRecord | null> {
   const cachedCustomer = getCustomerFromCache(id);
@@ -167,10 +193,9 @@ export async function fetchCustomerById(id: string | number): Promise<CustomerRe
       return data;
     }
   } catch (err) {
-    console.warn('Error or timeout fetching customer by id from backend:', err);
+    console.warn('Error fetching customer by id from backend:', err);
   }
 
-  // Return cached version if network is slow or offline
   return cachedCustomer || null;
 }
 
@@ -180,7 +205,6 @@ export async function fetchCustomerById(id: string | number): Promise<CustomerRe
 export async function createCustomer(data: Partial<CustomerRecord>): Promise<CustomerRecord> {
   const payload = {
     ...data,
-    role: data.role || 'Sales',
     status: data.status || 'active',
   };
 
@@ -207,21 +231,24 @@ export async function createCustomer(data: Partial<CustomerRecord>): Promise<Cus
   const mockCreated: CustomerRecord = {
     id: Date.now(),
     full_name: payload.full_name || '',
-    nid_no: payload.nid_no || '',
-    worker_phone: payload.worker_phone || '',
-    guardian_phone: payload.guardian_phone || '',
-    leaving_address: payload.leaving_address || '',
-    email: payload.email || '',
-    username: payload.username || '',
-    password: payload.password || '',
-    bank_account_name: payload.bank_account_name || '',
-    bank_account_number: payload.bank_account_number || '',
-    role: payload.role || 'Sales',
     passport_no: payload.passport_no || '',
-    total_payment: payload.total_payment || '',
+    passport_file: payload.passport_file || '',
+    nid_no: payload.nid_no || '',
+    nid_file: payload.nid_file || '',
+    date_of_birth: payload.date_of_birth || '',
+    country: payload.country || '',
+    passport_issue_date: payload.passport_issue_date || '',
+    passport_expire_date: payload.passport_expire_date || '',
+    leaving_address: payload.leaving_address || '',
+    phone: payload.phone || '',
+    email: payload.email || '',
+    working_sector: payload.working_sector || '',
+    working_address: payload.working_address || '',
+    basic_salary: payload.basic_salary || '',
+    overtime: payload.overtime || '',
     company_id: payload.company_id || '',
-    profile_pic: payload.profile_pic || '',
     documents: payload.documents || [],
+    role: 'Worker',
     status: payload.status || 'active',
     created_at: new Date().toISOString(),
   };
@@ -231,9 +258,9 @@ export async function createCustomer(data: Partial<CustomerRecord>): Promise<Cus
 }
 
 /**
- * Update an existing customer via PUT /api/customers/{id}
+ * Update an existing customer
  */
-export async function updateCustomer(id: string | number, data: Partial<CustomerRecord>): Promise<CustomerRecord> {
+export async function updateCustomer(id: number | string, data: Partial<CustomerRecord>): Promise<CustomerRecord> {
   try {
     const res = await fetch(`${API_BASE}/customers/${id}`, {
       method: 'PUT',
@@ -250,58 +277,116 @@ export async function updateCustomer(id: string | number, data: Partial<Customer
       return updated;
     }
   } catch (err) {
-    console.warn('Failed to update customer in backend, updating locally:', err);
+    console.warn('Failed to update customer on backend API:', err);
   }
 
-  const existing = await fetchCustomerById(id);
-  const updated = { ...existing, ...data } as CustomerRecord;
+  const existing = getCustomerFromCache(id);
+  const updated: CustomerRecord = {
+    ...(existing || { id: Number(id), full_name: '', nid_no: '', email: '', role: 'Worker', status: 'active' }),
+    ...data,
+    email: data.email ?? (existing?.email || ''),
+    role: data.role ?? (existing?.role || 'Worker'),
+    updated_at: new Date().toISOString(),
+  };
+
   updateLocalCache(updated, 'update');
   return updated;
 }
 
 /**
- * Delete a customer via DELETE /api/customers/{id}
+ * Delete a customer
  */
-export async function deleteCustomer(id: string | number): Promise<boolean> {
+export async function deleteCustomer(id: number | string): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/customers/${id}`, {
       method: 'DELETE',
       headers: { Accept: 'application/json' },
     });
     if (res.ok) {
-      removeFromLocalCache(id);
+      updateLocalCache({ id: Number(id) } as CustomerRecord, 'delete');
       return true;
     }
   } catch (err) {
-    console.warn('Backend delete failed, removing locally:', err);
+    console.warn('Failed to delete customer on backend API:', err);
   }
 
-  removeFromLocalCache(id);
+  updateLocalCache({ id: Number(id) } as CustomerRecord, 'delete');
   return true;
 }
 
-function updateLocalCache(customer: CustomerRecord, action: 'create' | 'update') {
+function updateLocalCache(record: CustomerRecord, action: 'create' | 'update' | 'delete') {
   if (typeof window === 'undefined') return;
   try {
     const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
     let list: CustomerRecord[] = cached ? JSON.parse(cached) : [];
+
     if (action === 'create') {
-      list = [customer, ...list];
-    } else {
-      list = list.map((c) => (String(c.id) === String(customer.id) ? customer : c));
+      list = [record, ...list.filter((c) => c.id !== record.id)];
+    } else if (action === 'update') {
+      list = list.map((c) => (c.id === record.id ? { ...c, ...record } : c));
+    } else if (action === 'delete') {
+      list = list.filter((c) => c.id !== record.id);
     }
+
     const sanitized = sanitizeForStorage(list);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
   } catch {}
 }
 
-function removeFromLocalCache(id: string | number) {
-  if (typeof window === 'undefined') return;
+/**
+ * Working Sectors API & Cache
+ */
+export async function fetchWorkingSectors(): Promise<WorkingSector[]> {
   try {
-    const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!cached) return;
-    let list: CustomerRecord[] = JSON.parse(cached);
-    list = list.filter((c) => String(c.id) !== String(id));
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(list));
-  } catch {}
+    const res = await fetch(`${API_BASE}/working-sectors`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(SECTORS_CACHE_KEY, JSON.stringify(data));
+        }
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch working sectors from backend:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem(SECTORS_CACHE_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+  }
+
+  return [
+    { id: 1, name: 'Construction & Infrastructure' },
+    { id: 2, name: 'Manufacturing & Factory' },
+    { id: 3, name: 'Plantation & Agriculture' },
+    { id: 4, name: 'Services & Cleaning' },
+    { id: 5, name: 'Engineering & Technical' },
+    { id: 6, name: 'Hospitality & Tourism' },
+    { id: 7, name: 'Logistics & Warehousing' },
+  ];
+}
+
+export async function createWorkingSector(name: string, description?: string): Promise<WorkingSector> {
+  const res = await fetch(`${API_BASE}/working-sectors`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ name, description }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || 'Failed to create sector');
+  }
+
+  return await res.json();
 }

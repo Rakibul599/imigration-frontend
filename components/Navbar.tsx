@@ -10,6 +10,7 @@ import {
   Lock,
   LogOut,
   Menu,
+  ShieldAlert,
   ShieldCheck,
   Users,
   X,
@@ -268,7 +269,37 @@ export default function Navbar() {
 
                     <div className="my-1 border-t border-slate-100" />
 
-                    {/* 2. Super Admin Console */}
+                    {/* 2. Master Admin Portal */}
+                    <Link
+                      href="/masteradmin/login"
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setMenuOpen(false);
+                      }}
+                      className="nav-dropdown-item flex items-start gap-3 p-2.5 rounded-lg hover:bg-amber-50/70 transition-all duration-150 group/item border border-transparent hover:border-amber-100/80 no-underline"
+                    >
+                      <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 mt-0.5 group-hover/item:bg-amber-600 group-hover/item:text-white transition-colors shadow-sm">
+                        <ShieldAlert size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[13px] font-bold text-slate-800 group-hover/item:text-amber-700 transition-colors">
+                            Master Admin Portal
+                          </span>
+                          <ChevronRight
+                            size={13}
+                            className="text-slate-300 group-hover/item:text-amber-600 group-hover/item:translate-x-0.5 transition-all"
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500 m-0 mt-0.5 leading-tight font-normal">
+                          Assigned multi-company administrative control
+                        </p>
+                      </div>
+                    </Link>
+
+                    <div className="my-1 border-t border-slate-100" />
+
+                    {/* 3. Super Admin Console */}
                     <Link
                       href="/superadmin/login"
                       onClick={() => {
@@ -291,7 +322,7 @@ export default function Navbar() {
                           />
                         </div>
                         <p className="text-[11px] text-slate-500 m-0 mt-0.5 leading-tight font-normal">
-                          Master administrative control &amp; system governance
+                          Master root administrative control &amp; governance
                         </p>
                       </div>
                     </Link>
@@ -327,6 +358,25 @@ export default function Navbar() {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-bold leading-tight">Employer &amp; Worker Portal</div>
                         <div className="text-[10px] text-slate-500 leading-tight">Clients, workers &amp; employers</div>
+                      </div>
+                      <ChevronRight size={14} className="text-slate-400" />
+                    </Link>
+
+                    <Link
+                      href="/masteradmin/login"
+                      onClick={() => setMenuOpen(false)}
+                      className={`nav-dropdown-item flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                        pathname.startsWith('/masteradmin')
+                          ? 'bg-amber-50 border-amber-200 text-amber-800'
+                          : 'bg-slate-50/80 border-slate-200/60 text-slate-700'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-md bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                        <ShieldAlert size={16} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold leading-tight">Master Admin Portal</div>
+                        <div className="text-[10px] text-slate-500 leading-tight">Assigned companies access</div>
                       </div>
                       <ChevronRight size={14} className="text-slate-400" />
                     </Link>

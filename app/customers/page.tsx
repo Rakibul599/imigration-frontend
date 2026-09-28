@@ -276,26 +276,17 @@ function CustomersContent() {
             </div>
           </div>
 
-          {/* Action Row: Create Button (NO MODAL - Full Page Link) + Filters + Search */}
+          {/* Action Row: Refresh & Search & Filters (Portal creation removed - restricted to Super Admin & Master Admin) */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-wrap">
-              {/* PRIMARY CREATE CUSTOMER BUTTON - DIRECT FULL PAGE NAVIGATION, NO MODAL */}
-              <Link
-                href={`/customers/create?company=${encodeURIComponent(activeCompany.id)}`}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#22a34a] hover:bg-[#1b843c] text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer no-underline tracking-wide uppercase"
-              >
-                <Plus size={16} />
-                <span>Create Customer</span>
-              </Link>
-
               <button
                 onClick={loadCustomerData}
                 disabled={loading}
                 title="Refresh customer list"
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer border-0"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer border-0"
               >
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                <span className="hidden sm:inline">Refresh</span>
+                <span>Refresh Directory</span>
               </button>
             </div>
 
@@ -379,15 +370,8 @@ function CustomersContent() {
                           <Users size={32} className="text-slate-300" />
                           <p className="font-bold text-slate-700 m-0">No customers found</p>
                           <p className="text-xs text-slate-400 m-0">
-                            {searchQuery ? `No records matched "${searchQuery}"` : 'No customer profiles have been created yet.'}
+                            {searchQuery ? `No records matched "${searchQuery}"` : 'No customer profiles are available in this directory.'}
                           </p>
-                          <Link
-                            href={`/customers/create?company=${encodeURIComponent(activeCompany.id)}`}
-                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#22a34a] hover:bg-[#1b843c] text-white rounded-lg text-xs font-semibold transition-colors no-underline"
-                          >
-                            <Plus size={14} />
-                            <span>Create First Customer</span>
-                          </Link>
                         </div>
                       </td>
                     </tr>
@@ -545,31 +529,15 @@ function CustomersContent() {
                           {/* Action Buttons */}
                           <td className="py-3 px-4 align-middle text-center">
                             <div className="flex items-center justify-center gap-1.5">
-                              {/* EYE ICON: NO MODAL -> OPENS DEDICATED FULL-PAGE DOSSIER */}
+                              {/* EYE ICON: OPENS DEDICATED FULL-PAGE DOSSIER */}
                               <Link
                                 href={`/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}`}
-                                title="View Customer Dossier (Full Page - Standard)"
-                                className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-blue-50 hover:border-blue-300 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors no-underline cursor-pointer"
+                                title="View Customer Dossier"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-blue-50 hover:border-blue-300 text-slate-700 hover:text-blue-700 text-xs font-semibold transition-colors no-underline cursor-pointer"
                               >
-                                <Eye size={14} />
+                                <Eye size={13} />
+                                <span>View Dossier</span>
                               </Link>
-
-                              <Link
-                                href={`/customers/create?id=${cust.id}&company=${encodeURIComponent(activeCompany.id)}`}
-                                title="Edit Customer (Full Page)"
-                                className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer no-underline"
-                              >
-                                <Edit2 size={14} />
-                              </Link>
-
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(cust.id, cust.full_name)}
-                                title="Delete Customer"
-                                className="w-8 h-8 rounded border border-rose-200 bg-rose-50/60 hover:bg-rose-100 flex items-center justify-center text-rose-600 transition-colors cursor-pointer"
-                              >
-                                <Trash2 size={14} />
-                              </button>
                             </div>
                           </td>
                         </tr>

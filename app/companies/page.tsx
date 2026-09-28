@@ -13,7 +13,6 @@ import {
   Edit3,
   Globe2,
   LogOut,
-  Plus,
   Search,
   Settings,
   ShieldAlert,
@@ -35,7 +34,6 @@ import {
   deleteStoredCompany,
   fetchCompaniesFromBackend,
   getStoredCompanies,
-  saveStoredCompany,
   subscribeToCompanyChanges,
   updateStoredCompany,
 } from '@/lib/companyStorage';
@@ -143,7 +141,6 @@ export default function CompaniesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [companyList, setCompanyList] = useState<Company[]>([]);
   const [sortAsc, setSortAsc] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState<Company | null>(null);
   const [showSubscriptionAlert, setShowSubscriptionAlert] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
@@ -197,7 +194,6 @@ export default function CompaniesPage() {
 
   // Permission evaluation
   const isEmployeeRole = currentUser?.role === 'Employee';
-  const userCanCreate = !isEmployeeRole || Boolean(currentUser?.permissions?.can_create);
   const userCanEdit = !isEmployeeRole || Boolean(currentUser?.permissions?.can_edit);
   const userCanDelete = !isEmployeeRole || Boolean(currentUser?.permissions?.can_delete);
 
@@ -213,42 +209,6 @@ export default function CompaniesPage() {
       })
     : companyList;
 
-  // New company form state
-  const [newCompanyName, setNewCompanyName] = useState('');
-  const [newCompanyRoc, setNewCompanyRoc] = useState('');
-  const [newCompanySector, setNewCompanySector] = useState('');
-
-  const handleCreateCompany = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userCanCreate) {
-      alert('Permission Denied: You do not have permission to create companies.');
-      return;
-    }
-    if (!newCompanyName.trim()) return;
-
-    const newComp: Company = {
-      id: newCompanyName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-      name: newCompanyName.toUpperCase(),
-      roc: newCompanyRoc.trim() || `ROC-${Math.floor(100000000000 + Math.random() * 900000000000)}`,
-      sector: newCompanySector.trim() || 'General Commercial & Services',
-      description: 'Newly registered employer entity within the Malaysian Immigration portal.',
-      logo: '/images/companies/gamuda.svg',
-      tag: 'New Registration',
-      totalWorkers: 0,
-    };
-
-    const updated = await saveStoredCompany(newComp);
-    setCompanyList(updated);
-    setNewCompanyName('');
-    setNewCompanyRoc('');
-    setNewCompanySector('');
-    setShowCreateModal(false);
-    setActionFeedback({
-      type: 'success',
-      message: `Company "${newComp.name}" registered successfully.`,
-    });
-    setTimeout(() => setActionFeedback(null), 3500);
-  };
 
   const openSettingsModal = (company: Company) => {
     setShowSettingsModal(company);
@@ -428,15 +388,6 @@ export default function CompaniesPage() {
                     <span className="text-slate-500">Your Permissions:</span>
                     <span
                       className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                        userCanCreate
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-100 text-slate-400 line-through'
-                      }`}
-                    >
-                      Create
-                    </span>
-                    <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
                         userCanEdit
                           ? 'bg-blue-50 text-blue-700 border border-blue-200'
                           : 'bg-slate-100 text-slate-400 line-through'
@@ -492,19 +443,9 @@ export default function CompaniesPage() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-600 mt-1">
-                  Viewing all <strong>{accessibleCompanies.length}</strong> employer companies. You have full create, edit, and delete permissions.
+                  Viewing all <strong>{accessibleCompanies.length}</strong> employer companies. Company registration is managed exclusively via the Super Administrator console.
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#22a34a] hover:bg-[#1b843c] text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer border-0"
-              >
-                <Plus size={14} />
-                <span>Create Company</span>
-              </button>
             </div>
           </div>
         )}
@@ -549,24 +490,9 @@ export default function CompaniesPage() {
           </div>
         )}
 
-        {/* Controls Row: Add Company (if permitted) & Search Bar */}
+        {/* Controls Row: Search Bar & Count Indicator */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-2">
-            {userCanCreate ? (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#22a34a] hover:bg-[#1b843c] text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer border-0"
-              >
-                <Plus size={15} />
-                <span>Add Company</span>
-              </button>
-            ) : (
-              <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                <ShieldAlert size={13} className="text-slate-400" />
-                <span>Create Company (Restricted)</span>
-              </span>
-            )}
-
             <span className="text-xs text-slate-500 font-medium">
               Showing {filtered.length} {filtered.length === 1 ? 'company' : 'companies'}
             </span>
@@ -715,80 +641,6 @@ export default function CompaniesPage() {
           </table>
         </div>
       </div>
-
-      {/* Create New Company Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 relative">
-            <button
-              onClick={() => setShowCreateModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
-            >
-              <X size={18} />
-            </button>
-            <h2 className="text-lg font-bold text-slate-900 mb-1">
-              Create New Company
-            </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Register a new employer organization in the digital portal.
-            </p>
-            <form onSubmit={handleCreateCompany} className="flex flex-col gap-3.5">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Company Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. NATASHA ENGINEERING SDN. BHD."
-                  value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  ROC Registration Number
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. ROC-202601099234"
-                  value={newCompanyRoc}
-                  onChange={(e) => setNewCompanyRoc(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Industry / Sector
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Civil & Building Construction"
-                  value={newCompanySector}
-                  onChange={(e) => setNewCompanySector(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
-                />
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[#22a34a] hover:bg-[#1b843c] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer border-0"
-                >
-                  Add Company
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Company Settings / Edit Modal */}
       {showSettingsModal && (
