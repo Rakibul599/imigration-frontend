@@ -468,9 +468,11 @@ function CustomerDetailsContent() {
                         <span className="font-bold text-slate-800 block truncate" title={doc.name}>
                           {doc.name}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {doc.size || 'Verified file attachment'}
-                        </span>
+                        <div className="text-[10px] text-slate-400 font-mono flex flex-wrap items-center gap-x-2">
+                          {doc.issue_date && <span>Issue: <strong className="text-slate-600">{doc.issue_date}</strong></span>}
+                          {doc.expire_date && <span>Expire: <strong className="text-slate-600">{doc.expire_date}</strong></span>}
+                          <span>{doc.size || 'Verified file attachment'}</span>
+                        </div>
                       </div>
                     </div>
 

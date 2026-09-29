@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -40,14 +40,32 @@ import {
   createWorkingSector,
   fetchCustomerById,
   fetchWorkingSectors,
+  getCustomerFromCache,
   getFileUrl,
   updateCustomer,
 } from '@/lib/customerStorage';
 import { getMasterAdminUser } from '@/lib/auth';
+import Select2Search, { Select2Option } from '@/components/Select2Search';
 
 interface CustomerFormFullPageProps {
   portalType: 'superadmin' | 'masteradmin';
   backUrl: string;
+}
+
+function filterPermittedCompanies(allComps: Company[], portalType: 'superadmin' | 'masteradmin'): Company[] {
+  if (portalType !== 'masteradmin') return allComps;
+  const user = getMasterAdminUser();
+  const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+  if (allowed.length === 0) return [];
+  if (allowed.includes('*')) return allComps;
+  return allComps.filter((c) =>
+    allowed.some(
+      (id) =>
+        id.toLowerCase() === c.id.toLowerCase() ||
+        id.toLowerCase() === c.name.toLowerCase() ||
+        (c.roc && id.toLowerCase() === c.roc.toLowerCase())
+    )
+  );
 }
 
 function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps) {
@@ -56,19 +74,49 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   const editId = searchParams.get('id');
   const isEditing = Boolean(editId);
 
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [sectors, setSectors] = useState<WorkingSector[]>([]);
-  const [isLoadingCustomer, setIsLoadingCustomer] = useState(Boolean(editId));
+  // Synchronous cache-first state initialization for 0ms instant page opening
+  const [companies, setCompanies] = useState<Company[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return filterPermittedCompanies(getStoredCompanies(), portalType);
+  });
+
+  const [sectors, setSectors] = useState<WorkingSector[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = localStorage.getItem('agency_working_sectors_cache');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [
+      { id: 1, name: 'Construction & Infrastructure' },
+      { id: 2, name: 'Manufacturing & Factory' },
+      { id: 3, name: 'Plantation & Agriculture' },
+      { id: 4, name: 'Services & Cleaning' },
+      { id: 5, name: 'Engineering & Technical' },
+      { id: 6, name: 'Hospitality & Tourism' },
+      { id: 7, name: 'Logistics & Warehousing' },
+    ];
+  });
+
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(() => {
+    if (!editId) return false;
+    // If found in local cache, no loading delay needed!
+    if (typeof window !== 'undefined' && getCustomerFromCache(editId)) {
+      return false;
+    }
+    return Boolean(editId);
+  });
 
   // Form states strictly matching user requirements
   const [fullName, setFullName] = useState('');
-  const [companyId, setCompanyId] = useState('');
+  const [companyId, setCompanyId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const initialComps = filterPermittedCompanies(getStoredCompanies(), portalType);
+    return initialComps[0]?.id || '';
+  });
   const [passportNo, setPassportNo] = useState('');
   const [passportFile, setPassportFile] = useState<string>('');
-  const [passportFileName, setPassportFileName] = useState('');
   const [nidNo, setNidNo] = useState('');
   const [nidFile, setNidFile] = useState<string>('');
-  const [nidFileName, setNidFileName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [country, setCountry] = useState('Bangladesh');
   const [passportIssueDate, setPassportIssueDate] = useState('');
@@ -95,83 +143,103 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const profilePicInputRef = useRef<HTMLInputElement | null>(null);
-  const passportInputRef = useRef<HTMLInputElement | null>(null);
-  const nidInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load companies & sectors
+  // Background refresh of companies & sectors (non-blocking)
   useEffect(() => {
-    async function init() {
+    let isMounted = true;
+    async function refreshBackgroundData() {
       try {
         const [allComps, secList] = await Promise.all([
           fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
           fetchWorkingSectors(),
         ]);
 
-        let finalComps = allComps;
-        if (portalType === 'masteradmin') {
-          const user = getMasterAdminUser();
-          const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
-          finalComps = allComps.filter((c) =>
-            allowed.some((id) => id.toLowerCase() === c.id.toLowerCase())
-          );
-        }
-
-        setCompanies(finalComps);
+        if (!isMounted) return;
+        const permitted = filterPermittedCompanies(allComps, portalType);
+        setCompanies(permitted);
         setSectors(secList);
 
-        if (!companyId && finalComps.length > 0) {
-          setCompanyId(finalComps[0].id);
-        }
-        if (!workingSector && secList.length > 0) {
-          setWorkingSector(secList[0].name);
-        }
+        setCompanyId((prev) => {
+          if (prev && permitted.some((c) => c.id.toLowerCase() === prev.toLowerCase())) {
+            return prev;
+          }
+          return permitted[0]?.id || '';
+        });
+
+        setWorkingSector((prev) => prev || secList[0]?.name || '');
       } catch (err) {
-        console.error('Initialization error:', err);
+        console.error('Background initialization error:', err);
       }
     }
-    init();
+    refreshBackgroundData();
+    return () => {
+      isMounted = false;
+    };
   }, [portalType]);
 
-  // Load customer if editing
+  const populateCustomerFields = (cust: CustomerRecord) => {
+    setFullName(cust.full_name || '');
+    if (cust.company_id) {
+      setCompanyId(cust.company_id);
+    }
+    setPassportNo(cust.passport_no || '');
+    setPassportFile(cust.passport_file || '');
+    setNidNo(cust.nid_no || '');
+    setNidFile(cust.nid_file || '');
+    setDateOfBirth(cust.date_of_birth || '');
+    setCountry(cust.country || 'Bangladesh');
+    setPassportIssueDate(cust.passport_issue_date || '');
+    setPassportExpireDate(cust.passport_expire_date || '');
+    setLeavingAddress(cust.leaving_address || '');
+    setPhone(cust.phone || cust.worker_phone || '');
+    setEmail(cust.email || '');
+    setWorkingSector(cust.working_sector || '');
+    setWorkingAddress(cust.working_address || '');
+    setBasicSalary(cust.basic_salary || 'RM 2,500');
+    setOvertime(cust.overtime || 'RM 15.00 / hr');
+    setProfilePic(cust.profile_pic || cust.profile_image || '');
+    setProfilePicName(cust.profile_pic || cust.profile_image ? 'Existing Profile Image' : '');
+    setDocuments(Array.isArray(cust.documents) ? cust.documents : []);
+    setStatus(cust.status || 'active');
+  };
+
+  // Load customer if editing (immediate from cache, then background fetch)
   useEffect(() => {
     if (!editId) return;
 
-    setIsLoadingCustomer(true);
+    const cached = getCustomerFromCache(editId);
+    if (cached) {
+      populateCustomerFields(cached);
+      setIsLoadingCustomer(false);
+    } else {
+      setIsLoadingCustomer(true);
+    }
+
     fetchCustomerById(editId)
       .then((cust) => {
         if (cust) {
-          setFullName(cust.full_name || '');
-          setCompanyId(cust.company_id || '');
-          setPassportNo(cust.passport_no || '');
-          setPassportFile(cust.passport_file || '');
-          setPassportFileName(cust.passport_file ? 'Existing Passport Document' : '');
-          setNidNo(cust.nid_no || '');
-          setNidFile(cust.nid_file || '');
-          setNidFileName(cust.nid_file ? 'Existing NID Document' : '');
-          setDateOfBirth(cust.date_of_birth || '');
-          setCountry(cust.country || 'Bangladesh');
-          setPassportIssueDate(cust.passport_issue_date || '');
-          setPassportExpireDate(cust.passport_expire_date || '');
-          setLeavingAddress(cust.leaving_address || '');
-          setPhone(cust.phone || cust.worker_phone || '');
-          setEmail(cust.email || '');
-          setWorkingSector(cust.working_sector || '');
-          setWorkingAddress(cust.working_address || '');
-          setBasicSalary(cust.basic_salary || 'RM 2,500');
-          setOvertime(cust.overtime || 'RM 15.00 / hr');
-          setProfilePic(cust.profile_pic || cust.profile_image || '');
-          setProfilePicName(cust.profile_pic || cust.profile_image ? 'Existing Profile Image' : '');
-          setDocuments(Array.isArray(cust.documents) ? cust.documents : []);
-          setStatus(cust.status || 'active');
+          populateCustomerFields(cust);
         }
       })
       .catch((err) => {
-        setFeedback({ type: 'error', message: 'Failed to load customer profile.' });
+        if (!cached) {
+          setFeedback({ type: 'error', message: 'Failed to load customer profile.' });
+        }
       })
       .finally(() => {
         setIsLoadingCustomer(false);
       });
   }, [editId]);
+
+  // Select2 options for employer companies
+  const companyOptions: Select2Option[] = useMemo(() => {
+    return companies.map((c) => ({
+      value: c.id,
+      label: c.name,
+      subLabel: `${c.sector || 'Employer'} • ROC: ${c.roc || 'Verified'}`,
+      badge: c.tag || 'Verified',
+    }));
+  }, [companies]);
 
   // File Upload Helper
   const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -195,36 +263,14 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     }
   };
 
-  const handlePassportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setPassportFile(dataUrl);
-      setPassportFileName(file.name);
-    } catch {
-      setFeedback({ type: 'error', message: 'Failed to process passport file.' });
-    }
-  };
-
-  const handleNidUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setNidFile(dataUrl);
-      setNidFileName(file.name);
-    } catch {
-      setFeedback({ type: 'error', message: 'Failed to process NID file.' });
-    }
-  };
-
   // Add Document row to multiple documents list
   const handleAddDocumentRow = () => {
     setDocuments((prev) => [
       ...prev,
       {
-        name: `Document ${prev.length + 1}`,
+        name: '',
+        issue_date: '',
+        expire_date: '',
         url: '',
         dataUrl: '',
         size: '',
@@ -233,12 +279,25 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     ]);
   };
 
+  const handleDocumentFieldChange = (
+    index: number,
+    field: keyof CustomerDocument,
+    value: string
+  ) => {
+    setDocuments((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
   const handleDocumentFileChange = async (index: number, file: File) => {
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const sizeStr = file.size < 1024 * 1024 
-        ? `${Math.round(file.size / 1024)} KB` 
-        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      const sizeStr =
+        file.size < 1024 * 1024
+          ? `${Math.round(file.size / 1024)} KB`
+          : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 
       setDocuments((prev) => {
         const copy = [...prev];
@@ -255,14 +314,6 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     } catch {
       setFeedback({ type: 'error', message: 'Failed to read document attachment.' });
     }
-  };
-
-  const handleDocumentNameChange = (index: number, name: string) => {
-    setDocuments((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], name };
-      return copy;
-    });
   };
 
   const handleRemoveDocumentRow = (index: number) => {
@@ -527,26 +578,31 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 Assigned Employer Company <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <Building2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <select
-                  required
-                  value={companyId}
-                  onChange={(e) => setCompanyId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 font-semibold focus:outline-hidden focus:border-[#0b4da2] focus:bg-white cursor-pointer"
-                >
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.roc || 'Verified'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select2Search
+                options={companyOptions}
+                value={companyId}
+                onChange={(val) => setCompanyId(val)}
+                placeholder="Search & select employer company..."
+                searchPlaceholder="Type company name, ROC or sector..."
+                icon={<Building2 size={15} className="text-slate-400" />}
+              />
+              {portalType === 'masteradmin' && (
+                <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                  <span className="text-blue-700 font-medium">
+                    {companies.length > 0
+                      ? `Showing ${companies.length} permitted ${companies.length === 1 ? 'company' : 'companies'}`
+                      : 'No company access assigned.'}
+                  </span>
+                  {companies.length > 1 && (
+                    <span className="text-slate-400">Searchable Select2</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Card 2: Passport & NID with Dedicated File Uploads */}
+        {/* Card 2: Passport & National Identity (NID) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
             <FileCheck2 size={15} className="text-[#0b4da2]" />
@@ -554,9 +610,8 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Passport Box */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <label className="block text-xs font-bold text-slate-800">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 Passport Number
               </label>
               <input
@@ -564,55 +619,12 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 value={passportNo}
                 onChange={(e) => setPassportNo(e.target.value)}
                 placeholder="e.g. A01234567"
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
               />
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1.5">
-                  Passport Upload (Image / PDF)
-                </label>
-                <input
-                  type="file"
-                  ref={passportInputRef}
-                  onChange={handlePassportUpload}
-                  accept="image/*,.pdf"
-                  className="hidden"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => passportInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Upload size={13} />
-                    <span>{passportFile ? 'Replace Passport File' : 'Choose Passport File'}</span>
-                  </button>
-                  {passportFile && (
-                    <div className="flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 truncate max-w-[160px]">
-                      <Check size={12} className="shrink-0" />
-                      <span className="truncate">{passportFileName || 'Uploaded'}</span>
-                    </div>
-                  )}
-                  {passportFile && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPassportFile('');
-                        setPassportFileName('');
-                      }}
-                      className="text-red-500 hover:text-red-700 p-1 bg-transparent border-0 cursor-pointer"
-                      title="Remove passport upload"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
 
-            {/* NID Box */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-              <label className="block text-xs font-bold text-slate-800">
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 National ID (NID / IC No.) <span className="text-red-500">*</span>
               </label>
               <input
@@ -621,101 +633,35 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 value={nidNo}
                 onChange={(e) => setNidNo(e.target.value)}
                 placeholder="e.g. 1988269123456"
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
               />
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1.5">
-                  NID Upload (Image / PDF)
-                </label>
-                <input
-                  type="file"
-                  ref={nidInputRef}
-                  onChange={handleNidUpload}
-                  accept="image/*,.pdf"
-                  className="hidden"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => nidInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Upload size={13} />
-                    <span>{nidFile ? 'Replace NID File' : 'Choose NID File'}</span>
-                  </button>
-                  {nidFile && (
-                    <div className="flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 truncate max-w-[160px]">
-                      <Check size={12} className="shrink-0" />
-                      <span className="truncate">{nidFileName || 'Uploaded'}</span>
-                    </div>
-                  )}
-                  {nidFile && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNidFile('');
-                        setNidFileName('');
-                      }}
-                      className="text-red-500 hover:text-red-700 p-1 bg-transparent border-0 cursor-pointer"
-                      title="Remove NID upload"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
 
           {/* Dates & Origin */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Date of Birth
               </label>
               <input
                 type="date"
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2]"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Country
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Origin Country
               </label>
               <input
                 type="text"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 placeholder="e.g. Bangladesh, Indonesia"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Passport Issue Date
-              </label>
-              <input
-                type="date"
-                value={passportIssueDate}
-                onChange={(e) => setPassportIssueDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Passport Expire Date
-              </label>
-              <input
-                type="date"
-                value={passportExpireDate}
-                onChange={(e) => setPassportExpireDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2]"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
               />
             </div>
           </div>
@@ -889,17 +835,22 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
           </div>
         </div>
 
-        {/* Card 5: Multiple Upload Documents (Name + File) */}
+        {/* Card 5: Multiple Upload Documents (Name + Date of Issue + Date of Expire + Attachment) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <FileText size={15} className="text-[#0b4da2]" />
-              <span>Upload Documents (Multiple with Document Name)</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <FileText size={15} className="text-[#0b4da2]" />
+                <span>Upload Documents (Passports, NID, Visa, Medical &amp; Certs)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+                Attach customer records with document name, date of issue, date of expire, and file attachment.
+              </p>
             </div>
             <button
               type="button"
               onClick={handleAddDocumentRow}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl border border-blue-200 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
             >
               <Plus size={14} />
               <span>Add Document Attachment</span>
@@ -907,15 +858,19 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
           </div>
 
           {documents.length === 0 ? (
-            <div className="border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-400 bg-slate-50/50">
-              <FileText size={28} className="mx-auto text-slate-300 mb-1.5" />
-              <p className="text-xs font-medium m-0">No additional document attachments added.</p>
+            <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 bg-slate-50/50">
+              <FileText size={32} className="mx-auto text-slate-300 mb-2" />
+              <p className="text-xs font-semibold text-slate-600 m-0">No document attachments added yet.</p>
+              <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                Upload passport copy, national ID, visa, work permit, medical reports, or certificates.
+              </p>
               <button
                 type="button"
                 onClick={handleAddDocumentRow}
-                className="mt-2 text-xs font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] px-3.5 py-1.5 rounded-lg border-0 transition-colors cursor-pointer shadow-xs"
               >
-                + Add Document with Custom Name &amp; File
+                <Plus size={13} />
+                <span>Add First Document</span>
               </button>
             </div>
           ) : (
@@ -923,60 +878,92 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               {documents.map((doc, idx) => (
                 <div
                   key={idx}
-                  className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center gap-3"
+                  className="bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl p-4 transition-all"
                 >
-                  {/* Document Name */}
-                  <div className="flex-1">
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Document Name #{idx + 1}
-                    </label>
-                    <input
-                      type="text"
-                      value={doc.name}
-                      onChange={(e) => handleDocumentNameChange(idx, e.target.value)}
-                      placeholder="e.g. Medical Fitness Certificate, Police Clearance, Visa Copy"
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
-                    />
-                  </div>
-
-                  {/* File Upload Button */}
-                  <div className="sm:w-72">
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Attachment File
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0">
-                        <Upload size={12} />
-                        <span>{doc.url ? 'Replace File' : 'Choose File'}</span>
-                        <input
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) handleDocumentFileChange(idx, f);
-                          }}
-                        />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+                    {/* 1. Document Name */}
+                    <div className="lg:col-span-4">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Document Name #{idx + 1}
                       </label>
-                      {doc.url ? (
-                        <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 truncate flex-1 font-mono">
-                          {doc.size || 'Ready'}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 italic">No file chosen</span>
-                      )}
+                      <input
+                        type="text"
+                        value={doc.name}
+                        onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
+                        placeholder="e.g. Passport, NID, Visa, Medical"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
+                      />
                     </div>
-                  </div>
 
-                  {/* Delete Row */}
-                  <div className="sm:pt-5">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDocumentRow(idx)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
-                      title="Remove document row"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    {/* 2. Date of Issue */}
+                    <div className="lg:col-span-2">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Date of Issue
+                      </label>
+                      <input
+                        type="date"
+                        value={doc.issue_date || ''}
+                        onChange={(e) => handleDocumentFieldChange(idx, 'issue_date', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                      />
+                    </div>
+
+                    {/* 3. Date of Expire */}
+                    <div className="lg:col-span-2">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Date of Expire
+                      </label>
+                      <input
+                        type="date"
+                        value={doc.expire_date || ''}
+                        onChange={(e) => handleDocumentFieldChange(idx, 'expire_date', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                      />
+                    </div>
+
+                    {/* 4. Attachment */}
+                    <div className="lg:col-span-3">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Attachment
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0">
+                          <Upload size={13} />
+                          <span>{doc.url || doc.dataUrl ? 'Replace' : 'Upload'}</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/*,.pdf,.doc,.docx"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleDocumentFileChange(idx, f);
+                            }}
+                          />
+                        </label>
+                        {doc.url || doc.dataUrl ? (
+                          <div className="flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1.5 rounded-md border border-emerald-200 truncate flex-1 font-mono">
+                            <Check size={12} className="shrink-0 text-emerald-600" />
+                            <span className="truncate" title={doc.size || 'Attached'}>
+                              {doc.size || 'Attached'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic py-1.5">No file chosen</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 5. Delete Action */}
+                    <div className="lg:col-span-1 flex justify-end lg:justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDocumentRow(idx)}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
+                        title="Remove document row"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

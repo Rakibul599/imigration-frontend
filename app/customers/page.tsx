@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   User,
@@ -31,6 +32,7 @@ import Footer from '@/components/Footer';
 import { getStoredCompanies } from '@/lib/companyStorage';
 import { Company } from '@/lib/companies';
 import { CustomerRecord, fetchCustomers, deleteCustomer, getFileUrl } from '@/lib/customerStorage';
+import { hasCompanyAccess } from '@/lib/auth';
 
 function CustomersContent() {
   const router = useRouter();
@@ -118,6 +120,8 @@ function CustomersContent() {
   const totalSales = customers.filter((c) => c.role.toLowerCase() === 'sales').length;
   const totalWorkers = customers.filter((c) => c.role.toLowerCase() === 'worker').length;
   const totalVerified = customers.filter((c) => c.status === 'active').length;
+
+  const hasAccess = hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc);
 
   return (
     <div className="w-full">
@@ -217,7 +221,28 @@ function CustomersContent() {
             </div>
           )}
 
-          {/* Summary Metric Cards */}
+          {/* Clearance Required Notice or Content */}
+          {!hasAccess ? (
+            <div className="bg-white rounded-2xl border border-rose-200 p-8 sm:p-12 text-center max-w-lg mx-auto shadow-sm my-8">
+              <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100">
+                <ShieldAlert size={28} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 m-0">Clearance Required</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                You do not have permission to view or manage customer records for <strong>{activeCompany.name}</strong>. Your account is restricted to your assigned companies only.
+              </p>
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link
+                  href="/companies"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold transition-colors no-underline"
+                >
+                  View Your Authorized Companies
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Summary Metric Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex items-center gap-3.5">
               <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold shrink-0">
@@ -548,6 +573,8 @@ function CustomersContent() {
               </table>
             </div>
           </div>
+          </>
+          )}
         </div>
       </section>
 

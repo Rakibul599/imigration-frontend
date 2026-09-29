@@ -12,10 +12,15 @@ const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:80
  */
 export async function fetchCompaniesFromBackend(): Promise<Company[]> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
     const res = await fetch(`${API_BASE}/companies`, {
       headers: { Accept: 'application/json' },
       cache: 'no-store',
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {

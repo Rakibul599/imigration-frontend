@@ -76,6 +76,7 @@ export type CompanyDirector = {
 
 export type Company = {
   id: string;
+  db_id?: number | string;
   name: string;
   roc: string; // Registration of Companies number
   sector: string;

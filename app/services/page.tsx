@@ -24,7 +24,7 @@ import Footer from '@/components/Footer';
 import { services, Service } from '@/lib/services';
 import { Company } from '@/lib/companies';
 import { getStoredCompanies } from '@/lib/companyStorage';
-import { AuthUser, getCurrentUser, hasCompanyAccess } from '@/lib/auth';
+import { AuthUser, getCurrentUser, getMasterAdminUser, hasCompanyAccess } from '@/lib/auth';
 
 function ServicesContent() {
   const router = useRouter();
@@ -58,9 +58,10 @@ function ServicesContent() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   useEffect(() => {
-    const user = getCurrentUser();
+    const user = getCurrentUser() || getMasterAdminUser();
     const loggedIn =
-      typeof window !== 'undefined' && localStorage.getItem('isLoggedIn') === 'true';
+      typeof window !== 'undefined' &&
+      (localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isMasterAdminLoggedIn') === 'true');
 
     if (!user || !loggedIn) {
       router.replace('/login?redirect=/services&error=auth_required');
@@ -89,7 +90,9 @@ function ServicesContent() {
   }
 
   const isEmployee = currentUser?.role === 'Employee';
-  const hasAccess = !isEmployee || hasCompanyAccess(activeCompany.id);
+  const isMasterAdmin = currentUser?.role === 'MasterAdmin';
+  const isRestrictedRole = isEmployee || isMasterAdmin;
+  const hasAccess = !isRestrictedRole || hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc);
 
   const filteredServices = services.filter((service) =>
     service.title.toLowerCase().includes(query.toLowerCase()) ||
@@ -98,14 +101,14 @@ function ServicesContent() {
 
   return (
     <div className="w-full">
-      {/* Access Restriction Warning for unauthorized employee */}
-      {isEmployee && !hasAccess && (
+      {/* Access Restriction Warning for unauthorized employee / master admin */}
+      {!hasAccess && (
         <div className="bg-rose-600 text-white py-3 px-6 shadow-md">
           <div className="max-w-[1180px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2.5 font-semibold">
               <ShieldAlert size={18} className="shrink-0" />
               <span>
-                Access Restricted: Your employee profile ({currentUser?.name}) does not have clearance for &quot;{activeCompany.name}&quot;. You only have access to your assigned companies.
+                Access Restricted: Your {isMasterAdmin ? 'Master Admin' : 'employee'} profile ({currentUser?.name}) does not have clearance for &quot;{activeCompany.name}&quot;. You only have access to your assigned companies.
               </span>
             </div>
             <Link
@@ -235,13 +238,42 @@ function ServicesContent() {
             </div>
           </div>
 
-          {/* 3-Column Service Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+          {/* 3-Column Service Cards Grid or Restricted Notice */}
+          {!hasAccess ? (
+            <div className="bg-white rounded-2xl border border-rose-200 p-8 sm:p-12 text-center max-w-lg mx-auto shadow-sm my-6">
+              <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100">
+                <ShieldAlert size={28} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 m-0">Clearance Required</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                You do not have clearance to access services for <strong>{activeCompany.name}</strong>. Your account is restricted to your assigned companies only.
+              </p>
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link
+                  href="/companies"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold transition-colors no-underline"
+                >
+                  View Your Authorized Companies
+                </Link>
+                {isMasterAdmin && (
+                  <Link
+                    href="/masteradmin/companies"
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors no-underline"
+                  >
+                    Master Admin Portal
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
             {filteredServices.map((service, index) => {
               const isCardVerified = verifiedServiceParam === service.id;
               const cardHref =
                 service.id === 'customer'
                   ? `/customers?company=${encodeURIComponent(activeCompany.id)}`
+                  : service.id === 'document-download'
+                  ? `/document-download?company=${encodeURIComponent(activeCompany.id)}`
                   : service.id === 'work-information'
                   ? `/mypass?company=${encodeURIComponent(activeCompany.id)}`
                   : `/services?company=${encodeURIComponent(activeCompany.id)}&verifiedService=${encodeURIComponent(service.id)}`;
@@ -249,6 +281,8 @@ function ServicesContent() {
               const actionText =
                 service.id === 'customer'
                   ? 'Open Customers'
+                  : service.id === 'document-download'
+                  ? 'Download Documents'
                   : service.id === 'work-information'
                   ? 'Open MYPASS@JIM'
                   : 'Access Service';
@@ -311,9 +345,10 @@ function ServicesContent() {
                 </Link>
               );
             })}
-          </div>
+            </div>
+          )}
 
-          {filteredServices.length === 0 && (
+          {hasAccess && filteredServices.length === 0 && (
             <div className="text-slate-500 py-12 text-center text-sm w-full">
               No service found matching your search.
             </div>

@@ -238,30 +238,35 @@ export async function authenticateMasterAdmin(
 /**
  * Check if the currently logged-in user has access to a specific company ID
  */
-export function hasCompanyAccess(companyId: string): boolean {
+export function hasCompanyAccess(companyId: string, companyName?: string, roc?: string): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return true; // Unauthenticated public view
   if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
 
-  // For MasterAdmin, strictly check assigned_companies
-  if (user.role === 'MasterAdmin') {
+  // MasterAdmin and Employee are strictly restricted to assigned_companies only
+  if (user.role === 'MasterAdmin' || user.role === 'Employee') {
     if (!Array.isArray(user.assigned_companies) || user.assigned_companies.length === 0) {
       return false;
     }
-    return user.assigned_companies.some(
-      (id) => id.toLowerCase() === companyId.toLowerCase()
-    );
+    if (user.assigned_companies.includes('*')) return true;
+
+    const targetId = (companyId || '').trim().toLowerCase();
+    const targetName = (companyName || '').trim().toLowerCase();
+    const targetRoc = (roc || '').trim().toLowerCase();
+    const targetNormalized = targetName.replace(/[^a-z0-9]/g, '');
+
+    return user.assigned_companies.some((id) => {
+      const cleanId = (id || '').trim().toLowerCase();
+      if (!cleanId) return false;
+      if (cleanId === targetId) return true;
+      if (cleanId === targetName) return true;
+      if (targetRoc && cleanId === targetRoc) return true;
+      const cleanNormalized = cleanId.replace(/[^a-z0-9]/g, '');
+      if (cleanNormalized && targetNormalized && cleanNormalized === targetNormalized) return true;
+      return false;
+    });
   }
 
-  // For Employee, strictly check assigned_companies
-  if (user.role === 'Employee') {
-    if (!Array.isArray(user.assigned_companies) || user.assigned_companies.length === 0) {
-      return false;
-    }
-    return user.assigned_companies.some(
-      (id) => id.toLowerCase() === companyId.toLowerCase()
-    );
-  }
   return true;
 }
 
@@ -347,7 +352,11 @@ export async function authenticateEmployee(
       },
     };
 
-    setCurrentUser(authUser, data.token);
+    if (authUser.role === 'MasterAdmin') {
+      setMasterAdminUser(authUser, data.token);
+    } else {
+      setCurrentUser(authUser, data.token);
+    }
 
     return {
       success: true,
@@ -357,11 +366,34 @@ export async function authenticateEmployee(
     };
   } catch (error) {
     console.error('Backend authentication error:', error);
-    // In case backend is temporarily unreachable, support Admin and DEMO fallbacks
+    // In case backend is temporarily unreachable, support MasterAdmin, Admin, and DEMO fallbacks
+    const cleanUser = userId.trim().toLowerCase();
+    if (cleanUser === 'masteradmin' && (password === 'password123' || password === 'admin')) {
+      const demoMasterAdmin: AuthUser = {
+        id: 1,
+        employee_code: 'masteradmin',
+        username: 'masteradmin',
+        name: 'Tan Sri Syed Mokhtar',
+        email: 'syed@masteradmin.com',
+        role: 'MasterAdmin',
+        assigned_companies: ['gamuda', 'top-glove', 'sime-darby'],
+        permissions: {
+          can_create: false,
+          can_edit: true,
+          can_delete: false,
+        },
+      };
+      setMasterAdminUser(demoMasterAdmin);
+      return {
+        success: true,
+        message: 'Master Administrator authenticated successfully.',
+        user: demoMasterAdmin,
+      };
+    }
+
     const isAdmin =
-      role === 'Admin' ||
-      userId.trim().toLowerCase() === 'admin' ||
-      userId.trim().toLowerCase() === 'superadmin';
+      cleanUser === 'admin' ||
+      cleanUser === 'superadmin';
 
     if (isAdmin && (password === 'admin' || password === 'admin123' || password === 'superadmin2026' || password.length >= 4)) {
       const adminUser: AuthUser = {

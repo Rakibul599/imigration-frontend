@@ -28,7 +28,9 @@ import { Company } from '@/lib/companies';
 import {
   AuthUser,
   getCurrentUser,
+  getMasterAdminUser,
   logoutUser,
+  logoutMasterAdmin,
 } from '@/lib/auth';
 import {
   deleteStoredCompany,
@@ -136,10 +138,16 @@ function BackgroundCanvas() {
 
 export default function CompaniesPage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return getCurrentUser() || getMasterAdminUser();
+  });
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [companyList, setCompanyList] = useState<Company[]>([]);
+  const [companyList, setCompanyList] = useState<Company[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return getStoredCompanies();
+  });
   const [sortAsc, setSortAsc] = useState(true);
   const [showSettingsModal, setShowSettingsModal] = useState<Company | null>(null);
   const [showSubscriptionAlert, setShowSubscriptionAlert] = useState(false);
@@ -152,9 +160,10 @@ export default function CompaniesPage() {
 
   // Sync with persistent company storage, backend MySQL, and auth
   useEffect(() => {
-    const user = getCurrentUser();
+    const user = getCurrentUser() || getMasterAdminUser();
     const loggedIn =
-      typeof window !== 'undefined' && localStorage.getItem('isLoggedIn') === 'true';
+      typeof window !== 'undefined' &&
+      (localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isMasterAdminLoggedIn') === 'true');
 
     if (!user || !loggedIn) {
       router.replace('/login?redirect=/companies&error=auth_required');
@@ -175,7 +184,7 @@ export default function CompaniesPage() {
     });
 
     const handleAuth = () => {
-      const updatedUser = getCurrentUser();
+      const updatedUser = getCurrentUser() || getMasterAdminUser();
       if (!updatedUser) {
         router.replace('/login?redirect=/companies&error=auth_required');
         return;
@@ -194,18 +203,40 @@ export default function CompaniesPage() {
 
   // Permission evaluation
   const isEmployeeRole = currentUser?.role === 'Employee';
-  const userCanEdit = !isEmployeeRole || Boolean(currentUser?.permissions?.can_edit);
-  const userCanDelete = !isEmployeeRole || Boolean(currentUser?.permissions?.can_delete);
+  const isMasterAdminRole = currentUser?.role === 'MasterAdmin';
+  const isRestrictedRole = isEmployeeRole || isMasterAdminRole;
 
-  // Filter companies: strictly restrict for employees to their assigned_companies
-  const accessibleCompanies = isEmployeeRole
+  const userCanCreate = !isMasterAdminRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_create));
+  const userCanEdit = isMasterAdminRole ? true : (!isEmployeeRole || Boolean(currentUser?.permissions?.can_edit));
+  const userCanDelete = !isMasterAdminRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_delete));
+
+  // Filter companies: strictly restrict for employees and master admins to their assigned_companies
+  const accessibleCompanies = isRestrictedRole
     ? companyList.filter((c) => {
-        const assigned = currentUser?.assigned_companies || [];
-        return assigned.some(
-          (id) =>
-            id.toLowerCase() === c.id.toLowerCase() ||
-            c.name.toLowerCase().includes(id.toLowerCase())
-        );
+        const assigned = Array.isArray(currentUser?.assigned_companies)
+          ? currentUser.assigned_companies
+          : [];
+        if (assigned.length === 0) return false;
+        if (assigned.includes('*')) return true;
+
+        const cleanCompId = (c.id || '').trim().toLowerCase();
+        const cleanCompName = (c.name || '').trim().toLowerCase();
+        const cleanCompRoc = (c.roc || '').trim().toLowerCase();
+        const cleanDbId = String(c.db_id || '');
+        const cleanCompNormalized = cleanCompName.replace(/[^a-z0-9]/g, '');
+
+        return assigned.some((raw) => {
+          const id = (raw || '').trim().toLowerCase();
+          if (!id) return false;
+          const idNormalized = id.replace(/[^a-z0-9]/g, '');
+          return (
+            id === cleanCompId ||
+            id === cleanCompName ||
+            (cleanCompRoc && id === cleanCompRoc) ||
+            (cleanDbId && id === cleanDbId) ||
+            (idNormalized && cleanCompNormalized && idNormalized === cleanCompNormalized)
+          );
+        });
       })
     : companyList;
 
@@ -275,6 +306,7 @@ export default function CompaniesPage() {
 
   const handleLogOut = () => {
     logoutUser();
+    logoutMasterAdmin();
     router.push('/login');
   };
 
@@ -420,8 +452,52 @@ export default function CompaniesPage() {
           </div>
         )}
 
+        {/* Master Admin / Assigned Admin Access Restriction Banner */}
+        {isMasterAdminRole && (
+          <div className="mb-6 bg-white border border-[#0b4da2]/30 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold shrink-0">
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-100 text-[#0b4da2] px-2.5 py-0.5 rounded-md border border-blue-200">
+                    Administrator Access Active
+                  </span>
+                  <span className="text-xs text-slate-500 font-mono font-medium">
+                    ID: {currentUser?.employee_code || currentUser?.username}
+                  </span>
+                </div>
+                <div className="text-sm font-bold text-slate-900 mt-1">
+                  Logged in as: {currentUser?.name}{' '}
+                  <span className="text-xs font-normal text-slate-500">
+                    ({currentUser?.email})
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs text-slate-600">
+                  <span className="font-medium">
+                    Assigned Clearance:{' '}
+                    <strong className="text-[#0b4da2] font-bold">
+                      {accessibleCompanies.length}
+                    </strong>{' '}
+                    of{' '}
+                    <strong className="text-slate-700">
+                      {companyList.length}
+                    </strong>{' '}
+                    total companies
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span className="text-slate-500">
+                    Access strictly restricted to your permitted employer entities.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Administrator Full Access Banner */}
-        {!isEmployeeRole && currentUser && (
+        {!isRestrictedRole && currentUser && (
           <div className="mb-6 bg-blue-50/90 border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
               <div className="w-11 h-11 rounded-xl bg-[#0b4da2] text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
@@ -621,14 +697,14 @@ export default function CompaniesPage() {
                     colSpan={3}
                     className="py-12 text-center text-slate-500 font-medium bg-slate-50/50"
                   >
-                    {isEmployeeRole && accessibleCompanies.length === 0 ? (
+                    {isRestrictedRole && accessibleCompanies.length === 0 ? (
                       <div className="max-w-md mx-auto flex flex-col items-center gap-2">
                         <ShieldAlert size={32} className="text-amber-500" />
                         <div className="font-bold text-slate-800 text-sm">
                           No Companies Assigned
                         </div>
                         <p className="text-xs text-slate-500 m-0">
-                          Your employee profile ({currentUser?.name}) currently has no assigned companies. Please contact your Super Administrator to grant you access in the Employees panel.
+                          Your {isMasterAdminRole ? 'Master Admin' : 'employee'} profile ({currentUser?.name}) currently has no assigned companies. Please contact your Super Administrator to grant you access.
                         </p>
                       </div>
                     ) : (

@@ -15,6 +15,13 @@ export const services: Service[] = [
     tag: 'Primary',
   },
   {
+    id: 'document-download',
+    title: 'Document Download',
+    description: 'Download, preview & share customer ePASS & official documents',
+    image: '/images/document-download.svg',
+    tag: 'Download',
+  },
+  {
     id: 'special-pass',
     title: 'Special Pass',
     description: 'Apply and manage your special pass',

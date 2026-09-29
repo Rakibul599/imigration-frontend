@@ -2,6 +2,8 @@
 
 export interface CustomerDocument {
   name: string;
+  issue_date?: string; // Date of issue
+  expire_date?: string; // Date of expire
   url?: string;
   size?: string;
   type?: string;
@@ -338,10 +340,15 @@ function updateLocalCache(record: CustomerRecord, action: 'create' | 'update' | 
  */
 export async function fetchWorkingSectors(): Promise<WorkingSector[]> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
     const res = await fetch(`${API_BASE}/working-sectors`, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {

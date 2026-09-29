@@ -62,7 +62,10 @@ const SECTOR_OPTIONS = [
 ];
 
 export default function MasterAdminCompaniesPage() {
-  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [allCompanies, setAllCompanies] = useState<Company[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return getStoredCompanies();
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
@@ -112,9 +115,27 @@ export default function MasterAdminCompaniesPage() {
   // Filter companies strictly by Master Admin assigned permission
   const permittedCompanies = useMemo(() => {
     if (assignedList.length === 0) return [];
-    return allCompanies.filter((c) =>
-      assignedList.some((id) => id.toLowerCase() === c.id.toLowerCase())
-    );
+    if (assignedList.includes('*')) return allCompanies;
+    return allCompanies.filter((c) => {
+      const cleanCompId = (c.id || '').trim().toLowerCase();
+      const cleanCompName = (c.name || '').trim().toLowerCase();
+      const cleanCompRoc = (c.roc || '').trim().toLowerCase();
+      const cleanDbId = String(c.db_id || '');
+      const cleanCompNormalized = cleanCompName.replace(/[^a-z0-9]/g, '');
+
+      return assignedList.some((raw) => {
+        const id = (raw || '').trim().toLowerCase();
+        if (!id) return false;
+        const idNormalized = id.replace(/[^a-z0-9]/g, '');
+        return (
+          id === cleanCompId ||
+          id === cleanCompName ||
+          (cleanCompRoc && id === cleanCompRoc) ||
+          (cleanDbId && id === cleanDbId) ||
+          (idNormalized && cleanCompNormalized && idNormalized === cleanCompNormalized)
+        );
+      });
+    });
   }, [allCompanies, assignedList]);
 
   // Filter with search & sector

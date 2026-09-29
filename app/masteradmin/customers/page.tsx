@@ -47,10 +47,28 @@ import {
 import { getMasterAdminUser } from '@/lib/auth';
 
 export default function MasterAdminCustomersPage() {
-  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [allCompanies, setAllCompanies] = useState<Company[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return getStoredCompanies();
+  });
   const [sectors, setSectors] = useState<WorkingSector[]>([]);
-  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState<CustomerRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = localStorage.getItem('agency_customers_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const user = getMasterAdminUser();
+        const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+        if (allowed.includes('*')) return parsed;
+        return parsed.filter((c: any) =>
+          c.company_id && allowed.some((id: string) => id.toLowerCase() === c.company_id.toLowerCase())
+        );
+      }
+    } catch {}
+    return [];
+  });
+  const [loading, setLoading] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,7 +94,6 @@ export default function MasterAdminCustomersPage() {
   };
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const [comps, secList, custList] = await Promise.all([
         fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
@@ -89,13 +106,21 @@ export default function MasterAdminCustomersPage() {
       // Filter customers strictly to those whose company_id matches assignedList
       const permitted = custList.filter((c) => {
         const cId = c.company_id;
-        return Boolean(cId && assignedList.some((id) => id.toLowerCase() === cId.toLowerCase()));
+        if (!cId) return false;
+        if (assignedList.includes('*')) return true;
+        return assignedList.some(
+          (id) =>
+            id.toLowerCase() === cId.toLowerCase() ||
+            comps.some((comp) => comp.id.toLowerCase() === cId.toLowerCase() && (
+              id.toLowerCase() === comp.name.toLowerCase() ||
+              id.toLowerCase() === comp.id.toLowerCase() ||
+              (comp.roc && id.toLowerCase() === comp.roc.toLowerCase())
+            ))
+        );
       });
       setCustomers(permitted);
     } catch (err) {
       console.error('Failed to load customers:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -105,8 +130,15 @@ export default function MasterAdminCustomersPage() {
 
   // Permitted companies
   const permittedCompanies = useMemo(() => {
+    if (assignedList.length === 0) return [];
+    if (assignedList.includes('*')) return allCompanies;
     return allCompanies.filter((c) =>
-      assignedList.some((id) => id.toLowerCase() === c.id.toLowerCase())
+      assignedList.some(
+        (id) =>
+          id.toLowerCase() === c.id.toLowerCase() ||
+          id.toLowerCase() === c.name.toLowerCase() ||
+          (c.roc && id.toLowerCase() === c.roc.toLowerCase())
+      )
     );
   }, [allCompanies, assignedList]);
 
@@ -762,7 +794,11 @@ export default function MasterAdminCustomersPage() {
                           <FileText size={15} className="text-[#0b4da2] shrink-0" />
                           <div className="truncate">
                             <div className="font-semibold text-slate-800 truncate">{doc.name}</div>
-                            <div className="text-[10px] text-slate-400">{doc.size || 'Attachment'}</div>
+                            <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-x-2">
+                              {doc.issue_date && <span>Issue: <strong className="text-slate-600 font-mono">{doc.issue_date}</strong></span>}
+                              {doc.expire_date && <span>Expire: <strong className="text-slate-600 font-mono">{doc.expire_date}</strong></span>}
+                              {doc.size && <span>({doc.size})</span>}
+                            </div>
                           </div>
                         </div>
                         {doc.url && (

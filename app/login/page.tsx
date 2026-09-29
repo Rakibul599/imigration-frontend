@@ -24,7 +24,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { companies, Company } from '@/lib/companies';
 import { services, Service } from '@/lib/services';
-import { authenticateEmployee } from '@/lib/auth';
+import { authenticateEmployee, setCurrentUser, setMasterAdminUser } from '@/lib/auth';
 
 // Default Credentials for Demo
 const DEFAULT_USER_ID = 'DEMO2026';
@@ -52,11 +52,13 @@ function LoginForm() {
         c.name.toLowerCase().includes((companyParam || '').toLowerCase())
     ) || companies[0];
 
+  type LoginRole = 'Admin' | 'Employee';
+
   const [selectedService, setSelectedService] = useState<Service>(matchedService);
   const [selectedCompany, setSelectedCompany] = useState<Company>(matchedCompany);
-  const [role, setRole] = useState<'Admin' | 'Employee'>('Employee');
-  const [userId, setUserId] = useState(DEFAULT_USER_ID);
-  const [password, setPassword] = useState(DEFAULT_PASSWORD);
+  const [role, setRole] = useState<LoginRole>('Admin');
+  const [userId, setUserId] = useState('masteradmin');
+  const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
@@ -98,12 +100,12 @@ function LoginForm() {
     }
   }, [companyParam]);
 
-  const handleRoleSelect = (newRole: 'Admin' | 'Employee') => {
+  const handleRoleSelect = (newRole: LoginRole) => {
     setRole(newRole);
     setFeedback(null);
     if (newRole === 'Admin') {
-      setUserId('admin');
-      setPassword('admin');
+      setUserId('masteradmin');
+      setPassword('password123');
     } else {
       setUserId(DEFAULT_USER_ID);
       setPassword(DEFAULT_PASSWORD);
@@ -112,11 +114,11 @@ function LoginForm() {
 
   const handleQuickFill = () => {
     if (role === 'Admin') {
-      setUserId('admin');
-      setPassword('admin');
+      setUserId('masteradmin');
+      setPassword('password123');
       setFeedback({
         type: 'info',
-        message: 'Admin credentials loaded! Click LOGIN to access all employer companies.',
+        message: 'Admin / Master credentials loaded (User ID: masteradmin / Pass: password123). Click LOGIN to access your assigned companies.',
       });
     } else {
       setUserId(DEFAULT_USER_ID);
@@ -147,12 +149,109 @@ function LoginForm() {
 
     const authenticatedUser = authRes.user;
 
-    // If Admin / SuperAdmin logs in: Grant instant full access and redirect directly to /companies list!
-    if (authenticatedUser.role === 'Admin' || authenticatedUser.role === 'SUPER_ADMIN' || role === 'Admin') {
+    // 1. MASTER ADMIN LOGIN: Strictly restricted to assigned_companies only!
+    if (authenticatedUser.role === 'MasterAdmin') {
+      try {
+        localStorage.removeItem('isSuperAdminLoggedIn');
+        localStorage.removeItem('superAdminUser');
+        setMasterAdminUser(authenticatedUser, authRes.token);
+        localStorage.setItem('isMasterAdminLoggedIn', 'true');
+        localStorage.setItem('isLoggedIn', 'true');
+        if (selectedCompany) {
+          localStorage.setItem('activeCompany', JSON.stringify(selectedCompany));
+        }
+        if (isServiceLogin && selectedService) {
+          localStorage.setItem('activeService', JSON.stringify(selectedService));
+        }
+      } catch {}
+
+      const allowedCompanies = Array.isArray(authenticatedUser.assigned_companies)
+        ? authenticatedUser.assigned_companies
+        : [];
+      const hasWildcard = allowedCompanies.includes('*');
+
+      // If user came via specific company link or service login
+      if (!hasWildcard && (companyParam || isServiceLogin)) {
+        const targetCompanyId = (selectedCompany.id || '').trim().toLowerCase();
+        const targetCompanyName = (selectedCompany.name || '').trim().toLowerCase();
+        const targetRoc = (selectedCompany.roc || '').trim().toLowerCase();
+        const targetNormalized = targetCompanyName.replace(/[^a-z0-9]/g, '');
+
+        const hasAccess = allowedCompanies.some((raw) => {
+          const id = (raw || '').trim().toLowerCase();
+          if (!id) return false;
+          return (
+            id === targetCompanyId ||
+            id === targetCompanyName ||
+            (targetRoc && id === targetRoc) ||
+            (id.replace(/[^a-z0-9]/g, '') === targetNormalized)
+          );
+        });
+
+        if (!hasAccess) {
+          setIsLoading(false);
+          setFeedback({
+            type: 'error',
+            message: `Access Denied: Your profile (${authenticatedUser.name}) does not have permission to access "${selectedCompany.name}". You only have clearance for your assigned companies: ${
+              allowedCompanies.length > 0 ? allowedCompanies.join(', ') : 'None'
+            }.`,
+          });
+          return;
+        }
+      }
+
+      setIsLoading(false);
+
+      if (isServiceLogin) {
+        const isLastCard =
+          selectedService.id === 'work-information' ||
+          selectedService.id === services[services.length - 1].id;
+
+        if (isLastCard) {
+          setFeedback({
+            type: 'success',
+            message: `Authenticated as ${authenticatedUser.name}! Opening MYPASS@JIM Portal...`,
+          });
+          setTimeout(() => {
+            window.location.href = `/mypass?company=${encodeURIComponent(selectedCompany.id)}`;
+          }, 400);
+          return;
+        }
+
+        setFeedback({
+          type: 'success',
+          message: `Authenticated as ${authenticatedUser.name}! Opening authorized portal...`,
+        });
+        setTimeout(() => {
+          window.location.href = `/services?company=${encodeURIComponent(selectedCompany.id)}&verifiedService=${encodeURIComponent(selectedService.id)}`;
+        }, 400);
+      } else if (companyParam) {
+        setFeedback({
+          type: 'success',
+          message: `Authenticated as ${authenticatedUser.name}! Loading ${selectedCompany.name}...`,
+        });
+        setTimeout(() => {
+          window.location.href = `/services?company=${encodeURIComponent(selectedCompany.id)}`;
+        }, 400);
+      } else {
+        setFeedback({
+          type: 'success',
+          message: `Welcome, ${authenticatedUser.name}! Loading your authorized companies...`,
+        });
+        setTimeout(() => {
+          window.location.href = '/companies';
+        }, 400);
+      }
+      return;
+    }
+
+    // 2. SUPER ADMIN / ADMIN LOGIN: Only if backend returned Admin or SUPER_ADMIN role
+    if (authenticatedUser.role === 'Admin' || authenticatedUser.role === 'SUPER_ADMIN') {
       try {
         localStorage.setItem('isSuperAdminLoggedIn', 'true');
         localStorage.setItem('superAdminUser', JSON.stringify(authenticatedUser));
         localStorage.setItem('isLoggedIn', 'true');
+        setCurrentUser(authenticatedUser, authRes.token);
       } catch {}
 
       setIsLoading(false);
@@ -161,20 +260,25 @@ function LoginForm() {
         message: `Welcome, Administrator! Opening full employer companies list...`,
       });
       setTimeout(() => {
-        router.push('/companies');
-      }, 500);
+        window.location.href = '/companies';
+      }, 400);
       return;
     }
 
-    // Check company-specific access for employees
+    // 3. EMPLOYEE LOGIN: Check company-specific access
     if (authenticatedUser.role === 'Employee') {
       const allowedCompanies = authenticatedUser.assigned_companies || [];
+      const hasWildcard = allowedCompanies.includes('*');
 
       // If user came via specific company link or service login
-      if (companyParam || isServiceLogin) {
+      if (!hasWildcard && (companyParam || isServiceLogin)) {
         const targetCompanyId = selectedCompany.id.toLowerCase();
         const hasAccess = allowedCompanies.some(
-          (id) => id.toLowerCase() === targetCompanyId
+          (id) =>
+            id.toLowerCase() === targetCompanyId ||
+            id.toLowerCase() === selectedCompany.name.toLowerCase() ||
+            (selectedCompany.roc && id.toLowerCase() === selectedCompany.roc.toLowerCase()) ||
+            selectedCompany.name.toLowerCase().includes(id.toLowerCase())
         );
 
         if (!hasAccess) {
@@ -241,8 +345,8 @@ function LoginForm() {
         message: `Welcome, ${authenticatedUser.name}! Loading your authorized companies...`,
       });
       setTimeout(() => {
-        router.push('/companies');
-      }, 500);
+        window.location.href = '/companies';
+      }, 400);
     }
   };
 
@@ -371,11 +475,11 @@ function LoginForm() {
             <span>
               {role === 'Admin' ? (
                 <>
-                  <strong>Admin Mode:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">admin</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">admin</code> (or your SuperAdmin pass)
+                  <strong>Admin Mode:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">masteradmin</code> (or <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">rr</code>) • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">password123</code> (or <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">rrrrr</code>)
                 </>
               ) : (
                 <>
-                  <strong>Default Demo:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
+                  <strong>Employee Mode:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
                 </>
               )}
             </span>

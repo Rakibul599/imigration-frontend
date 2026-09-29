@@ -743,7 +743,11 @@ export default function SuperAdminCustomersPage() {
                           <FileText size={15} className="text-[#0b4da2] shrink-0" />
                           <div className="truncate">
                             <div className="font-semibold text-slate-800 truncate">{doc.name}</div>
-                            <div className="text-[10px] text-slate-400">{doc.size || 'Attachment'}</div>
+                            <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-x-2">
+                              {doc.issue_date && <span>Issue: <strong className="text-slate-600 font-mono">{doc.issue_date}</strong></span>}
+                              {doc.expire_date && <span>Expire: <strong className="text-slate-600 font-mono">{doc.expire_date}</strong></span>}
+                              {doc.size && <span>({doc.size})</span>}
+                            </div>
                           </div>
                         </div>
                         {doc.url && (
