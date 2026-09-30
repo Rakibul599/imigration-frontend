@@ -8,6 +8,8 @@ export interface CustomerDocument {
   size?: string;
   type?: string;
   dataUrl?: string;
+  service_id?: string;
+  service_name?: string;
 }
 
 export interface CustomerRecord {
@@ -71,6 +73,9 @@ export function getFileUrl(path?: string): string {
     return path;
   }
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (cleanPath.startsWith('/images/')) {
+    return cleanPath;
+  }
   const backendBase = (process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api')
     .replace(/\/api\/?$/, '');
   return `${backendBase}${cleanPath}`;

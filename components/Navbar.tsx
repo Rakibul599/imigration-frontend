@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Globe2,
+  LayoutDashboard,
   Lock,
   LogOut,
   Menu,
@@ -20,9 +21,19 @@ import {
   getCurrentUser,
   isAuthenticated,
   logoutUser,
+  getUserPanelInfo,
 } from '@/lib/auth';
+import {
+  SiteSettings,
+  DEFAULT_SITE_SETTINGS,
+  getStoredSettings,
+  fetchSiteSettings,
+  subscribeToSettingsChanges,
+} from '@/lib/settingsStorage';
+import { resolveFileUrl } from '@/lib/companies';
 
 export default function Navbar() {
+  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -32,6 +43,8 @@ export default function Navbar() {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pathname = usePathname();
   const router = useRouter();
+
+  const panelInfo = getUserPanelInfo();
 
   const isLoginActive =
     pathname === '/login' || pathname.startsWith('/superadmin/login');
@@ -74,6 +87,19 @@ export default function Navbar() {
     };
   }, [pathname]);
 
+  // Load and listen to site general settings (Website Name, Logo, Favicon)
+  useEffect(() => {
+    setSettings(getStoredSettings());
+    fetchSiteSettings()
+      .then((data) => setSettings(data))
+      .catch(() => {});
+
+    const unsub = subscribeToSettingsChanges((newSettings) => {
+      setSettings(newSettings);
+    });
+    return unsub;
+  }, []);
+
   useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -107,18 +133,33 @@ export default function Navbar() {
         <span>Official portal for Foreign Workers &amp; Employer Services</span>
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline">Last updated: 06 September 2026</span>
-          <Link
-            href="/superadmin/login"
-            className="inline-flex items-center gap-1 text-emerald-300 hover:text-white font-semibold transition-colors no-underline text-xs"
-          >
-            <ShieldCheck size={12} />
-            <span>Super Admin</span>
-          </Link>
+          {!isLoggedIn && (
+            <Link
+              href="/superadmin/login"
+              className="inline-flex items-center gap-1 text-emerald-300 hover:text-white font-semibold transition-colors no-underline text-xs"
+            >
+              <ShieldCheck size={12} />
+              <span>Super Admin</span>
+            </Link>
+          )}
           {isLoggedIn && currentUser && (
-            <div className="flex items-center gap-2 border-l border-white/20 pl-3">
-              <span className="text-emerald-300 font-semibold text-xs">
-                {currentUser.name} ({currentUser.role})
-              </span>
+            <div className="flex items-center gap-2.5 border-l border-white/20 pl-3">
+              {panelInfo.hasPanel ? (
+                <Link
+                  href={panelInfo.panelUrl}
+                  className="inline-flex items-center gap-1.5 text-emerald-300 hover:text-white font-bold text-xs transition-colors no-underline group cursor-pointer"
+                  title={`Click to open ${panelInfo.panelBadge} Panel`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
+                  <span className="underline decoration-emerald-400/40 hover:decoration-white truncate max-w-[180px]">
+                    {currentUser.name} ({currentUser.role})
+                  </span>
+                </Link>
+              ) : (
+                <span className="text-emerald-300 font-semibold text-xs truncate max-w-[140px]">
+                  {currentUser.name} ({currentUser.role})
+                </span>
+              )}
               <button
                 onClick={handleLogout}
                 className="inline-flex items-center gap-1 text-yellow-300 hover:text-white font-semibold transition-colors cursor-pointer border-0 bg-transparent text-xs"
@@ -134,8 +175,18 @@ export default function Navbar() {
       {/* Main Header */}
       <header className="site-header">
         <div className="container header-inner">
-          {/* Left Side is Completely Blank as Requested */}
-          <div className="w-8 shrink-0 pointer-events-none" aria-hidden="true" />
+          {/* Left Side: Logo Only (No text beside logo) */}
+          <Link href="/" className="flex items-center no-underline group py-1 shrink-0" title={settings.site_name || 'Home'}>
+            {settings.site_logo && (
+              <div className="relative flex items-center justify-center">
+                <img
+                  src={resolveFileUrl(settings.site_logo)}
+                  alt={settings.site_name || 'Logo'}
+                  className="h-14 sm:h-16 md:h-[72px] lg:h-[78px] w-auto max-w-[260px] sm:max-w-[360px] md:max-w-[440px] lg:max-w-[500px] object-contain drop-shadow-xs transition-transform duration-200 group-hover:scale-102"
+                />
+              </div>
+            )}
+          </Link>
 
           {/* Right Side Navigation */}
           <nav
@@ -173,15 +224,31 @@ export default function Navbar() {
             {/* Authentication state in navbar */}
             {isLoggedIn ? (
               <div className="flex items-center gap-2.5">
-                <div className="hidden lg:flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100/90 px-3 py-1.5 rounded-full border border-slate-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="font-semibold text-slate-800 max-w-[140px] truncate">
-                    {currentUser?.name}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">
-                    ({currentUser?.role})
-                  </span>
-                </div>
+                {panelInfo.hasPanel ? (
+                  <Link
+                    href={panelInfo.panelUrl}
+                    className="flex items-center gap-2 text-xs font-bold text-slate-800 bg-white/95 hover:bg-white hover:text-[#0b4da2] px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-blue-300 shadow-2xs hover:shadow-xs transition-all no-underline group cursor-pointer"
+                    title={`Click to open ${panelInfo.panelBadge} Panel`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="font-bold text-slate-900 group-hover:text-[#0b4da2] max-w-[160px] truncate transition-colors">
+                      {currentUser?.name}
+                    </span>
+                    <span className="text-[10px] bg-blue-100 text-[#0b4da2] px-1.5 py-0.2 rounded font-black uppercase">
+                      {currentUser?.role}
+                    </span>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100/90 px-3 py-1.5 rounded-full border border-slate-200">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-semibold text-slate-800 max-w-[140px] truncate">
+                      {currentUser?.name}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">
+                      ({currentUser?.role})
+                    </span>
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -407,6 +474,16 @@ export default function Navbar() {
             {/* Mobile View: if logged in, show user info and logout inside mobile drawer */}
             {isLoggedIn && (
               <div className="min-[701px]:hidden border-t border-slate-100 pt-3 pb-2 mt-2">
+                {panelInfo.hasPanel && (
+                  <Link
+                    href={panelInfo.panelUrl}
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 mb-3 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-black shadow-sm no-underline border border-amber-300"
+                  >
+                    <LayoutDashboard size={15} />
+                    <span>Your Panel ({panelInfo.panelBadge})</span>
+                  </Link>
+                )}
                 <div className="flex items-center justify-between px-1 mb-2">
                   <div>
                     <div className="text-xs font-bold text-slate-800">{currentUser?.name}</div>

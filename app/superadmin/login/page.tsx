@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { setSuperAdminUser, AuthUser } from '@/lib/auth';
 
 const SUPER_ADMIN_USER = 'admin';
 const SUPER_ADMIN_PASS = 'admin';
@@ -45,6 +46,15 @@ export default function SuperAdminLoginPage() {
     setSuccessMsg('');
     setIsLoading(true);
 
+    const cleanInput = email.trim().toLowerCase();
+
+    // 1. Explicitly prevent Employees & MasterAdmins from attempting to access SuperAdmin console
+    if (cleanInput.startsWith('emp-') || cleanInput.includes('demo') || cleanInput === 'masteradmin' || cleanInput.includes('master')) {
+      setIsLoading(false);
+      setErrorMsg('Access Denied: Employee and Master Admin accounts are strictly forbidden from logging into the Super Admin console. Please use your authorized login portal.');
+      return;
+    }
+
     const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
     try {
@@ -58,56 +68,69 @@ export default function SuperAdminLoginPage() {
         body: JSON.stringify({ email: email.trim(), password }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('isSuperAdminLoggedIn', 'true');
-        localStorage.setItem(
-          'superAdminUser',
-          JSON.stringify(data.user || {
-            name: 'Super Administrator',
-            email: email.trim(),
-            role: 'SUPER_ADMIN',
-            loginTime: new Date().toISOString(),
-          })
-        );
+      const data = await res.json().catch(() => null);
 
-        setSuccessMsg('Authentication verified. Opening Super Admin Management Console...');
+      if (res.ok && data?.success) {
+        const superAdminUser: AuthUser = {
+          id: data.user?.id || 1,
+          employee_code: 'superadmin',
+          username: email.trim(),
+          name: data.user?.name || 'Super Administrator',
+          email: email.trim(),
+          role: 'SUPER_ADMIN',
+          assigned_companies: ['*'],
+          permissions: {
+            can_create: true,
+            can_edit: true,
+            can_delete: true,
+          },
+        };
+        setSuperAdminUser(superAdminUser, data.token);
+
+        setSuccessMsg('Authentication verified. Opening employer companies directory...');
         setTimeout(() => {
-          router.push('/superadmin/companies');
+          router.push('/companies');
         }, 500);
+        return;
+      } else if (data && !data.success) {
+        setIsLoading(false);
+        setErrorMsg(data.message || 'Invalid Super Admin credentials. Please check your username & password.');
         return;
       }
     } catch {
-      // Offline fallback
+      // Backend temporarily unreachable, check offline fallback for root administrator only
     }
 
-    // Fallback if backend momentarily restarting
+    // Strict offline fallback for root Super Administrator credentials ONLY!
     const isValid =
-      (email.trim().toLowerCase() === 'admin' && password === 'admin') ||
-      (email.trim().toLowerCase() === 'superadmin' && password === 'admin') ||
-      (email.trim().length >= 3 && password.trim().length >= 4);
+      (cleanInput === 'admin' && (password === 'admin' || password === 'superadmin2026')) ||
+      (cleanInput === 'superadmin' && (password === 'admin' || password === 'superadmin2026')) ||
+      (cleanInput === 'superadmin@agency.gov.my' && (password === 'superadmin2026' || password === 'admin'));
 
     if (isValid) {
-      try {
-        localStorage.setItem('isSuperAdminLoggedIn', 'true');
-        localStorage.setItem(
-          'superAdminUser',
-          JSON.stringify({
-            name: 'Super Administrator',
-            email: email.trim(),
-            role: 'SUPER_ADMIN',
-            loginTime: new Date().toISOString(),
-          })
-        );
-      } catch {}
+      const fallbackUser: AuthUser = {
+        id: 1,
+        employee_code: 'superadmin',
+        username: email.trim(),
+        name: 'Super Administrator',
+        email: email.trim(),
+        role: 'SUPER_ADMIN',
+        assigned_companies: ['*'],
+        permissions: {
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+        },
+      };
+      setSuperAdminUser(fallbackUser);
 
-      setSuccessMsg('Authentication verified. Opening Super Admin Management Console...');
+      setSuccessMsg('Authentication verified. Opening employer companies directory...');
       setTimeout(() => {
-        router.push('/superadmin/companies');
+        router.push('/companies');
       }, 500);
     } else {
       setIsLoading(false);
-      setErrorMsg('Invalid Super Admin credentials. Please check your username & password.');
+      setErrorMsg('Invalid Super Admin credentials. Only authorized Super Administrators can access this console.');
     }
   };
 

@@ -52,13 +52,13 @@ function LoginForm() {
         c.name.toLowerCase().includes((companyParam || '').toLowerCase())
     ) || companies[0];
 
-  type LoginRole = 'Admin' | 'Employee';
+  type LoginRole = 'Employee';
 
   const [selectedService, setSelectedService] = useState<Service>(matchedService);
   const [selectedCompany, setSelectedCompany] = useState<Company>(matchedCompany);
-  const [role, setRole] = useState<LoginRole>('Admin');
-  const [userId, setUserId] = useState('masteradmin');
-  const [password, setPassword] = useState('password123');
+  const [role, setRole] = useState<LoginRole>('Employee');
+  const [userId, setUserId] = useState(DEFAULT_USER_ID);
+  const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
@@ -69,7 +69,7 @@ function LoginForm() {
     if (errorParam === 'auth_required') {
       setFeedback({
         type: 'error',
-        message: 'Security Clearance Required: Please log in with your credentials to access the Company Directory & Services.',
+        message: 'Security Clearance Required: Please log in with your employee credentials to access Employer Services.',
       });
     }
   }, [errorParam]);
@@ -100,34 +100,13 @@ function LoginForm() {
     }
   }, [companyParam]);
 
-  const handleRoleSelect = (newRole: LoginRole) => {
-    setRole(newRole);
-    setFeedback(null);
-    if (newRole === 'Admin') {
-      setUserId('masteradmin');
-      setPassword('password123');
-    } else {
-      setUserId(DEFAULT_USER_ID);
-      setPassword(DEFAULT_PASSWORD);
-    }
-  };
-
   const handleQuickFill = () => {
-    if (role === 'Admin') {
-      setUserId('masteradmin');
-      setPassword('password123');
-      setFeedback({
-        type: 'info',
-        message: 'Admin / Master credentials loaded (User ID: masteradmin / Pass: password123). Click LOGIN to access your assigned companies.',
-      });
-    } else {
-      setUserId(DEFAULT_USER_ID);
-      setPassword(DEFAULT_PASSWORD);
-      setFeedback({
-        type: 'info',
-        message: 'Demo employee credentials loaded! Click LOGIN to authenticate.',
-      });
-    }
+    setUserId(DEFAULT_USER_ID);
+    setPassword(DEFAULT_PASSWORD);
+    setFeedback({
+      type: 'info',
+      message: 'Demo employee credentials loaded (ID: DEMO2026 / Pass: password123)! Click LOGIN to authenticate.',
+    });
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -236,7 +215,7 @@ function LoginForm() {
       } else {
         setFeedback({
           type: 'success',
-          message: `Welcome, ${authenticatedUser.name}! Loading your authorized companies...`,
+          message: `Welcome, ${authenticatedUser.name}! Opening employer companies directory...`,
         });
         setTimeout(() => {
           window.location.href = '/companies';
@@ -245,9 +224,12 @@ function LoginForm() {
       return;
     }
 
-    // 2. SUPER ADMIN / ADMIN LOGIN: Only if backend returned Admin or SUPER_ADMIN role
-    if (authenticatedUser.role === 'Admin' || authenticatedUser.role === 'SUPER_ADMIN') {
+    // 2. SUPER ADMIN LOGIN: Strictly only if authenticatedUser.role === 'SUPER_ADMIN'
+    if (authenticatedUser.role === 'SUPER_ADMIN') {
       try {
+        localStorage.removeItem('isMasterAdminLoggedIn');
+        localStorage.removeItem('masterAdminUser');
+        localStorage.removeItem('masterAdminToken');
         localStorage.setItem('isSuperAdminLoggedIn', 'true');
         localStorage.setItem('superAdminUser', JSON.stringify(authenticatedUser));
         localStorage.setItem('isLoggedIn', 'true');
@@ -257,7 +239,7 @@ function LoginForm() {
       setIsLoading(false);
       setFeedback({
         type: 'success',
-        message: `Welcome, Administrator! Opening full employer companies list...`,
+        message: `Welcome, Super Administrator! Opening employer companies directory...`,
       });
       setTimeout(() => {
         window.location.href = '/companies';
@@ -266,7 +248,17 @@ function LoginForm() {
     }
 
     // 3. EMPLOYEE LOGIN: Check company-specific access
-    if (authenticatedUser.role === 'Employee') {
+    // Clear any previous administrative session keys to prevent any privilege leakage!
+    try {
+      localStorage.removeItem('isSuperAdminLoggedIn');
+      localStorage.removeItem('superAdminUser');
+      localStorage.removeItem('superAdminToken');
+      localStorage.removeItem('isMasterAdminLoggedIn');
+      localStorage.removeItem('masterAdminUser');
+      localStorage.removeItem('masterAdminToken');
+    } catch {}
+
+    if (authenticatedUser.role === 'Employee' || !authenticatedUser.role) {
       const allowedCompanies = authenticatedUser.assigned_companies || [];
       const hasWildcard = allowedCompanies.includes('*');
 
@@ -342,7 +334,7 @@ function LoginForm() {
     } else {
       setFeedback({
         type: 'success',
-        message: `Welcome, ${authenticatedUser.name}! Loading your authorized companies...`,
+        message: `Welcome, ${authenticatedUser.name}! Opening employer companies directory...`,
       });
       setTimeout(() => {
         window.location.href = '/companies';
@@ -473,15 +465,7 @@ function LoginForm() {
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-amber-600 shrink-0" />
             <span>
-              {role === 'Admin' ? (
-                <>
-                  <strong>Admin Mode:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">masteradmin</code> (or <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">rr</code>) • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">password123</code> (or <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">rrrrr</code>)
-                </>
-              ) : (
-                <>
-                  <strong>Employee Mode:</strong> User ID: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
-                </>
-              )}
+              <strong>Employee Portal:</strong> User ID: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
             </span>
           </div>
           <button
@@ -517,68 +501,15 @@ function LoginForm() {
             </div>
           )}
 
-          {/* Role: Admin / Employee Login */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-3.5 flex-wrap py-0.5">
-              <label className="text-[13.5px] font-bold text-slate-900 shrink-0">
-                Login As:
-              </label>
-              <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Login Role">
-                <label
-                  className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold cursor-pointer border transition-all ${
-                    role === 'Admin'
-                      ? 'border-[#0b4da2] bg-blue-50/90 text-[#0b4da2] shadow-sm ring-1 ring-[#0b4da2]/30'
-                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50/30'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="loginRole"
-                    value="Admin"
-                    className="sr-only"
-                    checked={role === 'Admin'}
-                    onChange={() => handleRoleSelect('Admin')}
-                  />
-                  <span
-                    className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      role === 'Admin' ? 'border-[#0b4da2]' : 'border-slate-400'
-                    }`}
-                  >
-                    {role === 'Admin' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#0b4da2]" />
-                    )}
-                  </span>
-                  <span>Admin</span>
-                </label>
-
-                <label
-                  className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold cursor-pointer border transition-all ${
-                    role === 'Employee'
-                      ? 'border-[#0b4da2] bg-blue-50/90 text-[#0b4da2] shadow-sm ring-1 ring-[#0b4da2]/30'
-                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-200 hover:bg-blue-50/30'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="loginRole"
-                    value="Employee"
-                    className="sr-only"
-                    checked={role === 'Employee'}
-                    onChange={() => handleRoleSelect('Employee')}
-                  />
-                  <span
-                    className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      role === 'Employee' ? 'border-[#0b4da2]' : 'border-slate-400'
-                    }`}
-                  >
-                    {role === 'Employee' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#0b4da2]" />
-                    )}
-                  </span>
-                  <span>Employee</span>
-                </label>
-              </div>
+          {/* Account Type Indicator */}
+          <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200/80 rounded-xl px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#0b4da2] animate-pulse" />
+              <span className="text-xs font-bold text-[#0b4da2]">Employee Account Login</span>
             </div>
+            <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-blue-100 font-bold uppercase">
+              Staff Portal
+            </span>
           </div>
 
           {/* User ID Field */}

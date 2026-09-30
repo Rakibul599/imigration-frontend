@@ -16,6 +16,7 @@ import {
   PanelLeftOpen,
   Shield,
   ShieldAlert,
+  Sparkles,
   UserCheck,
   Users,
   X,
@@ -25,7 +26,7 @@ import {
   getStoredCompanies,
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
-import { getMasterAdminUser, logoutMasterAdmin, AuthUser } from '@/lib/auth';
+import { getMasterAdminUser, logoutMasterAdmin, AuthUser, getCurrentUser } from '@/lib/auth';
 
 export default function MasterAdminLayout({
   children,
@@ -53,10 +54,17 @@ export default function MasterAdminLayout({
     }
 
     try {
+      const portalUser = getCurrentUser();
+      if (portalUser?.role === 'Employee') {
+        setIsAuth(false);
+        router.replace('/companies?error=masteradmin_access_denied');
+        return;
+      }
+
       const loggedIn = localStorage.getItem('isMasterAdminLoggedIn');
       const user = getMasterAdminUser();
 
-      if (loggedIn === 'true' && user) {
+      if (loggedIn === 'true' && user && user.role === 'MasterAdmin') {
         setIsAuth(true);
         setCurrentUser(user);
       } else {
@@ -64,7 +72,8 @@ export default function MasterAdminLayout({
         router.push('/masteradmin/login');
       }
     } catch {
-      setIsAuth(true);
+      setIsAuth(false);
+      router.push('/masteradmin/login');
     }
   }, [pathname, isLoginPage, router]);
 
@@ -180,6 +189,12 @@ export default function MasterAdminLayout({
       badge: 'Live',
     },
     {
+      name: 'Services Portal',
+      href: '/companies',
+      icon: Sparkles,
+      badge: 'Cards',
+    },
+    {
       name: 'Change Password',
       href: '/masteradmin/change-password',
       icon: KeyRound,
@@ -196,6 +211,13 @@ export default function MasterAdminLayout({
         <span>Official Master Administrator Portal</span>
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline">Scope: {assignedList.length} Permitted Companies</span>
+          <Link
+            href="/companies"
+            className="inline-flex items-center gap-1 text-amber-300 hover:text-white font-bold transition-colors no-underline text-xs"
+          >
+            <Sparkles size={12} />
+            <span>Employer Services</span>
+          </Link>
           <button
             onClick={handleLogout}
             className="inline-flex items-center gap-1 text-yellow-300 hover:text-white font-semibold transition-colors cursor-pointer border-0 bg-transparent text-xs"

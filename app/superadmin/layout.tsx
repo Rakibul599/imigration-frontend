@@ -15,9 +15,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Settings,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   UserCheck,
   Users,
   X,
@@ -27,6 +29,7 @@ import {
   getStoredCompanies,
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
+import { getCurrentUser, getSuperAdminUser } from '@/lib/auth';
 
 export default function SuperAdminLayout({
   children,
@@ -46,8 +49,9 @@ export default function SuperAdminLayout({
   const [masterAdminCount, setMasterAdminCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
   const [passwordCount, setPasswordCount] = useState<number>(0);
+  const [serviceCount, setServiceCount] = useState<number>(0);
 
-  // Check superadmin authentication
+  // Check superadmin authentication strictly
   useEffect(() => {
     if (isLoginPage) {
       setIsAuthenticated(true);
@@ -55,15 +59,39 @@ export default function SuperAdminLayout({
     }
 
     try {
-      const loggedIn = localStorage.getItem('isSuperAdminLoggedIn');
-      if (loggedIn === 'true') {
+      const currentUser = getCurrentUser();
+      const superUser = getSuperAdminUser();
+      const isSuperAdminLoggedIn = localStorage.getItem('isSuperAdminLoggedIn') === 'true';
+
+      // 1. HARD BLOCK: Employees & MasterAdmins CANNOT access Super Admin!
+      if (
+        currentUser?.role === 'Employee' ||
+        currentUser?.role === 'MasterAdmin' ||
+        (currentUser?.role && currentUser.role !== 'SUPER_ADMIN')
+      ) {
+        setIsAuthenticated(false);
+        if (currentUser?.role === 'MasterAdmin') {
+          router.replace('/masteradmin');
+        } else {
+          router.replace('/companies?error=superadmin_access_denied');
+        }
+        return;
+      }
+
+      // 2. Only confirmed real Super Admin is granted access
+      const isRealSuperAdmin =
+        isSuperAdminLoggedIn &&
+        (currentUser?.role === 'SUPER_ADMIN' || superUser?.role === 'SUPER_ADMIN');
+
+      if (isRealSuperAdmin) {
         setIsAuthenticated(true);
       } else {
         setIsAuthenticated(false);
-        router.push('/superadmin/login');
+        router.replace('/superadmin/login?error=superadmin_required');
       }
     } catch {
-      setIsAuthenticated(true);
+      setIsAuthenticated(false);
+      router.replace('/superadmin/login');
     }
   }, [pathname, isLoginPage, router]);
 
@@ -126,6 +154,16 @@ export default function SuperAdminLayout({
         }
       })
       .catch(() => {});
+
+    // Fetch service cards count
+    fetch(`${apiBase}/service-cards`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setServiceCount(data.length);
+        }
+      })
+      .catch(() => {});
   }, [pathname, isLoginPage]);
 
   // If this is the login page, render children directly without admin sidebar
@@ -181,16 +219,34 @@ export default function SuperAdminLayout({
       badge: customerCount > 0 ? `${customerCount}` : undefined,
     },
     {
+      name: 'Service Cards',
+      href: '/superadmin/services',
+      icon: Sparkles,
+      badge: serviceCount > 0 ? `${serviceCount}` : undefined,
+    },
+    {
       name: 'Dashboard Overview',
       href: '/superadmin',
       icon: LayoutDashboard,
       badge: 'Live',
     },
     {
+      name: 'Services Portal',
+      href: '/companies',
+      icon: ExternalLink,
+      badge: 'Preview',
+    },
+    {
       name: 'Password Management',
       href: '/superadmin/passwords',
       icon: KeyRound,
       badge: passwordCount > 0 ? `${passwordCount}` : undefined,
+    },
+    {
+      name: 'General Settings',
+      href: '/superadmin/settings',
+      icon: Settings,
+      badge: 'Portal',
     },
   ];
 
@@ -201,6 +257,13 @@ export default function SuperAdminLayout({
         <span>Official Super Administrator Portal</span>
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline">Server: Laravel 11 API (MySQL Connected)</span>
+          <Link
+            href="/companies"
+            className="inline-flex items-center gap-1 text-amber-300 hover:text-white font-bold transition-colors no-underline text-xs"
+          >
+            <Sparkles size={12} />
+            <span>Employer Services</span>
+          </Link>
           <button
             onClick={handleLogout}
             className="inline-flex items-center gap-1 text-yellow-300 hover:text-white font-semibold transition-colors cursor-pointer border-0 bg-transparent text-xs"

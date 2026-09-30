@@ -23,7 +23,7 @@ button, input { font: inherit; }
 .portal-shell { min-height: 100vh; overflow: hidden; }
 .top-strip { align-items: center; background: #061d4d; color: #b8c9e6; display: flex; font-size: 11px; justify-content: space-between; letter-spacing: .04em; padding: 8px 5vw; }
 .site-header { background: white; border-bottom: 1px solid #e7ecf3; position: relative; z-index: 50; }
-.header-inner { align-items: center; display: flex; height: 78px; justify-content: space-between; }
+.header-inner { align-items: center; display: flex; min-height: 84px; height: auto; padding: 6px 0; justify-content: space-between; }
 .brand { align-items: center; display: inline-flex; gap: 12px; }
 .brand-copy { display: grid; gap: 4px; }
 .brand-copy strong { color: var(--deep-blue); font-size: 12px; letter-spacing: .09em; }

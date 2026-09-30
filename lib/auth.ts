@@ -6,6 +6,21 @@ export interface EmployeePermissions {
   can_delete: boolean;
 }
 
+export interface ModuleAccess {
+  view: boolean;
+  create?: boolean;
+  edit?: boolean;
+  delete?: boolean;
+}
+
+export interface ModulePermissions {
+  companies?: ModuleAccess;
+  customers?: ModuleAccess;
+  services?: ModuleAccess;
+  passwords?: ModuleAccess;
+  [key: string]: ModuleAccess | undefined;
+}
+
 export interface AuthUser {
   id: number | string;
   employee_code: string;
@@ -15,12 +30,17 @@ export interface AuthUser {
   role: 'Employee' | 'Admin' | 'SUPER_ADMIN' | 'MasterAdmin' | string;
   assigned_companies: string[];
   permissions: EmployeePermissions;
+  master_admin_id?: string | null;
+  master_admin_name?: string | null;
+  module_permissions?: ModulePermissions;
 }
 
 const STORAGE_KEY = 'portal_current_user';
 const TOKEN_KEY = 'portal_auth_token';
 const MASTER_ADMIN_STORAGE_KEY = 'masterAdminUser';
 const MASTER_ADMIN_LOGGED_KEY = 'isMasterAdminLoggedIn';
+const SUPER_ADMIN_STORAGE_KEY = 'superAdminUser';
+const SUPER_ADMIN_LOGGED_KEY = 'isSuperAdminLoggedIn';
 
 /**
  * Get the backend API base URL
@@ -33,12 +53,12 @@ export function getBackendApiUrl(): string {
 }
 
 /**
- * Get current authenticated user from localStorage
+ * Get current Super Admin user from localStorage
  */
-export function getCurrentUser(): AuthUser | null {
+export function getSuperAdminUser(): AuthUser | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(SUPER_ADMIN_STORAGE_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -47,13 +67,85 @@ export function getCurrentUser(): AuthUser | null {
 }
 
 /**
- * Check if a user is currently authenticated
+ * Check if Super Admin is authenticated
+ */
+export function isSuperAdminAuthenticated(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const logged = localStorage.getItem(SUPER_ADMIN_LOGGED_KEY) === 'true';
+    const user = getSuperAdminUser();
+    return Boolean(logged && user);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Save Super Admin session
+ */
+export function setSuperAdminUser(user: AuthUser, token?: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SUPER_ADMIN_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(SUPER_ADMIN_LOGGED_KEY, 'true');
+    localStorage.setItem('isLoggedIn', 'true');
+    if (token) {
+      localStorage.setItem('superAdminToken', token);
+    }
+    setCurrentUser(user, token);
+  } catch (err) {
+    console.error('Failed to set Super Admin session', err);
+  }
+}
+
+/**
+ * Log out Super Admin
+ */
+export function logoutSuperAdmin(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(SUPER_ADMIN_STORAGE_KEY);
+    localStorage.removeItem(SUPER_ADMIN_LOGGED_KEY);
+    localStorage.removeItem('superAdminToken');
+    logoutUser();
+  } catch (err) {
+    console.error('Failed to logout Super Admin', err);
+  }
+}
+
+/**
+ * Get current authenticated user from localStorage across all role types
+ */
+export function getCurrentUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+    const superAdmin = getSuperAdminUser();
+    if (superAdmin && localStorage.getItem(SUPER_ADMIN_LOGGED_KEY) === 'true') {
+      return superAdmin;
+    }
+    const masterAdmin = getMasterAdminUser();
+    if (masterAdmin && localStorage.getItem(MASTER_ADMIN_LOGGED_KEY) === 'true') {
+      return masterAdmin;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if any authorized user (SuperAdmin, MasterAdmin, Employee, Admin) is authenticated
  */
 export function isAuthenticated(): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    const user = getCurrentUser();
-    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const user = getCurrentUser() || getSuperAdminUser() || getMasterAdminUser();
+    const loggedIn =
+      localStorage.getItem('isLoggedIn') === 'true' ||
+      localStorage.getItem(SUPER_ADMIN_LOGGED_KEY) === 'true' ||
+      localStorage.getItem(MASTER_ADMIN_LOGGED_KEY) === 'true';
     return Boolean(user && loggedIn);
   } catch {
     return false;
@@ -86,6 +178,12 @@ export function logoutUser(): void {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem(SUPER_ADMIN_STORAGE_KEY);
+    localStorage.removeItem(SUPER_ADMIN_LOGGED_KEY);
+    localStorage.removeItem('superAdminToken');
+    localStorage.removeItem(MASTER_ADMIN_STORAGE_KEY);
+    localStorage.removeItem(MASTER_ADMIN_LOGGED_KEY);
+    localStorage.removeItem('masterAdminToken');
     localStorage.removeItem('activeCompany');
     localStorage.removeItem('activeService');
     window.dispatchEvent(new Event('portal-auth-change'));
@@ -130,6 +228,7 @@ export function setMasterAdminUser(user: AuthUser, token?: string): void {
   try {
     localStorage.setItem(MASTER_ADMIN_STORAGE_KEY, JSON.stringify(user));
     localStorage.setItem(MASTER_ADMIN_LOGGED_KEY, 'true');
+    localStorage.setItem('isLoggedIn', 'true');
     if (token) {
       localStorage.setItem('masterAdminToken', token);
     }
@@ -153,6 +252,101 @@ export function logoutMasterAdmin(): void {
   } catch (err) {
     console.error('Failed to logout Master Admin', err);
   }
+}
+
+/**
+ * Resolve user panel navigation target and badge
+ * Super Admin -> /superadmin (Strictly only real SUPER_ADMIN)
+ * Master Admin -> /masteradmin (Cannot access /superadmin)
+ * Employee -> /companies (Cannot access /superadmin)
+ */
+export function getUserPanelInfo(): {
+  hasPanel: boolean;
+  panelUrl: string;
+  panelLabel: string;
+  panelBadge: string;
+  roleType: 'SUPER_ADMIN' | 'MasterAdmin' | 'Employee' | 'User';
+} {
+  if (typeof window === 'undefined') {
+    return {
+      hasPanel: false,
+      panelUrl: '/services',
+      panelLabel: 'Your Panel',
+      panelBadge: 'Panel',
+      roleType: 'User',
+    };
+  }
+
+  const current = getCurrentUser();
+  const superLogged = localStorage.getItem(SUPER_ADMIN_LOGGED_KEY) === 'true';
+  const superUser = getSuperAdminUser();
+  const masterLogged = localStorage.getItem(MASTER_ADMIN_LOGGED_KEY) === 'true';
+  const masterUser = getMasterAdminUser();
+
+  // 1. Employee Check: An employee can NEVER access Super Admin!
+  const isEmployeeUser =
+    current?.role === 'Employee' ||
+    (current?.role !== 'SUPER_ADMIN' && current?.role !== 'MasterAdmin' && Boolean(current?.employee_code));
+
+  if (isEmployeeUser) {
+    return {
+      hasPanel: true,
+      panelUrl: '/employee',
+      panelLabel: 'Your Panel',
+      panelBadge: 'Employee',
+      roleType: 'Employee',
+    };
+  }
+
+  // 2. Master Admin Check: Master Admin can NEVER access Super Admin!
+  const isMasterUser =
+    current?.role === 'MasterAdmin' ||
+    masterLogged ||
+    masterUser?.role === 'MasterAdmin';
+
+  if (isMasterUser) {
+    return {
+      hasPanel: true,
+      panelUrl: '/masteradmin',
+      panelLabel: 'Your Panel',
+      panelBadge: 'Master Admin',
+      roleType: 'MasterAdmin',
+    };
+  }
+
+  // 3. Super Admin Check: ONLY real Super Admin is permitted into /superadmin!
+  const isRealSuperAdmin =
+    (current?.role === 'SUPER_ADMIN' || (superLogged && superUser?.role === 'SUPER_ADMIN')) &&
+    !isEmployeeUser &&
+    !isMasterUser;
+
+  if (isRealSuperAdmin) {
+    return {
+      hasPanel: true,
+      panelUrl: '/superadmin',
+      panelLabel: 'Your Panel',
+      panelBadge: 'Super Admin',
+      roleType: 'SUPER_ADMIN',
+    };
+  }
+
+  if (current || localStorage.getItem('isLoggedIn') === 'true') {
+    return {
+      hasPanel: true,
+      panelUrl: '/companies',
+      panelLabel: 'Your Panel',
+      panelBadge: 'Employee',
+      roleType: 'Employee',
+    };
+  }
+
+  return {
+    hasPanel: false,
+    panelUrl: '/services',
+    panelLabel: 'Your Panel',
+    panelBadge: 'Panel',
+    roleType: 'User',
+  };
 }
 
 /**
@@ -241,10 +435,10 @@ export async function authenticateMasterAdmin(
 export function hasCompanyAccess(companyId: string, companyName?: string, roc?: string): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return true; // Unauthenticated public view
-  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
+  if (user.role === 'SUPER_ADMIN') return true;
 
-  // MasterAdmin and Employee are strictly restricted to assigned_companies only
-  if (user.role === 'MasterAdmin' || user.role === 'Employee') {
+  // MasterAdmin and Employee (including admin staff) are strictly restricted to assigned_companies only
+  if (user.role === 'MasterAdmin' || user.role === 'Employee' || user.role === 'Admin') {
     if (!Array.isArray(user.assigned_companies) || user.assigned_companies.length === 0) {
       return false;
     }
@@ -278,7 +472,7 @@ export function canCreate(): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
   if (user.role === 'MasterAdmin') return false; // Masteradmin CANNOT create companies!
-  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
+  if (user.role === 'SUPER_ADMIN') return true;
   return Boolean(user.permissions?.can_create);
 }
 
@@ -288,7 +482,7 @@ export function canCreate(): boolean {
 export function canEdit(): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
-  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin' || user.role === 'MasterAdmin') return true;
+  if (user.role === 'SUPER_ADMIN' || user.role === 'MasterAdmin') return true;
   return Boolean(user.permissions?.can_edit);
 }
 
@@ -299,7 +493,7 @@ export function canDelete(): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
   if (user.role === 'MasterAdmin') return false;
-  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin') return true;
+  if (user.role === 'SUPER_ADMIN') return true;
   return Boolean(user.permissions?.can_delete);
 }
 

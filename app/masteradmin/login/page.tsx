@@ -57,9 +57,9 @@ export default function MasterAdminLoginPage() {
       const res = await authenticateMasterAdmin(username, password);
 
       if (res.success) {
-        setSuccessMsg('Authorization verified! Opening Master Admin Console...');
+        setSuccessMsg('Authorization verified! Opening employer companies directory...');
         setTimeout(() => {
-          router.push('/masteradmin/companies');
+          router.push('/companies');
         }, 500);
       } else {
         setIsLoading(false);

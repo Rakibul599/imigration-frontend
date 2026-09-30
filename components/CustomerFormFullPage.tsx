@@ -44,6 +44,11 @@ import {
   getFileUrl,
   updateCustomer,
 } from '@/lib/customerStorage';
+import {
+  ServiceCard,
+  getStoredServices,
+  fetchServiceCards,
+} from '@/lib/serviceStorage';
 import { getMasterAdminUser } from '@/lib/auth';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 
@@ -133,6 +138,17 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>('active');
 
+  // Service cards for tagging uploaded documents
+  const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
+    return typeof window !== 'undefined' ? getStoredServices() : [];
+  });
+
+  const selectableServices = useMemo(() => {
+    return availableServices.filter(
+      (s) => s.id !== 'customer' && s.id !== 'document-download'
+    );
+  }, [availableServices]);
+
   // Sector management states
   const [isAddingNewSector, setIsAddingNewSector] = useState(false);
   const [newSectorName, setNewSectorName] = useState('');
@@ -149,15 +165,19 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     let isMounted = true;
     async function refreshBackgroundData() {
       try {
-        const [allComps, secList] = await Promise.all([
+        const [allComps, secList, svcList] = await Promise.all([
           fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
           fetchWorkingSectors(),
+          fetchServiceCards().catch(() => getStoredServices()),
         ]);
 
         if (!isMounted) return;
         const permitted = filterPermittedCompanies(allComps, portalType);
         setCompanies(permitted);
         setSectors(secList);
+        if (svcList && svcList.length > 0) {
+          setAvailableServices(svcList);
+        }
 
         setCompanyId((prev) => {
           if (prev && permitted.some((c) => c.id.toLowerCase() === prev.toLowerCase())) {
@@ -275,6 +295,8 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
         dataUrl: '',
         size: '',
         type: 'application/pdf',
+        service_id: '',
+        service_name: '',
       },
     ]);
   };
@@ -287,6 +309,19 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     setDocuments((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleDocumentServiceChange = (index: number, serviceId: string) => {
+    const matched = selectableServices.find((s) => s.id === serviceId);
+    setDocuments((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        service_id: serviceId,
+        service_name: matched ? matched.title : '',
+      };
       return copy;
     });
   };
@@ -882,7 +917,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
                     {/* 1. Document Name */}
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-3">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
                         Document Name #{idx + 1}
                       </label>
@@ -890,12 +925,32 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                         type="text"
                         value={doc.name}
                         onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
-                        placeholder="e.g. Passport, NID, Visa, Medical"
+                        placeholder="e.g. Passport, NID, Medical"
                         className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
                       />
                     </div>
 
-                    {/* 2. Date of Issue */}
+                    {/* 2. Select Service Card */}
+                    <div className="lg:col-span-3">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center justify-between">
+                        <span>Select Service Card</span>
+                        <span className="text-[10px] text-blue-600 font-semibold">Service Tag</span>
+                      </label>
+                      <select
+                        value={doc.service_id || ''}
+                        onChange={(e) => handleDocumentServiceChange(idx, e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
+                      >
+                        <option value="">-- General Document (None) --</option>
+                        {selectableServices.map((svc) => (
+                          <option key={svc.id} value={svc.id}>
+                            {svc.title} {svc.tag ? `[${svc.tag}]` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 3. Date of Issue */}
                     <div className="lg:col-span-2">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
                         Date of Issue
@@ -908,7 +963,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                       />
                     </div>
 
-                    {/* 3. Date of Expire */}
+                    {/* 4. Date of Expire */}
                     <div className="lg:col-span-2">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
                         Date of Expire
@@ -921,14 +976,14 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                       />
                     </div>
 
-                    {/* 4. Attachment */}
-                    <div className="lg:col-span-3">
+                    {/* 5. Attachment & Delete */}
+                    <div className="lg:col-span-2">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
                         Attachment
                       </label>
-                      <div className="flex items-center gap-2">
-                        <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0">
-                          <Upload size={13} />
+                      <div className="flex items-center gap-1.5">
+                        <label className="inline-flex items-center gap-1 px-2.5 py-2 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0">
+                          <Upload size={12} />
                           <span>{doc.url || doc.dataUrl ? 'Replace' : 'Upload'}</span>
                           <input
                             type="file"
@@ -941,28 +996,24 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                           />
                         </label>
                         {doc.url || doc.dataUrl ? (
-                          <div className="flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1.5 rounded-md border border-emerald-200 truncate flex-1 font-mono">
-                            <Check size={12} className="shrink-0 text-emerald-600" />
+                          <div className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-1.5 rounded border border-emerald-200 truncate flex-1 font-mono">
+                            <Check size={11} className="shrink-0 text-emerald-600" />
                             <span className="truncate" title={doc.size || 'Attached'}>
                               {doc.size || 'Attached'}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-400 italic py-1.5">No file chosen</span>
+                          <span className="text-[10px] text-slate-400 italic flex-1 truncate">No file</span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDocumentRow(idx)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent shrink-0"
+                          title="Remove document row"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </div>
-                    </div>
-
-                    {/* 5. Delete Action */}
-                    <div className="lg:col-span-1 flex justify-end lg:justify-center">
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDocumentRow(idx)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
-                        title="Remove document row"
-                      >
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                   </div>
                 </div>

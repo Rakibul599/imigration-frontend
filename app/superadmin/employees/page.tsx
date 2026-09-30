@@ -1,25 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
-  Check,
   CheckCircle2,
-  CheckSquare,
   Edit2,
   KeyRound,
-  Lock,
-  Mail,
   Plus,
-  RotateCcw,
   Search,
-  Shield,
-  ShieldAlert,
   ShieldCheck,
-  Square,
+  Sparkles,
   Trash2,
-  User,
   UserCheck,
   Users,
   X,
@@ -33,10 +26,18 @@ export type EmployeeRecord = {
   name: string;
   email: string;
   role: 'Employee' | 'Admin';
+  master_admin_id?: number | null;
+  master_admin_name?: string | null;
   assigned_companies: string[];
   can_create: boolean;
   can_edit: boolean;
   can_delete: boolean;
+  module_permissions?: {
+    companies?: { view: boolean; edit?: boolean; delete?: boolean };
+    customers?: { view: boolean; create?: boolean; edit?: boolean; delete?: boolean };
+    services?: { view: boolean; create?: boolean; edit?: boolean; delete?: boolean };
+    passwords?: { view: boolean; edit?: boolean };
+  };
   status: 'active' | 'inactive';
   created_at?: string;
   updated_at?: string;
@@ -46,23 +47,9 @@ export default function SuperAdminEmployeesPage() {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  // Form states
-  const [formName, setFormName] = useState('');
-  const [formCode, setFormCode] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formPassword, setFormPassword] = useState('');
-  const [formRole, setFormRole] = useState<'Employee' | 'Admin'>('Employee');
-  const [formAssignedCompanies, setFormAssignedCompanies] = useState<string[]>([]);
-  const [formCanCreate, setFormCanCreate] = useState(false);
-  const [formCanEdit, setFormCanEdit] = useState(true);
-  const [formCanDelete, setFormCanDelete] = useState(false);
-  const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active');
 
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
@@ -81,9 +68,11 @@ export default function SuperAdminEmployeesPage() {
   useEffect(() => {
     fetchEmployees();
     setCompanies(getStoredCompanies());
-    fetchCompaniesFromBackend().then((list) => {
-      setCompanies(list);
-    }).catch(() => {});
+    fetchCompaniesFromBackend()
+      .then((list) => {
+        setCompanies(list);
+      })
+      .catch(() => {});
   }, []);
 
   const showToast = (type: 'success' | 'info', message: string) => {
@@ -91,113 +80,6 @@ export default function SuperAdminEmployeesPage() {
     setTimeout(() => {
       setNotification(null);
     }, 3500);
-  };
-
-  const openCreateModal = () => {
-    setEditingEmployee(null);
-    setFormName('');
-    setFormCode(`EMP-${Math.floor(1000 + Math.random() * 9000)}`);
-    setFormEmail('');
-    setFormPassword('password123');
-    setFormRole('Employee');
-    // Default assign first two companies if available
-    setFormAssignedCompanies(companies.slice(0, 2).map((c) => c.id));
-    setFormCanCreate(true);
-    setFormCanEdit(true);
-    setFormCanDelete(false);
-    setFormStatus('active');
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (emp: EmployeeRecord) => {
-    setEditingEmployee(emp);
-    setFormName(emp.name);
-    setFormCode(emp.employee_code);
-    setFormEmail(emp.email);
-    setFormPassword(''); // blank means leave unchanged
-    setFormRole(emp.role);
-    setFormAssignedCompanies(Array.isArray(emp.assigned_companies) ? emp.assigned_companies : []);
-    setFormCanCreate(Boolean(emp.can_create));
-    setFormCanEdit(Boolean(emp.can_edit));
-    setFormCanDelete(Boolean(emp.can_delete));
-    setFormStatus(emp.status);
-    setIsModalOpen(true);
-  };
-
-  const toggleCompanyAssignment = (companyId: string) => {
-    setFormAssignedCompanies((prev) => {
-      if (prev.includes(companyId)) {
-        return prev.filter((id) => id !== companyId);
-      }
-      return [...prev, companyId];
-    });
-  };
-
-  const selectAllCompanies = () => {
-    setFormAssignedCompanies(companies.map((c) => c.id));
-  };
-
-  const clearAllCompanies = () => {
-    setFormAssignedCompanies([]);
-  };
-
-  const handleSaveEmployee = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName.trim() || !formCode.trim() || !formEmail.trim()) return;
-
-    setIsLoading(true);
-
-    const payload: any = {
-      name: formName.trim(),
-      employee_code: formCode.trim().toUpperCase(),
-      email: formEmail.trim().toLowerCase(),
-      role: formRole,
-      assigned_companies: formAssignedCompanies,
-      can_create: formCanCreate,
-      can_edit: formCanEdit,
-      can_delete: formCanDelete,
-      status: formStatus,
-    };
-
-    if (formPassword.trim()) {
-      payload.password = formPassword.trim();
-    }
-
-    try {
-      const url = editingEmployee
-        ? `${apiBase}/employees/${editingEmployee.id}`
-        : `${apiBase}/employees`;
-      const method = editingEmployee ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        await fetchEmployees();
-        setIsModalOpen(false);
-        setEditingEmployee(null);
-        showToast(
-          'success',
-          editingEmployee
-            ? `Employee "${payload.name}" updated successfully.`
-            : `New Employee "${payload.name}" created with ${formAssignedCompanies.length} assigned companies.`
-        );
-      } else {
-        const errorData = await res.json();
-        alert(errorData.message || 'Error saving employee.');
-      }
-    } catch (err) {
-      console.error('Save employee error:', err);
-      alert('Failed to connect to backend.');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleDeleteEmployee = async (id: number) => {
@@ -210,7 +92,7 @@ export default function SuperAdminEmployeesPage() {
       if (res.ok) {
         await fetchEmployees();
         setDeleteConfirmId(null);
-        showToast('info', 'Employee deleted successfully from MySQL database.');
+        showToast('info', 'Employee profile deleted successfully.');
       }
     } catch (err) {
       console.error('Delete employee error:', err);
@@ -225,7 +107,7 @@ export default function SuperAdminEmployeesPage() {
       emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.employee_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.role.toLowerCase().includes(searchTerm.toLowerCase())
+      (emp.master_admin_name && emp.master_admin_name.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const activeCount = employees.filter((e) => e.status === 'active').length;
@@ -258,25 +140,24 @@ export default function SuperAdminEmployeesPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight m-0">
-                Employee &amp; Permissions Management
+                Staff &amp; Workforce Management
               </h1>
               <span className="bg-blue-100 text-[#0b4da2] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-                {employees.length} Users
+                {employees.length} Staff
               </span>
             </div>
             <p className="text-xs text-slate-500 m-0">
-              Configure employee login accounts, assign permitted companies, and specify granular permissions (Create, Edit, Delete).
+              Manage employee accounts, supervise master admin assignments, employer clearances, and granular module permissions.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-sm transition-all cursor-pointer border-0"
+          <Link
+            href="/superadmin/employees/create"
+            className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083a7c] text-white shadow-sm transition-all cursor-pointer border-0 no-underline"
           >
             <Plus size={16} />
             <span>Add New Employee</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -333,7 +214,7 @@ export default function SuperAdminEmployeesPage() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by name, User ID, or email..."
+            placeholder="Search by name, User ID, email, supervisor..."
             className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all shadow-xs"
           />
         </div>
@@ -347,17 +228,17 @@ export default function SuperAdminEmployeesPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-[#22a34a] text-white text-xs font-bold">
-              <th className="py-3 px-4 border-r border-green-600/60 w-[25%]">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[24%]">
                 Employee Profile
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[12%]">
-                Role
+              <th className="py-3 px-4 border-r border-green-600/60 w-[18%]">
+                Supervisor (Master Admin)
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[35%]">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[26%]">
                 Assigned Company Access
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 text-center w-[16%]">
-                Permissions
+              <th className="py-3 px-4 border-r border-green-600/60 text-center w-[20%]">
+                Module Permissions
               </th>
               <th className="py-3 px-4 text-right w-[12%]">
                 Actions
@@ -368,6 +249,12 @@ export default function SuperAdminEmployeesPage() {
             {filteredEmployees.map((emp) => {
               const assignedIds = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
               const assignedCompanyObjects = companies.filter((c) => assignedIds.includes(c.id));
+              const perms = emp.module_permissions || {
+                companies: { view: true, edit: emp.can_edit, delete: emp.can_delete },
+                customers: { view: true, create: emp.can_create, edit: emp.can_edit, delete: emp.can_delete },
+                services: { view: true },
+                passwords: { view: false },
+              };
 
               return (
                 <tr key={emp.id} className="hover:bg-blue-50/40 transition-colors">
@@ -378,30 +265,47 @@ export default function SuperAdminEmployeesPage() {
                         {emp.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <span className="font-bold text-slate-900 block text-[13px]">
-                          {emp.name}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900 block text-[13px]">
+                            {emp.name}
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase ${
+                              emp.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            {emp.status}
+                          </span>
+                        </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="font-mono text-[11px] font-bold text-[#0b4da2] bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
                             {emp.employee_code}
                           </span>
-                          <span className="text-slate-500 text-[11px]">{emp.email}</span>
+                          <span className="text-slate-500 text-[11px] truncate max-w-[130px]" title={emp.email}>
+                            {emp.email}
+                          </span>
                         </div>
                       </div>
                     </div>
                   </td>
 
-                  {/* Role */}
+                  {/* Supervisor (Master Admin) */}
                   <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                    <span
-                      className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                        emp.role === 'Admin'
-                          ? 'bg-purple-100 text-purple-800'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {emp.role}
-                    </span>
+                    {emp.master_admin_name ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                        <div>
+                          <span className="font-bold text-purple-900 text-xs block leading-tight">
+                            {emp.master_admin_name}
+                          </span>
+                          <span className="text-[10px] text-purple-600 font-medium">Assigned Supervisor</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 italic text-[11px]">Unassigned</span>
+                    )}
                   </td>
 
                   {/* Assigned Companies */}
@@ -428,53 +332,86 @@ export default function SuperAdminEmployeesPage() {
                     </div>
                   </td>
 
-                  {/* Permissions Pills */}
+                  {/* Module Permissions Matrix Badges */}
                   <td className="py-3.5 px-4 border-r border-slate-200 text-center align-middle">
-                    <div className="flex items-center justify-center gap-1 flex-wrap">
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                          emp.can_create
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-slate-100 text-slate-400 line-through'
-                        }`}
-                        title={emp.can_create ? 'Permission: Create Records' : 'No Create Permission'}
-                      >
-                        Create
-                      </span>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                          emp.can_edit
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-400 line-through'
-                        }`}
-                        title={emp.can_edit ? 'Permission: Edit Records' : 'No Edit Permission'}
-                      >
-                        Edit
-                      </span>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                          emp.can_delete
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-slate-100 text-slate-400 line-through'
-                        }`}
-                        title={emp.can_delete ? 'Permission: Delete Records' : 'No Delete Permission'}
-                      >
-                        Delete
-                      </span>
+                    <div className="flex flex-col gap-1 items-start justify-center max-w-[200px] mx-auto text-[10px]">
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-slate-500 font-semibold">Companies:</span>
+                        <span
+                          className={`font-bold px-1.5 py-0.2 rounded ${
+                            perms.companies?.view
+                              ? perms.companies?.delete
+                                ? 'bg-red-50 text-red-700'
+                                : perms.companies?.edit
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-400 line-through'
+                          }`}
+                        >
+                          {perms.companies?.view
+                            ? perms.companies?.delete
+                              ? 'Full'
+                              : perms.companies?.edit
+                              ? 'Edit'
+                              : 'View'
+                            : 'None'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-slate-500 font-semibold">Customers:</span>
+                        <span
+                          className={`font-bold px-1.5 py-0.2 rounded ${
+                            perms.customers?.view
+                              ? perms.customers?.delete
+                                ? 'bg-red-50 text-red-700'
+                                : perms.customers?.create || perms.customers?.edit
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-400 line-through'
+                          }`}
+                        >
+                          {perms.customers?.view
+                            ? perms.customers?.delete
+                              ? 'Full'
+                              : perms.customers?.create && perms.customers?.edit
+                              ? 'Create/Edit'
+                              : perms.customers?.edit
+                              ? 'Edit'
+                              : 'View'
+                            : 'None'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-slate-500 font-semibold">Services:</span>
+                        <span
+                          className={`font-bold px-1.5 py-0.2 rounded ${
+                            perms.services?.view
+                              ? perms.services?.delete
+                                ? 'bg-red-50 text-red-700'
+                                : perms.services?.edit
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'bg-emerald-50 text-emerald-700'
+                              : 'bg-slate-100 text-slate-400 line-through'
+                          }`}
+                        >
+                          {perms.services?.view ? (perms.services?.edit ? 'Edit' : 'View') : 'None'}
+                        </span>
+                      </div>
                     </div>
                   </td>
 
                   {/* Actions */}
                   <td className="py-3 px-4 align-middle text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(emp)}
+                      <Link
+                        href={`/superadmin/employees/${emp.id}/edit`}
                         title="Edit Employee & Permissions"
-                        className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
+                        className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors no-underline shadow-2xs"
                       >
                         <Edit2 size={14} />
-                      </button>
+                      </Link>
 
                       <button
                         type="button"
@@ -500,277 +437,6 @@ export default function SuperAdminEmployeesPage() {
           </tbody>
         </table>
       </div>
-
-      {/* CREATE / EDIT EMPLOYEE MODAL */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-[#0b4da2]">
-                <Users size={22} />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 m-0">
-                  {editingEmployee ? 'Edit Employee & Access Permissions' : 'Create New Employee Account'}
-                </h2>
-                <p className="text-xs text-slate-500 m-0">
-                  Configure employee credentials, company permissions, and operational access levels.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveEmployee} className="flex flex-col gap-4 pt-2">
-              {/* Name and Role */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Employee Full Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Ahmad bin Zulkifli"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Role Category
-                  </label>
-                  <select
-                    value={formRole}
-                    onChange={(e) => setFormRole(e.target.value as 'Employee' | 'Admin')}
-                    className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 cursor-pointer bg-white"
-                  >
-                    <option value="Employee">Employee (Company Access Restricted)</option>
-                    <option value="Admin">Admin (Elevated Operational Access)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Employee Code / User ID and Email */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    User ID / Employee Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. DEMO2026 or EMP-1001"
-                    value={formCode}
-                    onChange={(e) => setFormCode(e.target.value)}
-                    className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 font-mono font-bold uppercase"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Email Address <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="e.g. ahmad@demo.com"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
-                  />
-                </div>
-              </div>
-
-              {/* Password */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Password {editingEmployee ? <span className="text-slate-400 font-normal">(Leave blank to keep unchanged)</span> : <span className="text-red-500">*</span>}
-                </label>
-                <input
-                  type="password"
-                  required={!editingEmployee}
-                  placeholder={editingEmployee ? '•••••••• (unchanged)' : 'Enter login password'}
-                  value={formPassword}
-                  onChange={(e) => setFormPassword(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 font-mono"
-                />
-              </div>
-
-              {/* COMPANY ACCESS CHECKBOXES */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <label className="text-xs font-bold text-slate-800 block m-0">
-                      Assigned Company Access ({formAssignedCompanies.length} Selected)
-                    </label>
-                    <p className="text-[11px] text-slate-500 m-0">
-                      Employee will ONLY be able to access and view these selected companies.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={selectAllCompanies}
-                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold bg-transparent border-0 cursor-pointer p-0"
-                    >
-                      Select All
-                    </button>
-                    <span className="text-slate-300">|</span>
-                    <button
-                      type="button"
-                      onClick={clearAllCompanies}
-                      className="text-[11px] text-slate-500 hover:text-slate-700 font-semibold bg-transparent border-0 cursor-pointer p-0"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 max-h-44 overflow-y-auto pr-1">
-                  {companies.map((comp) => {
-                    const isChecked = formAssignedCompanies.includes(comp.id);
-                    return (
-                      <label
-                        key={comp.id}
-                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
-                          isChecked
-                            ? 'bg-blue-50/80 border-blue-300 text-[#0b4da2] font-semibold'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleCompanyAssignment(comp.id)}
-                          className="w-4 h-4 rounded text-[#0b4da2] border-slate-300 cursor-pointer"
-                        />
-                        <div className="truncate">
-                          <span className="truncate block leading-tight">{comp.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono block leading-none mt-0.5">
-                            {comp.roc}
-                          </span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* GRANULAR PERMISSIONS */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <label className="text-xs font-bold text-slate-800 block mb-1">
-                  Operational Permissions
-                </label>
-                <p className="text-[11px] text-slate-500 mb-3">
-                  Specify whether this user has permission to create, edit, or delete items within their assigned companies.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Can Create */}
-                  <label
-                    className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                      formCanCreate
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formCanCreate}
-                      onChange={(e) => setFormCanCreate(e.target.checked)}
-                      className="w-4 h-4 rounded text-emerald-600 cursor-pointer"
-                    />
-                    <span>Can Create</span>
-                  </label>
-
-                  {/* Can Edit */}
-                  <label
-                    className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                      formCanEdit
-                        ? 'bg-blue-50 border-blue-300 text-blue-800 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formCanEdit}
-                      onChange={(e) => setFormCanEdit(e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-600 cursor-pointer"
-                    />
-                    <span>Can Edit</span>
-                  </label>
-
-                  {/* Can Delete */}
-                  <label
-                    className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-colors ${
-                      formCanDelete
-                        ? 'bg-red-50 border-red-300 text-red-800 font-bold'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formCanDelete}
-                      onChange={(e) => setFormCanDelete(e.target.checked)}
-                      className="w-4 h-4 rounded text-red-600 cursor-pointer"
-                    />
-                    <span>Can Delete</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 block">
-                    Account Status
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    Active accounts can log into the digital portal.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFormStatus(formStatus === 'active' ? 'inactive' : 'active')}
-                  className={`px-3 py-1 rounded-full text-xs font-bold transition-colors cursor-pointer border ${
-                    formStatus === 'active'
-                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                      : 'bg-slate-100 text-slate-500 border-slate-300'
-                  }`}
-                >
-                  {formStatus === 'active' ? 'Active' : 'Inactive'}
-                </button>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-5 py-2 bg-[#22a34a] hover:bg-[#1b843c] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer border-0 shadow-xs disabled:opacity-50"
-                >
-                  {isLoading ? 'Saving...' : editingEmployee ? 'Update Employee' : 'Save Employee'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirmId && (
@@ -799,7 +465,7 @@ export default function SuperAdminEmployeesPage() {
                 onClick={() => handleDeleteEmployee(deleteConfirmId)}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border-0 shadow-xs"
               >
-                {isLoading ? 'Deleting...' : 'Yes, Delete'}
+                {isLoading ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

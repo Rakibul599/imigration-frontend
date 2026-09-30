@@ -191,6 +191,15 @@ export default function SuperAdminCompanyDetailsPage() {
           </button>
 
           <Link
+            href={`/services?company=${encodeURIComponent(company.id)}`}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-2xs transition-colors no-underline cursor-pointer"
+            title="Open Service Cards for this Company"
+          >
+            <Sparkles size={14} />
+            <span>Service Cards</span>
+          </Link>
+
+          <Link
             href={`/superadmin/companies/create?id=${encodeURIComponent(company.id)}`}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083c80] text-white shadow-2xs transition-colors no-underline cursor-pointer"
           >

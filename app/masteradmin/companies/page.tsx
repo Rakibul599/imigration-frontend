@@ -451,6 +451,15 @@ export default function MasterAdminCompaniesPage() {
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           <Link
+                            href={`/services?company=${encodeURIComponent(comp.id)}`}
+                            className="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-[#0b4da2] text-[11px] font-bold inline-flex items-center gap-1 transition-colors no-underline border border-blue-200"
+                            title="Open Service Cards for this Company"
+                          >
+                            <Sparkles size={12} />
+                            <span>Services</span>
+                          </Link>
+
+                          <Link
                             href={`/superadmin/companies/${comp.id}`}
                             className="p-1.5 text-slate-600 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center"
                             title="Open Company Details"

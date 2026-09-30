@@ -457,6 +457,15 @@ export default function RegisteredCompaniesListPage() {
                     {/* 8. Action Buttons */}
                     <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Services Cards */}
+                        <Link
+                          href={`/services?company=${encodeURIComponent(company.id)}`}
+                          title="Open Service Cards for this Company"
+                          className="w-8 h-8 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-[#0b4da2] hover:text-blue-800 transition-colors shadow-2xs no-underline"
+                        >
+                          <Sparkles size={14} />
+                        </Link>
+
                         {/* View Full Company Profile Page */}
                         <Link
                           href={`/superadmin/companies/${encodeURIComponent(company.id)}`}

@@ -37,6 +37,8 @@ export const metadata: Metadata = {
   },
 };
 
+import SiteSettingsProvider from '@/components/SiteSettingsProvider';
+
 export default function RootLayout({
   children,
 }: {
@@ -45,7 +47,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head />
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <SiteSettingsProvider />
+        {children}
+      </body>
     </html>
   );
 }
