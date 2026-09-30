@@ -33,7 +33,7 @@ import {
 import { resolveFileUrl } from '@/lib/companies';
 
 export default function Navbar() {
-  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  const [settings, setSettings] = useState<SiteSettings>(() => getStoredSettings());
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);

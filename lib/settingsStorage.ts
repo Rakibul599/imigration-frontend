@@ -12,7 +12,7 @@ export interface SiteSettings {
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   site_name: 'Foreign Workers & Employer Services',
   site_tagline: 'Official Digital Portal',
-  site_logo: '/images/malaysia-crest.svg',
+  site_logo: '/images/agency-logo.jpg',
   site_favicon: '/favicon.ico',
 };
 
@@ -30,9 +30,15 @@ export function getStoredSettings(): SiteSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const logo =
+        !parsed.site_logo || parsed.site_logo === '/images/malaysia-crest.svg'
+          ? DEFAULT_SITE_SETTINGS.site_logo
+          : parsed.site_logo;
+
       return {
         ...DEFAULT_SITE_SETTINGS,
         ...parsed,
+        site_logo: logo,
       };
     }
   } catch (err) {

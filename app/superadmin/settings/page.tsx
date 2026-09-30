@@ -30,6 +30,7 @@ import {
 import { resolveFileUrl } from '@/lib/companies';
 
 const LOGO_PRESETS = [
+  { label: 'Agency Logo (Default)', url: '/images/agency-logo.jpg' },
   { label: 'Official Crest', url: '/images/malaysia-crest.svg' },
   { label: 'Agency Emblem', url: '/image.png' },
   { label: 'Work Pass Icon', url: '/images/work-information.svg' },
