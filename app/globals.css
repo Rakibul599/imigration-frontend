@@ -211,5 +211,149 @@ button, input { font: inherit; }
 @media (max-width: 700px) { .container { width: min(100% - 32px, 560px); }.top-strip span:last-child { display: none; }.header-inner { height: 66px; }.main-nav { align-items: stretch; background: white; border-bottom: 1px solid var(--line); box-shadow: 0 14px 20px rgba(0,0,0,.08); display: none; flex-direction: column; gap: 0; left: 0; padding: 10px 16px 18px; position: absolute; top: 66px; width: 100%; }.main-nav--open { display: flex; }.main-nav > a { padding: 13px 0; }.main-nav > a.active::after { bottom: 7px; }.language-button { align-self: flex-start; margin-top: 8px; }.menu-button { display: block; }.brand-copy strong { font-size: 10px; }.brand-copy small { font-size: 7px; }.hero { min-height: 640px; padding-bottom: 24px; }.hero-inner { align-items: flex-start; flex-direction: column; min-height: 620px; padding-top: 48px; }.hero-art { height: 330px; opacity: 1; position: relative; right: auto; top: 15px; width: 100%; margin-bottom: 10px; }.hero-laptop-card { width: 320px; }.hero-chart-card { width: 220px; right: 0; bottom: 10px; }.hero-laptop-img { height: 180px; }.hero-chart-img { height: 120px; }.floating-metric { bottom: 20px; }.hero h1 { font-size: 38px; }.hero-subtitle { font-size: 13px; line-height: 1.5; max-width: 300px; }.intro-section { display: block; padding: 42px 0; }.intro-stat { border-left: 0; margin: 28px 0 0; padding-left: 0; }.trust-inner { align-items: flex-start; display: flex; flex-direction: column; }.trust-inner .button { margin-top: 8px; }.footer-top { display: flex; flex-direction: column; gap: 32px; }.footer-links { justify-content: space-between; }.footer-bottom { flex-direction: column; gap: 8px; }.accessibility-tab { top: auto; bottom: 24px; } }
 @media (max-width: 390px) { .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; }.hero-laptop-card { width: 270px; }.hero-chart-card { width: 185px; right: 0; bottom: 12px; }.hero-laptop-img { height: 150px; }.hero-chart-img { height: 100px; }.floating-metric { transform: scale(0.8); left: 0; bottom: 16px; } }
 
+/* Theme 2 (AutoCount Green) Styling & Animations */
+.bg-radial-theme2 {
+  background: radial-gradient(circle at 18% 22%, #f8fdf9 0%, #e8f7ec 42%, #c7edd0 75%, #15803d 100%);
+}
 
+@keyframes theme2Float1 {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
 
+.animate-theme2-float1 {
+  animation: theme2Float1 4.5s ease-in-out infinite;
+}
+
+@keyframes theme2Pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 10px 25px rgba(22, 122, 62, 0.4);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 16px 35px rgba(34, 197, 94, 0.65);
+  }
+}
+
+.animate-theme2-pulse {
+  animation: theme2Pulse 3s ease-in-out infinite;
+}
+
+@keyframes theme2Float2 {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(8px);
+  }
+}
+
+.animate-theme2-float2 {
+  animation: theme2Float2 5.5s ease-in-out infinite;
+}
+
+/* Rising from bottom entrance animation */
+@keyframes riseUpFromBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(70px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise-up-text {
+  animation: riseUpFromBottom 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-rise-up-laptop {
+  animation: riseUpFromBottom 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards;
+  opacity: 0;
+  animation-fill-mode: forwards;
+}
+
+/* Exact Theme 2 Background & Laptop Animation */
+.bg-theme2-exact {
+  background: linear-gradient(180deg, #eef9e9 0%, #e2f4dc 25%, #c0dfbb 55%, #92cd88 80%, #6abd5f 100%);
+}
+
+@keyframes laptopContinuousFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.animate-laptop-float {
+  animation: laptopContinuousFloat 5s ease-in-out infinite;
+}
+
+/* Service Cards Entrance Animations */
+@keyframes cardFromLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-70px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cardFromRight {
+  0% {
+    opacity: 0;
+    transform: translateX(70px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes cardFromBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(70px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardFromTop {
+  0% {
+    opacity: 0;
+    transform: translateY(-70px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.anim-card-from-left {
+  animation: cardFromLeft 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-card-from-right {
+  animation: cardFromRight 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-card-from-bottom {
+  animation: cardFromBottom 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.anim-card-from-top {
+  animation: cardFromTop 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

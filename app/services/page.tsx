@@ -41,6 +41,14 @@ import {
   subscribeToServiceChanges,
 } from '@/lib/serviceStorage';
 import {
+  getStoredThemeSettings,
+  fetchThemeSettings,
+  subscribeToThemeChanges,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+  ServiceCardsAnimationType,
+} from '@/lib/themeSettings';
+import {
   fetchCustomers,
   CustomerRecord,
   CustomerDocument,
@@ -115,6 +123,54 @@ function ServicesContent() {
       setServiceList(getStoredServices());
     });
     return unsub;
+  }, []);
+
+  // Service Card Animation Setting State
+  const [cardAnimation, setCardAnimation] = useState<ServiceCardsAnimationType>(() => {
+    return typeof window !== 'undefined'
+      ? getStoredThemeSettings().service_cards_animation || 'from-bottom'
+      : 'from-bottom';
+  });
+  const [cardDuration, setCardDuration] = useState<number>(() => {
+    return typeof window !== 'undefined'
+      ? getStoredThemeSettings().service_cards_duration || 1000
+      : 1000;
+  });
+  const [cardStagger, setCardStagger] = useState<number>(() => {
+    return typeof window !== 'undefined'
+      ? getStoredThemeSettings().service_cards_stagger || 120
+      : 120;
+  });
+
+  // Load and listen to active service card animation theme changes
+  useEffect(() => {
+    fetchThemeSettings()
+      .then((theme) => {
+        if (theme?.service_cards_animation) {
+          setCardAnimation(theme.service_cards_animation);
+        }
+        if (typeof theme?.service_cards_duration === 'number') {
+          setCardDuration(theme.service_cards_duration);
+        }
+        if (typeof theme?.service_cards_stagger === 'number') {
+          setCardStagger(theme.service_cards_stagger);
+        }
+      })
+      .catch(() => {});
+
+    const unsubTheme = subscribeToThemeChanges((theme) => {
+      if (theme?.service_cards_animation) {
+        setCardAnimation(theme.service_cards_animation);
+      }
+      if (typeof theme?.service_cards_duration === 'number') {
+        setCardDuration(theme.service_cards_duration);
+      }
+      if (typeof theme?.service_cards_stagger === 'number') {
+        setCardStagger(theme.service_cards_stagger);
+      }
+    });
+
+    return unsubTheme;
   }, []);
 
   const isEmployee =
@@ -491,6 +547,7 @@ function ServicesContent() {
                   : 'View Documents';
 
                 const CardElement = isCoreCustomer || isCoreDocDownload ? Link : 'div';
+                const animClass = getServiceCardAnimationClass(cardAnimation, index);
 
                 return (
                   <CardElement
@@ -504,8 +561,8 @@ function ServicesContent() {
                         setDocSearchQuery('');
                       }
                     }}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                    className={`group relative flex flex-col items-center text-center bg-white border rounded-[20px] p-8 md:p-9 shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:-translate-y-1.5 transition-all duration-300 cursor-pointer min-h-[300px] outline-none font-inherit no-underline select-none ${
+                    style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
+                    className={`group relative flex flex-col items-center text-center bg-white border rounded-[20px] p-8 md:p-9 shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:-translate-y-1.5 transition-all duration-300 cursor-pointer min-h-[300px] outline-none font-inherit no-underline select-none ${animClass} ${
                       isCardVerified
                         ? 'border-emerald-400 ring-2 ring-emerald-400/20'
                         : 'border-slate-200/90 hover:border-blue-400'

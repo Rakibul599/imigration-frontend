@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -241,6 +242,12 @@ export default function SuperAdminLayout({
       href: '/superadmin/passwords',
       icon: KeyRound,
       badge: passwordCount > 0 ? `${passwordCount}` : undefined,
+    },
+    {
+      name: 'Theme Settings',
+      href: '/superadmin/theme',
+      icon: Palette,
+      badge: 'Home',
     },
     {
       name: 'General Settings',

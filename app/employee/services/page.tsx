@@ -21,6 +21,14 @@ import { fetchCustomers, CustomerRecord } from '@/lib/customerStorage';
 import { getCurrentUser, AuthUser } from '@/lib/auth';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { Company } from '@/lib/companies';
+import {
+  getStoredThemeSettings,
+  fetchThemeSettings,
+  subscribeToThemeChanges,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+  ServiceCardsAnimationType,
+} from '@/lib/themeSettings';
 
 export default function EmployeeServicesPage() {
   const [services, setServices] = useState<ServiceCard[]>(() => {
@@ -33,6 +41,22 @@ export default function EmployeeServicesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
+  const [cardAnimation, setCardAnimation] = useState<ServiceCardsAnimationType>(() => {
+    return typeof window !== 'undefined'
+      ? getStoredThemeSettings().service_cards_animation || 'from-bottom'
+      : 'from-bottom';
+  });
+  const [cardDuration, setCardDuration] = useState<number>(() => {
+    return typeof window !== 'undefined'
+      ? getStoredThemeSettings().service_cards_duration || 1000
+      : 1000;
+  });
+  const [cardStagger, setCardStagger] = useState<number>(() => {
+    return typeof window !== 'undefined'
+      ? getStoredThemeSettings().service_cards_stagger || 120
+      : 120;
+  });
+
   useEffect(() => {
     const user = getCurrentUser();
     setCurrentUser(user);
@@ -41,6 +65,34 @@ export default function EmployeeServicesPage() {
     fetchCompaniesFromBackend()
       .then((comps) => setAllCompanies(comps))
       .catch(() => setAllCompanies(getStoredCompanies()));
+
+    fetchThemeSettings()
+      .then((theme) => {
+        if (theme?.service_cards_animation) {
+          setCardAnimation(theme.service_cards_animation);
+        }
+        if (typeof theme?.service_cards_duration === 'number') {
+          setCardDuration(theme.service_cards_duration);
+        }
+        if (typeof theme?.service_cards_stagger === 'number') {
+          setCardStagger(theme.service_cards_stagger);
+        }
+      })
+      .catch(() => {});
+
+    const unsub = subscribeToThemeChanges((theme) => {
+      if (theme?.service_cards_animation) {
+        setCardAnimation(theme.service_cards_animation);
+      }
+      if (typeof theme?.service_cards_duration === 'number') {
+        setCardDuration(theme.service_cards_duration);
+      }
+      if (typeof theme?.service_cards_stagger === 'number') {
+        setCardStagger(theme.service_cards_stagger);
+      }
+    });
+
+    return unsub;
   }, []);
 
   const assignedList = useMemo(() => {
@@ -188,14 +240,16 @@ export default function EmployeeServicesPage() {
 
       {/* Service Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredServices.map((card) => {
+        {filteredServices.map((card, index) => {
           const docCount = docCountsPerCard[card.id] || 0;
           const isSystemCard = card.id === 'customer' || card.id === 'document-download';
+          const animClass = getServiceCardAnimationClass(cardAnimation, index);
 
           return (
             <div
               key={card.id}
-              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-blue-300 hover:shadow-md transition-all"
+              style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
+              className={`bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-blue-300 hover:shadow-md transition-all ${animClass}`}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
