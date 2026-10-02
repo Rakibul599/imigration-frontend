@@ -196,6 +196,12 @@ export default function SuperAdminLayout({
 
   const navLinks = [
     {
+      name: 'Dashboard Overview',
+      href: '/superadmin',
+      icon: LayoutDashboard,
+      badge: 'Live',
+    },
+    {
       name: 'Companies Management',
       href: '/superadmin/companies',
       icon: Building2,
@@ -224,12 +230,6 @@ export default function SuperAdminLayout({
       href: '/superadmin/services',
       icon: Sparkles,
       badge: serviceCount > 0 ? `${serviceCount}` : undefined,
-    },
-    {
-      name: 'Dashboard Overview',
-      href: '/superadmin',
-      icon: LayoutDashboard,
-      badge: 'Live',
     },
     {
       name: 'Services Portal',

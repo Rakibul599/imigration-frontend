@@ -166,6 +166,12 @@ export default function MasterAdminLayout({
 
   const navLinks = [
     {
+      name: 'Dashboard Overview',
+      href: '/masteradmin',
+      icon: LayoutDashboard,
+      badge: 'Live',
+    },
+    {
       name: 'Companies Management',
       href: '/masteradmin/companies',
       icon: Building2,
@@ -182,12 +188,6 @@ export default function MasterAdminLayout({
       href: '/masteradmin/customers',
       icon: UserCheck,
       badge: customerCount > 0 ? `${customerCount}` : undefined,
-    },
-    {
-      name: 'Dashboard Overview',
-      href: '/masteradmin',
-      icon: LayoutDashboard,
-      badge: 'Live',
     },
     {
       name: 'Services Portal',
