@@ -227,7 +227,7 @@ export default function CompanyOrderStatisticsChart({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight m-0">
-                Order Statistics
+                Company Statistics
               </h2>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase font-mono">
                 {currentCard.name}
