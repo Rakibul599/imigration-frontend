@@ -37,6 +37,7 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UserCheck,
@@ -62,6 +63,21 @@ import {
   resetStoredCompanies,
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
+
+const DEFAULT_REG_COMPANIES_CARDS: PageStatCardConfig[] = [
+  { id: 'total_companies', title: 'Total Companies', subtitle: 'All registered entities', icon: 'Building2', order_num: 1 },
+  { id: 'foreign_workers', title: 'Foreign Worker', subtitle: 'Approved workforce permits', icon: 'Users', order_num: 2 },
+  { id: 'appointed_directors', title: 'Appointed Directors', subtitle: 'Board executives & CEOs', icon: 'UserCheck', order_num: 3 },
+  { id: 'active_sectors', title: 'Active Sectors', subtitle: 'Distinct operational industries', icon: 'Briefcase', order_num: 4 },
+];
 
 export default function RegisteredCompaniesListPage() {
   const router = useRouter();
@@ -73,6 +89,31 @@ export default function RegisteredCompaniesListPage() {
   const [previewFile, setPreviewFile] = useState<{ name: string; url: string; type?: string } | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Manage Cards Modal State
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_REG_COMPANIES_CARDS);
+
+  useEffect(() => {
+    setCards(getStoredPageCards('registered_companies', DEFAULT_REG_COMPANIES_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('registered_companies', DEFAULT_REG_COMPANIES_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_registered_companies', handleUpdate);
+    return () => window.removeEventListener('superadmin_cards_update_registered_companies', handleUpdate);
+  }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('registered_companies', updated);
+    setCards(saved);
+    showToast('success', 'Cards priority and names updated successfully.');
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('registered_companies', DEFAULT_REG_COMPANIES_CARDS);
+    setCards(reset);
+    showToast('info', 'Cards reset to default layout.');
+  };
 
   useEffect(() => {
     setCompanies(getStoredCompanies());
@@ -197,10 +238,10 @@ export default function RegisteredCompaniesListPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-nowrap">
             <Link
               href="/superadmin/companies"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition-colors whitespace-nowrap"
             >
               <ArrowLeft size={14} />
               <span>Back</span>
@@ -208,87 +249,80 @@ export default function RegisteredCompaniesListPage() {
 
             <button
               type="button"
+              onClick={() => setIsCardModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-blue-700 text-white shadow-xs hover:shadow transition-all cursor-pointer border-0 whitespace-nowrap"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Manage Cards &amp; Priority</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleResetDefaults}
               title="Reset companies to default dataset in MySQL/LocalStorage"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
             >
               <RotateCcw size={14} />
               <span className="hidden sm:inline">Reset Defaults</span>
             </button>
 
-            {/* CREATE COMPANY BUTTON (Navigates to dedicated page) */}
+            {/* CREATE COMPANY BUTTON */}
             <Link
               href="/superadmin/companies/create"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-md hover:shadow-lg transition-all cursor-pointer no-underline"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-md hover:shadow-lg transition-all cursor-pointer no-underline whitespace-nowrap"
             >
-              <Plus size={16} />
+              <Plus size={15} />
               <span>Create Company</span>
             </Link>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
-            <Building2 size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Total Companies
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {companies.length}
-            </p>
-            <span className="text-[10px] text-slate-400">All registered entities</span>
-          </div>
-        </div>
+        {cards.map((card) => {
+          let value: number | string = 0;
+          let themeColor = 'text-slate-900';
+          let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-            <Users size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Foreign Worker
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {totalWorkersCount.toLocaleString()}
-            </p>
-            <span className="text-[10px] text-emerald-600 font-medium">Permits allocated</span>
-          </div>
-        </div>
+          if (card.id === 'total_companies') {
+            value = companies.length;
+            themeColor = 'text-slate-900';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'foreign_workers') {
+            value = totalWorkersCount.toLocaleString();
+            themeColor = 'text-emerald-600';
+            iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'appointed_directors') {
+            value = totalDirectorsCount;
+            themeColor = 'text-purple-700';
+            iconBg = 'bg-purple-50 text-purple-600';
+          } else if (card.id === 'active_sectors') {
+            value = distinctSectors.length;
+            themeColor = 'text-indigo-700';
+            iconBg = 'bg-indigo-50 text-indigo-600';
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
-            <UserCheck size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Appointed Directors (CEOs)
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {totalDirectorsCount}
-            </p>
-            <span className="text-[10px] text-slate-400">With verified credentials</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
-            <Briefcase size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Active Sectors
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {distinctSectors.length}
-            </p>
-            <span className="text-[10px] text-slate-400">Industries covered</span>
-          </div>
-        </div>
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
+                {value}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Filter and Search Bar */}
@@ -717,6 +751,16 @@ export default function RegisteredCompaniesListPage() {
           </div>
         </div>
       )}
+
+      {/* Card Priority & Management Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle="Registered Companies Directory"
+      />
     </div>
   );
 }

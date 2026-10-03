@@ -18,6 +18,18 @@ const STORAGE_KEY = 'agency_service_cards_cache';
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
 /**
+ * Sorts service cards by priority order_num ascending
+ */
+export function sortCards(cards: ServiceCard[]): ServiceCard[] {
+  return [...cards].sort((a, b) => {
+    const orderA = typeof a.order_num === 'number' && !isNaN(a.order_num) ? a.order_num : 9999;
+    const orderB = typeof b.order_num === 'number' && !isNaN(b.order_num) ? b.order_num : 9999;
+    if (orderA !== orderB) return orderA - orderB;
+    return (a.title || '').localeCompare(b.title || '');
+  });
+}
+
+/**
  * Initial fallback list mapping static default services
  */
 const initialDefaultCards: ServiceCard[] = defaultServices.map((s, index) => ({
@@ -32,11 +44,11 @@ const initialDefaultCards: ServiceCard[] = defaultServices.map((s, index) => ({
 }));
 
 /**
- * Synchronously retrieves cached service cards or defaults
+ * Synchronously retrieves cached service cards or defaults, sorted by order_num
  */
 export function getStoredServices(): ServiceCard[] {
   if (typeof window === 'undefined') {
-    return initialDefaultCards;
+    return sortCards(initialDefaultCards);
   }
 
   try {
@@ -55,14 +67,14 @@ export function getStoredServices(): ServiceCard[] {
         if (!hasDocDownload) {
           result.splice(1, 0, initialDefaultCards[1]);
         }
-        return result;
+        return sortCards(result);
       }
     }
   } catch (err) {
     console.warn('Error reading stored service cards:', err);
   }
 
-  return initialDefaultCards;
+  return sortCards(initialDefaultCards);
 }
 
 /**
@@ -71,7 +83,8 @@ export function getStoredServices(): ServiceCard[] {
 export function saveServicesToCache(cards: ServiceCard[]): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    const sorted = sortCards(cards);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
     window.dispatchEvent(new Event('agency_services_updated'));
   } catch (err) {
     console.warn('Error caching service cards:', err);
@@ -103,13 +116,14 @@ export async function fetchServiceCards(): Promise<ServiceCard[]> {
           image: item.image || '/images/registration-document.svg',
           tag: item.tag || undefined,
           is_core: Boolean(item.is_core) || item.slug === 'customer' || item.slug === 'document-download',
-          order_num: item.order_num ?? (idx + 1),
+          order_num: typeof item.order_num === 'number' ? item.order_num : (idx + 1),
           db_id: item.id,
           status: item.status || 'active',
         }));
 
-        saveServicesToCache(formatted);
-        return formatted;
+        const sorted = sortCards(formatted);
+        saveServicesToCache(sorted);
+        return sorted;
       }
     }
   } catch (err) {
@@ -140,6 +154,7 @@ export async function createServiceCard(
         description: cardData.description,
         image: cardData.image,
         tag: cardData.tag,
+        order_num: cardData.order_num ?? (current.length + 1),
       }),
     });
 
@@ -152,12 +167,12 @@ export async function createServiceCard(
         image: created.image || cardData.image,
         tag: created.tag || cardData.tag,
         is_core: false,
-        order_num: created.order_num ?? (current.length + 1),
+        order_num: created.order_num ?? (cardData.order_num ?? (current.length + 1)),
         db_id: created.id,
         status: created.status || 'active',
       };
 
-      const updated = [...current, newCard];
+      const updated = sortCards([...current, newCard]);
       saveServicesToCache(updated);
       return newCard;
     }
@@ -169,11 +184,11 @@ export async function createServiceCard(
   const newCard: ServiceCard = {
     ...cardData,
     is_core: false,
-    order_num: current.length + 1,
+    order_num: cardData.order_num ?? (current.length + 1),
     status: 'active',
   };
 
-  const updated = [...current, newCard];
+  const updated = sortCards([...current, newCard]);
   saveServicesToCache(updated);
   return newCard;
 }
@@ -204,6 +219,7 @@ export async function updateServiceCard(
         description: updates.description,
         image: updates.image,
         tag: updates.tag,
+        order_num: updates.order_num,
       }),
     });
 
@@ -215,10 +231,12 @@ export async function updateServiceCard(
         description: updatedBackend.description ?? updates.description ?? target.description,
         image: updatedBackend.image ?? updates.image ?? target.image,
         tag: updatedBackend.tag ?? updates.tag ?? target.tag,
+        order_num: updatedBackend.order_num ?? updates.order_num ?? target.order_num,
       };
 
       current[index] = merged;
-      saveServicesToCache(current);
+      const sorted = sortCards(current);
+      saveServicesToCache(sorted);
       return merged;
     }
   } catch (err) {
@@ -233,8 +251,62 @@ export async function updateServiceCard(
   };
 
   current[index] = merged;
-  saveServicesToCache(current);
+  const sorted = sortCards(current);
+  saveServicesToCache(sorted);
   return merged;
+}
+
+/**
+ * Bulk reorder service cards priority and sync with backend & local storage
+ */
+export async function reorderServiceCards(newOrderList: ServiceCard[]): Promise<ServiceCard[]> {
+  const updatedList: ServiceCard[] = newOrderList.map((card, idx) => ({
+    ...card,
+    order_num: idx + 1,
+  }));
+
+  saveServicesToCache(updatedList);
+
+  try {
+    const payload = updatedList.map((card, idx) => ({
+      id: card.db_id || card.id,
+      slug: card.id,
+      order_num: idx + 1,
+    }));
+
+    const res = await fetch(`${API_BASE}/service-cards/reorder`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ orders: payload }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.cards) && data.cards.length > 0) {
+        const backendFormatted: ServiceCard[] = data.cards.map((item: any, idx: number) => ({
+          id: item.slug || `service-${item.id}`,
+          title: item.title,
+          description: item.description || '',
+          image: item.image || '/images/registration-document.svg',
+          tag: item.tag || undefined,
+          is_core: Boolean(item.is_core) || item.slug === 'customer' || item.slug === 'document-download',
+          order_num: typeof item.order_num === 'number' ? item.order_num : (idx + 1),
+          db_id: item.id,
+          status: item.status || 'active',
+        }));
+        const sorted = sortCards(backendFormatted);
+        saveServicesToCache(sorted);
+        return sorted;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend reorder service cards error, keeping local order:', err);
+  }
+
+  return updatedList;
 }
 
 /**

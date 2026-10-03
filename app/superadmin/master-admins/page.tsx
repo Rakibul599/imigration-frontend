@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
@@ -22,6 +23,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   User,
@@ -32,6 +34,14 @@ import {
 import { Company, resolveFileUrl } from '@/lib/companies';
 import { fetchCompaniesFromBackend, getStoredCompanies } from '@/lib/companyStorage';
 import Select2MultiSearch, { Select2MultiOption } from '@/components/Select2MultiSearch';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
 
 export type MasterAdminRecord = {
   id: number;
@@ -45,6 +55,12 @@ export type MasterAdminRecord = {
   updated_at?: string;
 };
 
+const DEFAULT_MASTER_ADMIN_CARDS: PageStatCardConfig[] = [
+  { id: 'total_master_admins', title: 'Total Master Admins', subtitle: 'Registered administrative operators', icon: 'ShieldAlert', order_num: 1 },
+  { id: 'active_status', title: 'Active Status', subtitle: 'Currently authorized & verified', icon: 'UserCheck', order_num: 2 },
+  { id: 'company_permissions', title: 'Company Permissions', subtitle: 'Total assigned company slots', icon: 'Building2', order_num: 3 },
+];
+
 export default function MasterAdminPermissionPage() {
   const [masterAdmins, setMasterAdmins] = useState<MasterAdminRecord[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -56,6 +72,31 @@ export default function MasterAdminPermissionPage() {
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Manage Cards Modal State
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_MASTER_ADMIN_CARDS);
+
+  useEffect(() => {
+    setCards(getStoredPageCards('master_admins', DEFAULT_MASTER_ADMIN_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('master_admins', DEFAULT_MASTER_ADMIN_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_master_admins', handleUpdate);
+    return () => window.removeEventListener('superadmin_cards_update_master_admins', handleUpdate);
+  }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('master_admins', updated);
+    setCards(saved);
+    setNotification({ type: 'success', message: 'Cards priority and names updated successfully.' });
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('master_admins', DEFAULT_MASTER_ADMIN_CARDS);
+    setCards(reset);
+    setNotification({ type: 'info', message: 'Cards reset to default layout.' });
+  };
 
   // Copy Link Modal States
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
@@ -424,8 +465,8 @@ export default function MasterAdminPermissionPage() {
 
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white rounded-2xl p-6 sm:p-7 shadow-sm relative overflow-hidden">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="min-w-0">
             <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase mb-2">
               <ShieldAlert size={12} className="text-yellow-400" />
               <span>Multi-Tenant Company Access Control</span>
@@ -438,68 +479,68 @@ export default function MasterAdminPermissionPage() {
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-0 shrink-0"
-          >
-            <Plus size={16} />
-            <span>Create Master Admin</span>
-          </button>
+          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+            <button
+              type="button"
+              onClick={() => setIsCardModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Manage Cards &amp; Priority</span>
+            </button>
+
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-0 shrink-0 whitespace-nowrap"
+            >
+              <Plus size={16} />
+              <span>Create Master Admin</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* KPI Stats Cards */}
+      {/* KPI Stats Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Total Master Admins
-            </span>
-            <div className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
-              {totalAdmins}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Registered administrative operators
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
-            <ShieldAlert size={20} />
-          </div>
-        </div>
+        {cards.map((card) => {
+          let value: number = 0;
+          let themeColor = 'text-slate-900';
+          let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Active Status
-            </span>
-            <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-1">
-              {activeAdmins}
-            </div>
-            <div className="text-[11px] text-emerald-600 mt-1">
-              Currently authorized &amp; verified
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <UserCheck size={20} />
-          </div>
-        </div>
+          if (card.id === 'total_master_admins') {
+            value = totalAdmins;
+            themeColor = 'text-slate-900';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'active_status') {
+            value = activeAdmins;
+            themeColor = 'text-emerald-600';
+            iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'company_permissions') {
+            value = totalAssignedSlots;
+            themeColor = 'text-[#0b4da2]';
+            iconBg = 'bg-purple-50 text-purple-600';
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Company Permissions
-            </span>
-            <div className="text-2xl font-bold text-[#0b4da2] tracking-tight mt-1">
-              {totalAssignedSlots}
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
+                {value}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Total assigned company slots
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-            <Building2 size={20} />
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Main Table Card */}
@@ -1207,6 +1248,16 @@ export default function MasterAdminPermissionPage() {
           </div>
         </div>
       )}
+
+      {/* Card Priority & Customization Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle="Master Admin Permissions"
+      />
     </div>
   );
 }

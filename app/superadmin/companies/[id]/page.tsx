@@ -25,6 +25,7 @@ import {
   MapPin,
   Phone,
   Printer,
+  SlidersHorizontal,
   Sparkles,
   User,
   UserCheck,
@@ -41,6 +42,21 @@ import {
 } from '@/lib/companyStorage';
 import ExcelSheetEditorModal from '@/components/ExcelSheetEditorModal';
 import WordDocumentEditorModal from '@/components/WordDocumentEditorModal';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
+
+const DEFAULT_COMPANY_DETAILS_CARDS: PageStatCardConfig[] = [
+  { id: 'foreign_worker', title: 'Foreign Worker', subtitle: 'Approved Workforce', icon: 'Users', order_num: 1 },
+  { id: 'company_directors', title: 'Company Directors', subtitle: 'Registered Executives', icon: 'UserCheck', order_num: 2 },
+  { id: 'operating_currency', title: 'Operating Currency', subtitle: 'Transactional Code', icon: 'Coins', order_num: 3 },
+  { id: 'system_language', title: 'System Language', subtitle: 'Default Interface', icon: 'Globe2', order_num: 4 },
+];
 
 export default function SuperAdminCompanyDetailsPage() {
   const router = useRouter();
@@ -56,6 +72,29 @@ export default function SuperAdminCompanyDetailsPage() {
     url: string;
     type?: string;
   } | null>(null);
+
+  // Manage Cards Modal State
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_COMPANY_DETAILS_CARDS);
+
+  useEffect(() => {
+    setCards(getStoredPageCards('company_details', DEFAULT_COMPANY_DETAILS_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('company_details', DEFAULT_COMPANY_DETAILS_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_company_details', handleUpdate);
+    return () => window.removeEventListener('superadmin_cards_update_company_details', handleUpdate);
+  }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('company_details', updated);
+    setCards(saved);
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('company_details', DEFAULT_COMPANY_DETAILS_CARDS);
+    setCards(reset);
+  };
 
   // Load Company Data
   useEffect(() => {
@@ -171,19 +210,19 @@ export default function SuperAdminCompanyDetailsPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
           <Link
             href="/superadmin/companies/registered"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors no-underline"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors no-underline whitespace-nowrap"
           >
             <ArrowLeft size={14} />
-            <span>Back to List</span>
+            <span>Back</span>
           </Link>
 
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
             title="Print Company Profile"
           >
             <Printer size={14} />
@@ -192,16 +231,25 @@ export default function SuperAdminCompanyDetailsPage() {
 
           <Link
             href={`/services?company=${encodeURIComponent(company.id)}`}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-2xs transition-colors no-underline cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-2xs transition-colors no-underline cursor-pointer whitespace-nowrap"
             title="Open Service Cards for this Company"
           >
             <Sparkles size={14} />
             <span>Service Cards</span>
           </Link>
 
+          <button
+            type="button"
+            onClick={() => setIsCardModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+          >
+            <SlidersHorizontal size={14} />
+            <span>Manage Cards &amp; Priority</span>
+          </button>
+
           <Link
             href={`/superadmin/companies/create?id=${encodeURIComponent(company.id)}`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083c80] text-white shadow-2xs transition-colors no-underline cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083c80] text-white shadow-2xs transition-colors no-underline cursor-pointer whitespace-nowrap"
           >
             <Edit2 size={14} />
             <span>Edit Company</span>
@@ -209,71 +257,48 @@ export default function SuperAdminCompanyDetailsPage() {
         </div>
       </div>
 
-      {/* Corporate Summary KPI Cards */}
+      {/* Corporate Summary KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Foreign Worker */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0">
-            <Users size={22} />
-          </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-              Foreign Worker
-            </span>
-            <span className="text-xl font-bold text-slate-900 font-mono">
-              {company.totalWorkers ? company.totalWorkers.toLocaleString() : '0'}
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Approved Workforce</span>
-          </div>
-        </div>
+        {cards.map((card) => {
+          let value: React.ReactNode = '0';
+          let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-        {/* Directors & CEOs */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
-            <UserCheck size={22} />
-          </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-              Company Directors
-            </span>
-            <span className="text-xl font-bold text-slate-900 font-mono">
-              {directors.length}
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Registered Executives</span>
-          </div>
-        </div>
+          if (card.id === 'foreign_worker') {
+            value = company.totalWorkers ? company.totalWorkers.toLocaleString() : '0';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'company_directors') {
+            value = directors.length;
+            iconBg = 'bg-purple-50 text-purple-700';
+          } else if (card.id === 'operating_currency') {
+            value = currency;
+            iconBg = 'bg-emerald-50 text-emerald-700';
+          } else if (card.id === 'system_language') {
+            value = language;
+            iconBg = 'bg-amber-50 text-amber-700';
+          }
 
-        {/* Currency */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-            <Coins size={22} />
-          </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-              Operating Currency
-            </span>
-            <span className="text-xl font-bold text-slate-900 font-mono">
-              {currency}
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Transactional Code</span>
-          </div>
-        </div>
-
-        {/* Language */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-            <Globe2 size={22} />
-          </div>
-          <div>
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-              System Language
-            </span>
-            <span className="text-xl font-bold text-slate-900 truncate block">
-              {language}
-            </span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Default Interface</span>
-          </div>
-        </div>
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight">
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-slate-900 tracking-tight font-mono my-0.5 truncate">
+                {value}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">
+                {card.subtitle}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Main Grid: Company Details (Left) + Banking & Profile Info (Right) */}
@@ -819,6 +844,16 @@ export default function SuperAdminCompanyDetailsPage() {
           initialDocument={selectedWordDoc}
         />
       )}
+
+      {/* Card Priority & Customization Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle={`${company?.name || 'Company'} Profile Overview`}
+      />
     </div>
   );
 }

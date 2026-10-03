@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Plus,
   ShieldCheck,
+  SlidersHorizontal,
   TrendingUp,
   Users,
 } from 'lucide-react';
@@ -19,9 +20,26 @@ import {
   getStoredCompanies,
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
+
+const DEFAULT_DASHBOARD_CARDS: PageStatCardConfig[] = [
+  { id: 'reg_companies', title: 'Registered Companies', subtitle: 'Active registered employers • View Directory →', icon: 'Building2', order_num: 1 },
+  { id: 'total_workers', title: 'Total Foreign Workers', subtitle: 'Foreign worker permits allocated', icon: 'Users', order_num: 2 },
+  { id: 'active_sectors', title: 'Active Sectors', subtitle: 'Approved economic sectors', icon: 'Briefcase', order_num: 3 },
+  { id: 'system_health', title: 'System Health', subtitle: 'Laravel 11 REST API operational', icon: 'ShieldCheck', order_num: 4 },
+];
 
 export default function SuperAdminDashboard() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_DASHBOARD_CARDS);
 
   useEffect(() => {
     setCompanies(getStoredCompanies());
@@ -29,11 +47,30 @@ export default function SuperAdminDashboard() {
       setCompanies(list);
     }).catch(() => {});
 
+    setCards(getStoredPageCards('dashboard', DEFAULT_DASHBOARD_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('dashboard', DEFAULT_DASHBOARD_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_dashboard', handleUpdate);
+
     const unsub = subscribeToCompanyChanges(() => {
       setCompanies(getStoredCompanies());
     });
-    return unsub;
+    return () => {
+      unsub();
+      window.removeEventListener('superadmin_cards_update_dashboard', handleUpdate);
+    };
   }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('dashboard', updated);
+    setCards(saved);
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('dashboard', DEFAULT_DASHBOARD_CARDS);
+    setCards(reset);
+  };
 
   const totalWorkers = companies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
   const sectors = Array.from(new Set(companies.map((c) => c.sector)));
@@ -53,20 +90,29 @@ export default function SuperAdminDashboard() {
           <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed m-0 mb-6">
             Authorized administrative gateway for managing employer records, foreign worker permits, and verified company directory. Integrated with Laravel 11 Backend &amp; MySQL.
           </p>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
             <Link
               href="/superadmin/companies"
-              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all no-underline"
+              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all no-underline whitespace-nowrap"
             >
               <Building2 size={15} />
               <span>Manage Company Directory</span>
               <ArrowRight size={13} />
             </Link>
 
+            <button
+              type="button"
+              onClick={() => setIsCardModalOpen(true)}
+              className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-white/20 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Manage Cards &amp; Priority</span>
+            </button>
+
             <Link
               href="/companies"
               target="_blank"
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-4 py-2.5 rounded-xl border border-white/20 transition-all no-underline"
+              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-4 py-2.5 rounded-xl border border-white/20 transition-all no-underline whitespace-nowrap"
             >
               <span>View Public Portal</span>
               <ExternalLink size={13} />
@@ -75,75 +121,101 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* KPI Cards (Pure White) */}
+      {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link
-          href="/superadmin/companies/registered"
-          title="Open Registered Companies Directory"
-          className="bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md rounded-xl p-5 shadow-xs transition-all group no-underline text-inherit block cursor-pointer"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors">
-              Registered Companies
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] group-hover:bg-[#0b4da2] group-hover:text-white flex items-center justify-center transition-colors">
-              <Building2 size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-slate-900 tracking-tight">
-            {companies.length}
-          </div>
-          <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium">
-            <TrendingUp size={12} />
-            <span>Active registered employers • View Directory →</span>
-          </div>
-        </Link>
+        {cards.map((card) => {
+          if (card.id === 'reg_companies') {
+            return (
+              <Link
+                key={card.id}
+                href="/superadmin/companies/registered"
+                title="Open Registered Companies Directory"
+                className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px] no-underline text-inherit cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
+                    {card.title}
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] group-hover:bg-[#0b4da2] group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                    <DynamicCardIcon icon={card.icon} size={16} />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-slate-900 tracking-tight font-mono my-0.5">
+                  {companies.length}
+                </div>
+                <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium truncate">
+                  <TrendingUp size={12} />
+                  <span>{card.subtitle}</span>
+                </div>
+              </Link>
+            );
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
-              Total Foreign Workers
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Users size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-slate-900 tracking-tight">
-            {totalWorkers.toLocaleString()}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1">Foreign worker permits allocated</div>
-        </div>
+          if (card.id === 'total_workers') {
+            return (
+              <div
+                key={card.id}
+                className="bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-emerald-700 transition-colors leading-tight truncate">
+                    {card.title}
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <DynamicCardIcon icon={card.icon} size={16} />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-slate-900 tracking-tight font-mono my-0.5">
+                  {totalWorkers.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
+              </div>
+            );
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
-              Active Sectors
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Briefcase size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-slate-900 tracking-tight">
-            {sectors.length}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1">Approved economic sectors</div>
-        </div>
+          if (card.id === 'active_sectors') {
+            return (
+              <div
+                key={card.id}
+                className="bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-indigo-700 transition-colors leading-tight truncate">
+                    {card.title}
+                  </span>
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <DynamicCardIcon icon={card.icon} size={16} />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold text-slate-900 tracking-tight font-mono my-0.5">
+                  {sectors.length}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
+              </div>
+            );
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
-              System Health
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <ShieldCheck size={16} />
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-amber-700 transition-colors leading-tight truncate">
+                  {card.title}
+                </span>
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-emerald-700 tracking-tight flex items-center gap-1.5 my-0.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Online</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
             </div>
-          </div>
-          <div className="text-base font-bold text-emerald-700 tracking-tight flex items-center gap-1.5 mt-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>MySQL Connected</span>
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1">Laravel 11 REST API operational</div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Recent Companies Section (White Card) */}
@@ -209,6 +281,16 @@ export default function SuperAdminDashboard() {
           ))}
         </div>
       </div>
+
+      {/* Card Priority & Customization Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle="Super Administrator Dashboard"
+      />
     </div>
   );
 }

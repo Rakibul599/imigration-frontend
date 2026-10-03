@@ -27,6 +27,7 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   User,
   UserCheck,
@@ -34,7 +35,6 @@ import {
   X,
 } from 'lucide-react';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
-import { Company } from '@/lib/companies';
 import {
   CustomerDocument,
   CustomerRecord,
@@ -44,12 +44,53 @@ import {
   fetchWorkingSectors,
   getFileUrl,
 } from '@/lib/customerStorage';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import { Company } from '@/lib/companies';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
+
+const DEFAULT_CUSTOMER_CARDS: PageStatCardConfig[] = [
+  { id: 'total_customers', title: 'Total Customers', subtitle: 'Across all registered employers', icon: 'Users', order_num: 1 },
+  { id: 'active_permits', title: 'Active Permits', subtitle: 'Authorized status', icon: 'UserCheck', order_num: 2 },
+  { id: 'passport_verified', title: 'Passport Verified', subtitle: 'Valid biometric passports', icon: 'CheckCircle2', order_num: 3 },
+  { id: 'document_dossiers', title: 'Document Dossiers', subtitle: 'Total uploaded dossiers', icon: 'FolderOpen', order_num: 4 },
+];
 
 export default function SuperAdminCustomersPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [sectors, setSectors] = useState<WorkingSector[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Manage Cards Modal State
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_CUSTOMER_CARDS);
+
+  useEffect(() => {
+    setCards(getStoredPageCards('customers', DEFAULT_CUSTOMER_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('customers', DEFAULT_CUSTOMER_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_customers', handleUpdate);
+    return () => window.removeEventListener('superadmin_cards_update_customers', handleUpdate);
+  }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('customers', updated);
+    setCards(saved);
+    showToast('success', 'Cards priority and names updated successfully.');
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('customers', DEFAULT_CUSTOMER_CARDS);
+    setCards(reset);
+    showToast('info', 'Cards reset to default layout.');
+  };
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -174,10 +215,19 @@ export default function SuperAdminCustomersPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+            <button
+              type="button"
+              onClick={() => setIsCardModalOpen(true)}
+              className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Manage Cards &amp; Priority</span>
+            </button>
+
             <button
               onClick={loadData}
-              className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
               title="Refresh customer database"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -186,7 +236,7 @@ export default function SuperAdminCustomersPage() {
 
             <Link
               href="/superadmin/customers/create"
-              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-0 no-underline"
+              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-0 no-underline whitespace-nowrap"
             >
               <Plus size={16} />
               <span>Create Customer</span>
@@ -195,75 +245,51 @@ export default function SuperAdminCustomersPage() {
         </div>
       </div>
 
-      {/* KPI Stats Cards */}
+      {/* KPI Stats Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Total Customers
-            </span>
-            <div className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
-              {totalCustomers}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Across all registered employers
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
-            <Users size={20} />
-          </div>
-        </div>
+        {cards.map((card) => {
+          let value: number | string = 0;
+          let themeColor = 'text-slate-900';
+          let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Active Permits
-            </span>
-            <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-1">
-              {activeCount}
-            </div>
-            <div className="text-[11px] text-emerald-600 mt-1">
-              Authorized status
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <UserCheck size={20} />
-          </div>
-        </div>
+          if (card.id === 'total_customers') {
+            value = totalCustomers;
+            themeColor = 'text-slate-900';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'active_permits') {
+            value = activeCount;
+            themeColor = 'text-emerald-600';
+            iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'passport_verified') {
+            value = passportCount;
+            themeColor = 'text-[#0b4da2]';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'document_dossiers') {
+            value = totalDocuments;
+            themeColor = 'text-purple-600';
+            iconBg = 'bg-purple-50 text-purple-600';
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Passport Verified
-            </span>
-            <div className="text-2xl font-bold text-purple-600 tracking-tight mt-1">
-              {passportCount}
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
+                {value}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Valid passport records
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-            <FileCheck2 size={20} />
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Document Dossiers
-            </span>
-            <div className="text-2xl font-bold text-amber-600 tracking-tight mt-1">
-              {totalDocuments}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Uploaded files &amp; attachments
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <FileText size={20} />
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Main Table Card */}
@@ -813,6 +839,16 @@ export default function SuperAdminCustomersPage() {
           </div>
         </div>
       )}
+
+      {/* Card Priority & Customization Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle="Customer & Worker Management"
+      />
     </div>
   );
 }

@@ -11,12 +11,21 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UserCheck,
   Users,
   X,
 } from 'lucide-react';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
 import { Company } from '@/lib/companies';
 import { fetchCompaniesFromBackend, getStoredCompanies } from '@/lib/companyStorage';
 
@@ -43,6 +52,12 @@ export type EmployeeRecord = {
   updated_at?: string;
 };
 
+const DEFAULT_EMPLOYEE_CARDS: PageStatCardConfig[] = [
+  { id: 'total_accounts', title: 'Total Accounts', subtitle: 'Registered staff & workforce members', icon: 'Users', order_num: 1 },
+  { id: 'active_logins', title: 'Active Logins', subtitle: 'Authorized & operational logins', icon: 'UserCheck', order_num: 2 },
+  { id: 'available_companies', title: 'Available Companies', subtitle: 'Assigned corporate employer entities', icon: 'Building2', order_num: 3 },
+];
+
 export default function SuperAdminEmployeesPage() {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -50,6 +65,31 @@ export default function SuperAdminEmployeesPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Manage Cards Modal State
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_EMPLOYEE_CARDS);
+
+  useEffect(() => {
+    setCards(getStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_employees', handleUpdate);
+    return () => window.removeEventListener('superadmin_cards_update_employees', handleUpdate);
+  }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('employees', updated);
+    setCards(saved);
+    setNotification({ type: 'success', message: 'Cards priority and names updated successfully.' });
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS);
+    setCards(reset);
+    setNotification({ type: 'info', message: 'Cards reset to default layout.' });
+  };
 
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
@@ -135,75 +175,84 @@ export default function SuperAdminEmployeesPage() {
       )}
 
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight m-0">
                 Staff &amp; Workforce Management
               </h1>
-              <span className="bg-blue-100 text-[#0b4da2] text-[11px] font-bold px-2.5 py-0.5 rounded-full">
+              <span className="bg-blue-100 text-[#0b4da2] text-[11px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
                 {employees.length} Staff
               </span>
             </div>
-            <p className="text-xs text-slate-500 m-0">
+            <p className="text-xs text-slate-500 m-0 leading-relaxed max-w-2xl">
               Manage employee accounts, supervise master admin assignments, employer clearances, and granular module permissions.
             </p>
           </div>
 
-          <Link
-            href="/superadmin/employees/create"
-            className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083a7c] text-white shadow-sm transition-all cursor-pointer border-0 no-underline"
-          >
-            <Plus size={16} />
-            <span>Add New Employee</span>
-          </Link>
+          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+            <button
+              type="button"
+              onClick={() => setIsCardModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Manage Cards &amp; Priority</span>
+            </button>
+
+            <Link
+              href="/superadmin/employees/create"
+              className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083a7c] text-white shadow-sm transition-all cursor-pointer border-0 no-underline whitespace-nowrap"
+            >
+              <Plus size={16} />
+              <span>Add New Employee</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
-            <Users size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Total Accounts
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {employees.length}
-            </p>
-          </div>
-        </div>
+        {cards.map((card) => {
+          let value: number = 0;
+          let themeColor = 'text-slate-900';
+          let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-            <UserCheck size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Active Logins
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {activeCount}
-            </p>
-          </div>
-        </div>
+          if (card.id === 'total_accounts') {
+            value = employees.length;
+            themeColor = 'text-slate-900';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'active_logins') {
+            value = activeCount;
+            themeColor = 'text-emerald-600';
+            iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'available_companies') {
+            value = companies.length;
+            themeColor = 'text-slate-900';
+            iconBg = 'bg-indigo-50 text-indigo-600';
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
-            <Building2 size={22} />
-          </div>
-          <div>
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider m-0">
-              Available Companies
-            </p>
-            <p className="text-xl font-bold text-slate-900 m-0 mt-0.5">
-              {companies.length}
-            </p>
-          </div>
-        </div>
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
+                {value}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Search Bar */}
@@ -471,6 +520,16 @@ export default function SuperAdminEmployeesPage() {
           </div>
         </div>
       )}
+
+      {/* Card Priority & Customization Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle="Staff & Workforce Management"
+      />
     </div>
   );
 }

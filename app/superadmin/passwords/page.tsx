@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
@@ -19,11 +20,21 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   User,
+  UserCheck,
   Users,
   X,
 } from 'lucide-react';
+import CardPriorityModal from '@/components/CardPriorityModal';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import {
+  PageStatCardConfig,
+  getStoredPageCards,
+  saveStoredPageCards,
+  resetStoredPageCards,
+} from '@/lib/pageCardStorage';
 
 export type CredentialRecord = {
   id: number | string;
@@ -40,6 +51,13 @@ export type CredentialRecord = {
   updated_at?: string;
 };
 
+const DEFAULT_PASSWORD_CARDS: PageStatCardConfig[] = [
+  { id: 'total_accounts', title: 'Total Accounts', subtitle: 'All registered accounts', icon: 'ShieldCheck', order_num: 1 },
+  { id: 'master_admins', title: 'Master Admins', subtitle: 'Multi-company administrators', icon: 'ShieldAlert', order_num: 2 },
+  { id: 'staff_employees', title: 'Staff & Employees', subtitle: 'Internal operators', icon: 'UserCheck', order_num: 3 },
+  { id: 'workers_clients', title: 'Workers & Clients', subtitle: 'Foreign worker permits', icon: 'Users', order_num: 4 },
+];
+
 export default function SuperAdminPasswordManagementPage() {
   const [credentials, setCredentials] = useState<CredentialRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,12 +67,37 @@ export default function SuperAdminPasswordManagementPage() {
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Manage Cards Modal State
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_PASSWORD_CARDS);
+
   // Edit / Reset Password Modal
   const [editingTarget, setEditingTarget] = useState<CredentialRecord | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+
+  useEffect(() => {
+    setCards(getStoredPageCards('passwords', DEFAULT_PASSWORD_CARDS));
+    const handleUpdate = (e: any) => {
+      setCards(e.detail || getStoredPageCards('passwords', DEFAULT_PASSWORD_CARDS));
+    };
+    window.addEventListener('superadmin_cards_update_passwords', handleUpdate);
+    return () => window.removeEventListener('superadmin_cards_update_passwords', handleUpdate);
+  }, []);
+
+  const handleSaveCards = (updated: PageStatCardConfig[]) => {
+    const saved = saveStoredPageCards('passwords', updated);
+    setCards(saved);
+    setNotification({ type: 'success', message: 'Cards priority and names updated successfully.' });
+  };
+
+  const handleResetCards = () => {
+    const reset = resetStoredPageCards('passwords', DEFAULT_PASSWORD_CARDS);
+    setCards(reset);
+    setNotification({ type: 'info', message: 'Cards reset to default layout.' });
+  };
 
   const fetchCredentials = async () => {
     setIsLoading(true);
@@ -217,10 +260,19 @@ export default function SuperAdminPasswordManagementPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+            <button
+              type="button"
+              onClick={() => setIsCardModalOpen(true)}
+              className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-4 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <SlidersHorizontal size={14} />
+              <span>Manage Cards &amp; Priority</span>
+            </button>
+
             <button
               onClick={toggleShowAll}
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-4 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-4 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
             >
               {showAllPasswords ? <EyeOff size={15} /> : <Eye size={15} />}
               <span>{showAllPasswords ? 'Mask All Passwords' : 'Show All Passwords'}</span>
@@ -229,47 +281,51 @@ export default function SuperAdminPasswordManagementPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-            Total Accounts
-          </div>
-          <div className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
-            {credentials.length}
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1">All registered accounts</div>
-        </div>
+      {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {cards.map((card) => {
+          let value: number = 0;
+          let themeColor = 'text-slate-900';
+          let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="text-[11px] text-[#0b4da2] font-bold uppercase tracking-wider">
-            Master Admins
-          </div>
-          <div className="text-2xl font-bold text-[#0b4da2] tracking-tight mt-1">
-            {masterAdminCount}
-          </div>
-          <div className="text-[10px] text-blue-600 mt-1">Multi-company administrators</div>
-        </div>
+          if (card.id === 'total_accounts') {
+            value = credentials.length;
+            themeColor = 'text-slate-900';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'master_admins') {
+            value = masterAdminCount;
+            themeColor = 'text-[#0b4da2]';
+            iconBg = 'bg-blue-50 text-[#0b4da2]';
+          } else if (card.id === 'staff_employees') {
+            value = employeeCount;
+            themeColor = 'text-emerald-600';
+            iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'workers_clients') {
+            value = customerCount;
+            themeColor = 'text-purple-600';
+            iconBg = 'bg-purple-50 text-purple-600';
+          }
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider">
-            Staff &amp; Employees
-          </div>
-          <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-1">
-            {employeeCount}
-          </div>
-          <div className="text-[10px] text-emerald-600 mt-1">Internal operators</div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="text-[11px] text-purple-600 font-bold uppercase tracking-wider">
-            Workers &amp; Clients
-          </div>
-          <div className="text-2xl font-bold text-purple-600 tracking-tight mt-1">
-            {customerCount}
-          </div>
-          <div className="text-[10px] text-purple-600 mt-1">Foreign worker permits</div>
-        </div>
+          return (
+            <div
+              key={card.id}
+              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                  <DynamicCardIcon icon={card.icon} size={16} />
+                </div>
+              </div>
+              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
+                {value}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Filter and Credentials Table */}
@@ -597,6 +653,16 @@ export default function SuperAdminPasswordManagementPage() {
           </div>
         </div>
       )}
+
+      {/* Card Priority & Customization Modal */}
+      <CardPriorityModal
+        isOpen={isCardModalOpen}
+        onClose={() => setIsCardModalOpen(false)}
+        cards={cards}
+        onSave={handleSaveCards}
+        onReset={handleResetCards}
+        pageTitle="Password Management Console"
+      />
     </div>
   );
 }
