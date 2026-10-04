@@ -18,7 +18,7 @@ import {
   fetchServiceCards,
 } from '@/lib/serviceStorage';
 import { fetchCustomers, CustomerRecord } from '@/lib/customerStorage';
-import { getCurrentUser, AuthUser } from '@/lib/auth';
+import { getCurrentUser, AuthUser, hasServiceCardAccess } from '@/lib/auth';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { Company } from '@/lib/companies';
 import {
@@ -162,16 +162,23 @@ export default function EmployeeServicesPage() {
     return counts;
   }, [scopedCustomers, services]);
 
+  const permittedServices = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'Employee') {
+      return services;
+    }
+    return services.filter((s) => hasServiceCardAccess(s.id, s.title));
+  }, [services, currentUser]);
+
   const filteredServices = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return services;
-    return services.filter(
+    if (!q) return permittedServices;
+    return permittedServices.filter(
       (s) =>
         s.title.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q) ||
         (s.tag && s.tag.toLowerCase().includes(q))
     );
-  }, [services, searchQuery]);
+  }, [permittedServices, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -305,6 +312,18 @@ export default function EmployeeServicesPage() {
           );
         })}
       </div>
+
+      {filteredServices.length === 0 && !isLoading && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-xs">
+          <FolderOpen size={40} className="mx-auto text-slate-300 mb-3" />
+          <h3 className="text-base font-bold text-slate-800 m-0">No Service Cards Available</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+            {searchQuery
+              ? 'No service cards matched your search keywords.'
+              : 'You do not currently have permission to access any service cards. Please contact your administrator.'}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -29,6 +29,7 @@ export interface AuthUser {
   email: string;
   role: 'Employee' | 'Admin' | 'SUPER_ADMIN' | 'MasterAdmin' | string;
   assigned_companies: string[];
+  assigned_service_cards?: string[];
   permissions: EmployeePermissions;
   master_admin_id?: string | null;
   master_admin_name?: string | null;
@@ -462,6 +463,42 @@ export function hasCompanyAccess(companyId: string, companyName?: string, roc?: 
   }
 
   return true;
+}
+
+/**
+ * Check if the currently logged-in employee has access to a specific service card
+ */
+export function hasServiceCardAccess(cardId: string, cardTitle?: string): boolean {
+  const user = getCurrentUser() || getMasterAdminUser() || getSuperAdminUser();
+  if (!user) return true;
+  if (user.role === 'SUPER_ADMIN' || user.role === 'MasterAdmin') return true;
+
+  // For Employee: check assigned_service_cards
+  const allowed = user.assigned_service_cards;
+  if (allowed === undefined || allowed === null) {
+    return true;
+  }
+  if (!Array.isArray(allowed)) {
+    return true;
+  }
+  if (allowed.includes('*') || allowed.includes('ALL')) {
+    return true;
+  }
+  if (allowed.length === 0) {
+    return false;
+  }
+
+  const targetId = (cardId || '').trim().toLowerCase();
+  const targetTitle = (cardTitle || '').trim().toLowerCase();
+
+  return allowed.some((id) => {
+    const clean = (id || '').trim().toLowerCase();
+    if (!clean) return false;
+    if (clean === '*' || clean === 'all') return true;
+    if (clean === targetId) return true;
+    if (targetTitle && clean === targetTitle) return true;
+    return false;
+  });
 }
 
 /**

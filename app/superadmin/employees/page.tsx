@@ -203,7 +203,7 @@ export default function SuperAdminEmployeesPage() {
 
             <Link
               href="/superadmin/employees/create"
-              className="inline-flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083a7c] text-white shadow-sm transition-all cursor-pointer border-0 no-underline whitespace-nowrap"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083a7c] text-white shadow-sm transition-all cursor-pointer border-0 no-underline whitespace-nowrap active:scale-[0.98]"
             >
               <Plus size={16} />
               <span>Add New Employee</span>
@@ -455,7 +455,7 @@ export default function SuperAdminEmployeesPage() {
                   <td className="py-3 px-4 align-middle text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <Link
-                        href={`/superadmin/employees/${emp.id}/edit`}
+                        href={`/superadmin/employees/edit?id=${emp.id}`}
                         title="Edit Employee & Permissions"
                         className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors no-underline shadow-2xs"
                       >

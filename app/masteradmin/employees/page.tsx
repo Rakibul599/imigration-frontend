@@ -31,6 +31,7 @@ import { Company, resolveFileUrl } from '@/lib/companies';
 import { fetchCompaniesFromBackend, getStoredCompanies } from '@/lib/companyStorage';
 import { getMasterAdminUser } from '@/lib/auth';
 import Select2MultiSearch, { Select2MultiOption } from '@/components/Select2MultiSearch';
+import { ServiceCard, getStoredServices, fetchServiceCards } from '@/lib/serviceStorage';
 
 export type EmployeeRecord = {
   id: number;
@@ -39,6 +40,7 @@ export type EmployeeRecord = {
   email: string;
   role: 'Employee' | 'Admin';
   assigned_companies: string[];
+  assigned_service_cards?: string[];
   can_create: boolean;
   can_edit: boolean;
   can_delete: boolean;
@@ -71,6 +73,10 @@ export default function MasterAdminEmployeesPage() {
   const [formCanEdit, setFormCanEdit] = useState(true);
   const [formCanDelete, setFormCanDelete] = useState(false);
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active');
+  const [serviceCardsList, setServiceCardsList] = useState<ServiceCard[]>(() => {
+    return typeof window !== 'undefined' ? getStoredServices() : [];
+  });
+  const [formAssignedServiceCards, setFormAssignedServiceCards] = useState<string[]>(['*']);
 
   const currentUser = getMasterAdminUser();
   const assignedScope = useMemo(() => {
@@ -98,6 +104,9 @@ export default function MasterAdminEmployeesPage() {
     setAllCompanies(getStoredCompanies());
     fetchCompaniesFromBackend().then((list) => {
       setAllCompanies(list);
+    }).catch(() => {});
+    fetchServiceCards().then((list) => {
+      if (list && list.length > 0) setServiceCardsList(list);
     }).catch(() => {});
   }, []);
 
@@ -148,6 +157,7 @@ export default function MasterAdminEmployeesPage() {
     setFormCanEdit(true);
     setFormCanDelete(false);
     setFormStatus('active');
+    setFormAssignedServiceCards(['*']);
     setShowPassword(false);
     setIsModalOpen(true);
   };
@@ -170,6 +180,11 @@ export default function MasterAdminEmployeesPage() {
     setFormCanEdit(Boolean(emp.can_edit));
     setFormCanDelete(Boolean(emp.can_delete));
     setFormStatus(emp.status);
+    setFormAssignedServiceCards(
+      Array.isArray(emp.assigned_service_cards) && emp.assigned_service_cards.length > 0
+        ? emp.assigned_service_cards
+        : ['*']
+    );
     setShowPassword(false);
     setIsModalOpen(true);
   };
@@ -189,6 +204,7 @@ export default function MasterAdminEmployeesPage() {
       email: formEmail.trim().toLowerCase(),
       role: formRole,
       assigned_companies: formAssignedCompanies,
+      assigned_service_cards: formAssignedServiceCards,
       can_create: formCanCreate,
       can_edit: formCanEdit,
       can_delete: formCanDelete,
@@ -788,6 +804,75 @@ export default function MasterAdminEmployeesPage() {
                   searchPlaceholder="Search your permitted companies..."
                   helpText="Only companies in your Master Admin scope can be assigned to this staff member."
                 />
+              </div>
+
+              {/* Permitted Service Cards Clearances */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 m-0">
+                      Service Cards Clearance ({formAssignedServiceCards.includes('*') ? serviceCardsList.length : formAssignedServiceCards.length} Selected)
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      Select which service cards this staff member is authorized to access
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormAssignedServiceCards(['*'])}
+                      className="text-[11px] font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormAssignedServiceCards([])}
+                      className="text-[11px] font-bold text-slate-500 hover:underline bg-transparent border-0 cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  {serviceCardsList.map((card) => {
+                    const isSelected = formAssignedServiceCards.includes('*') || formAssignedServiceCards.includes(card.id);
+                    return (
+                      <label
+                        key={card.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-blue-50/80 border-blue-200 text-blue-900 font-semibold shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            if (formAssignedServiceCards.includes('*')) {
+                              const allExceptThis = serviceCardsList.map((s) => s.id).filter((id) => id !== card.id);
+                              setFormAssignedServiceCards(allExceptThis);
+                            } else if (formAssignedServiceCards.includes(card.id)) {
+                              setFormAssignedServiceCards(formAssignedServiceCards.filter((id) => id !== card.id));
+                            } else {
+                              const next = [...formAssignedServiceCards, card.id];
+                              if (next.length === serviceCardsList.length) {
+                                setFormAssignedServiceCards(['*']);
+                              } else {
+                                setFormAssignedServiceCards(next);
+                              }
+                            }
+                          }}
+                          className="rounded text-[#0b4da2] focus:ring-[#0b4da2] shrink-0"
+                        />
+                        <span className="truncate">{card.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Permissions Checkboxes */}

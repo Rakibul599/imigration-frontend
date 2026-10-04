@@ -63,6 +63,7 @@ import {
   isAuthenticated,
   getUserPanelInfo,
   logoutUser,
+  hasServiceCardAccess,
 } from '@/lib/auth';
 
 function ServicesContent() {
@@ -237,10 +238,12 @@ function ServicesContent() {
     if (modalParam && serviceList.length > 0) {
       const matched = serviceList.find((s) => s.id === modalParam);
       if (matched && matched.id !== 'customer' && matched.id !== 'document-download') {
-        setSelectedServiceModal(matched);
+        if (!currentUser || currentUser.role !== 'Employee' || hasServiceCardAccess(matched.id, matched.title)) {
+          setSelectedServiceModal(matched);
+        }
       }
     }
-  }, [searchParams, serviceList]);
+  }, [searchParams, serviceList, currentUser]);
 
   // Compute document count per service card for the active company
   const activeCompanyDocCounts = useMemo(() => {
@@ -305,11 +308,18 @@ function ServicesContent() {
     return result;
   }, [selectedServiceModal, companyCustomers, docSearchQuery]);
 
-  const verifiedService = serviceList.find(
+  const allowedServiceList = useMemo(() => {
+    if (!currentUser || currentUser.role !== 'Employee') {
+      return serviceList;
+    }
+    return serviceList.filter((s) => hasServiceCardAccess(s.id, s.title));
+  }, [serviceList, currentUser]);
+
+  const verifiedService = allowedServiceList.find(
     (s) => s.id.toLowerCase() === (verifiedServiceParam || '').toLowerCase()
   );
 
-  const filteredServices = serviceList.filter(
+  const filteredServices = allowedServiceList.filter(
     (service) =>
       service.title.toLowerCase().includes(query.toLowerCase()) ||
       service.description.toLowerCase().includes(query.toLowerCase())
@@ -475,7 +485,7 @@ function ServicesContent() {
                 </span>
               </div>
               <h2 className="text-[#1a283c] text-3xl md:text-4xl font-extrabold tracking-tight m-0">
-                Digital Immigration &amp; Employer Services ({serviceList.length})
+                Digital Immigration &amp; Employer Services ({allowedServiceList.length})
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
                 Select any digital service below to view tagged customer documents, passports, and

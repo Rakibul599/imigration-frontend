@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
+import { ServiceCard, getStoredServices, fetchServiceCards } from '@/lib/serviceStorage';
 
 export interface ModuleAccessSettings {
   view: boolean;
@@ -92,17 +93,29 @@ export default function EmployeeFormFullPage({
   const [companySearch, setCompanySearch] = useState('');
   const [companiesList, setCompaniesList] = useState<Company[]>([]);
 
+  // Assigned service cards
+  const [assignedServiceCards, setAssignedServiceCards] = useState<string[]>(['*']);
+  const [serviceCardsList, setServiceCardsList] = useState<ServiceCard[]>([]);
+  const [serviceCardSearch, setServiceCardSearch] = useState('');
+
   // Master admins list
   const [masterAdmins, setMasterAdmins] = useState<MasterAdminItem[]>([]);
 
   // Module permissions
   const [permissions, setPermissions] = useState<EmployeeModulePermissions>(DEFAULT_PERMISSIONS);
 
-  // Load companies & master admins
+  // Load companies, service cards & master admins
   useEffect(() => {
     setCompaniesList(getStoredCompanies());
     fetchCompaniesFromBackend()
       .then((comps) => setCompaniesList(comps))
+      .catch(() => {});
+
+    setServiceCardsList(getStoredServices());
+    fetchServiceCards()
+      .then((cards) => {
+        if (cards && cards.length > 0) setServiceCardsList(cards);
+      })
       .catch(() => {});
 
     fetch(`${apiBase}/master-admins`)
@@ -130,6 +143,12 @@ export default function EmployeeFormFullPage({
             setMasterAdminId(emp.master_admin_id ? String(emp.master_admin_id) : '');
             setStatus(emp.status || 'active');
             setAssignedCompanies(Array.isArray(emp.assigned_companies) ? emp.assigned_companies : []);
+            
+            if (Array.isArray(emp.assigned_service_cards)) {
+              setAssignedServiceCards(emp.assigned_service_cards);
+            } else {
+              setAssignedServiceCards(['*']);
+            }
 
             if (emp.module_permissions && typeof emp.module_permissions === 'object') {
               setPermissions({
@@ -150,6 +169,7 @@ export default function EmployeeFormFullPage({
     } else {
       setEmployeeCode(`EMP-${Math.floor(1000 + Math.random() * 9000)}`);
       setPassword('password123');
+      setAssignedServiceCards(['*']);
     }
   }, [editId, apiBase]);
 
@@ -176,6 +196,53 @@ export default function EmployeeFormFullPage({
 
   const handleClearAllCompanies = () => {
     setAssignedCompanies([]);
+  };
+
+  // Toggle service card assignment
+  const isAllServicesSelected =
+    assignedServiceCards.includes('*') ||
+    (serviceCardsList.length > 0 &&
+      serviceCardsList.every((s) => assignedServiceCards.includes(s.id)));
+
+  const handleToggleAllServices = () => {
+    if (isAllServicesSelected) {
+      setAssignedServiceCards([]);
+    } else {
+      setAssignedServiceCards(['*']);
+    }
+  };
+
+  const handleToggleServiceCard = (cardId: string) => {
+    if (assignedServiceCards.includes('*')) {
+      const allIds = serviceCardsList.map((s) => s.id);
+      setAssignedServiceCards(allIds.filter((id) => id !== cardId));
+      return;
+    }
+
+    setAssignedServiceCards((prev) => {
+      const exists = prev.includes(cardId);
+      if (exists) {
+        return prev.filter((id) => id !== cardId);
+      } else {
+        const next = [...prev, cardId];
+        if (serviceCardsList.length > 0 && next.length >= serviceCardsList.length) {
+          return ['*'];
+        }
+        return next;
+      }
+    });
+  };
+
+  const handleSelectAllServices = () => {
+    setAssignedServiceCards(['*']);
+  };
+
+  const handleClearAllServices = () => {
+    setAssignedServiceCards([]);
+  };
+
+  const isCardChecked = (cardId: string) => {
+    return assignedServiceCards.includes('*') || assignedServiceCards.includes(cardId);
   };
 
   // Toggle module permission
@@ -262,6 +329,7 @@ export default function EmployeeFormFullPage({
       master_admin_id: masterAdminId || null,
       master_admin_name: selectedMaster ? `${selectedMaster.name} (${selectedMaster.username})` : null,
       assigned_companies: assignedCompanies,
+      assigned_service_cards: assignedServiceCards,
       can_create: Boolean(permissions.customers.create),
       can_edit: Boolean(permissions.customers.edit),
       can_delete: Boolean(permissions.customers.delete),
@@ -402,17 +470,17 @@ export default function EmployeeFormFullPage({
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* CARD 1: Identity & Credentials */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-5">
-          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+          <div className="border-b border-slate-100 pb-4 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
-                <User size={16} />
+              <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shadow-2xs">
+                <User size={18} />
               </div>
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
                   Employee Identity &amp; System Credentials
                 </h3>
-                <p className="text-xs text-slate-400 m-0">
+                <p className="text-xs text-slate-400 m-0 mt-0.5">
                   Basic staff profile information, login code, password, and supervising Master Admin.
                 </p>
               </div>
@@ -420,17 +488,17 @@ export default function EmployeeFormFullPage({
 
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Role:</span>
-              <span className="text-xs font-black bg-blue-100 text-[#0b4da2] px-3 py-1 rounded-full uppercase tracking-wider border border-blue-200">
+              <span className="text-xs font-black bg-blue-100 text-[#0b4da2] px-3 py-1 rounded-full uppercase tracking-wider border border-blue-200 shadow-2xs">
                 Employee
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
             {/* Full Name */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Full Name *
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                Full Name <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -438,30 +506,32 @@ export default function EmployeeFormFullPage({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Mohd Syahir Bin Abdullah"
-                className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl px-3.5 py-2 text-xs text-slate-900 font-medium outline-none"
+                className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none transition-all"
               />
             </div>
 
             {/* Employee Code */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center justify-between">
-                <span>Employee Code (User ID) *</span>
-                <span className="text-[10px] text-blue-600 font-normal">Login ID</span>
-              </label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                  Employee Code (User ID) <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.2 rounded">Login ID</span>
+              </div>
               <input
                 type="text"
                 required
                 value={employeeCode}
                 onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
                 placeholder="e.g. EMP-2003"
-                className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl px-3.5 py-2 text-xs text-slate-900 font-mono font-bold outline-none"
+                className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-mono font-bold outline-none transition-all"
               />
             </div>
 
             {/* Email Address */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Official Email *
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                Official Email <span className="text-rose-500">*</span>
               </label>
               <input
                 type="email"
@@ -469,22 +539,24 @@ export default function EmployeeFormFullPage({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. syahir@agency.gov.my"
-                className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl px-3.5 py-2 text-xs text-slate-900 font-medium outline-none"
+                className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none transition-all"
               />
             </div>
 
             {/* Password */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center justify-between">
-                <span>{editId ? 'Password (Leave blank to keep)' : 'Password *'}</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                  {editId ? 'Password (Leave blank to keep)' : 'Password'} {!editId && <span className="text-rose-500">*</span>}
+                </label>
                 <button
                   type="button"
                   onClick={generatePassword}
-                  className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer border-0 bg-transparent flex items-center gap-1"
+                  className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer border-0 bg-transparent flex items-center gap-1 hover:underline"
                 >
                   <RotateCcw size={10} /> Generate
                 </button>
-              </label>
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -492,28 +564,30 @@ export default function EmployeeFormFullPage({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter secure password"
-                  className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl pl-3.5 pr-10 py-2 text-xs text-slate-900 font-mono outline-none"
+                  className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl pl-3.5 pr-10 py-2.5 text-xs sm:text-sm text-slate-900 font-mono outline-none transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded cursor-pointer bg-transparent border-0"
                 >
-                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
 
-            {/* ASSIGN MASTER ADMIN (Positioned directly after password as requested) */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center justify-between">
-                <span>Assign Master Admin</span>
-                <span className="text-[10px] text-purple-600 font-bold">Supervisor</span>
-              </label>
+            {/* ASSIGN MASTER ADMIN */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                  Assign Master Admin
+                </label>
+                <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.2 rounded">Supervisor</span>
+              </div>
               <select
                 value={masterAdminId}
                 onChange={(e) => setMasterAdminId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl px-3 py-2 text-xs text-slate-900 font-medium outline-none cursor-pointer"
+                className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none cursor-pointer transition-all"
               >
                 <option value="">-- No Supervising Master Admin --</option>
                 {masterAdmins.map((ma) => (
@@ -525,14 +599,14 @@ export default function EmployeeFormFullPage({
             </div>
 
             {/* Account Status */}
-            <div>
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
                 Account Status
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as 'active' | 'inactive')}
-                className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl px-3 py-2 text-xs text-slate-900 font-medium outline-none cursor-pointer"
+                className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none cursor-pointer transition-all"
               >
                 <option value="active">Active (Permitted To Login)</option>
                 <option value="inactive">Inactive (Suspended)</option>
@@ -545,14 +619,14 @@ export default function EmployeeFormFullPage({
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <Building2 size={16} />
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-2xs">
+                <Building2 size={18} />
               </div>
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
                   Assigned Employer Clearances
                 </h3>
-                <p className="text-xs text-slate-400 m-0">
+                <p className="text-xs text-slate-400 m-0 mt-0.5">
                   Select which registered companies this employee is authorized to access and manage.
                 </p>
               </div>
@@ -562,14 +636,14 @@ export default function EmployeeFormFullPage({
               <button
                 type="button"
                 onClick={handleSelectAllCompanies}
-                className="text-[11px] font-bold text-[#0b4da2] hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors"
+                className="text-[11px] font-bold text-[#0b4da2] hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer"
               >
                 Select All
               </button>
               <button
                 type="button"
                 onClick={handleClearAllCompanies}
-                className="text-[11px] font-bold text-slate-500 hover:bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 transition-colors"
+                className="text-[11px] font-bold text-slate-500 hover:bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 transition-colors cursor-pointer"
               >
                 Clear All
               </button>
@@ -584,7 +658,7 @@ export default function EmployeeFormFullPage({
               value={companySearch}
               onChange={(e) => setCompanySearch(e.target.value)}
               placeholder="Search companies by name, ROC, sector..."
-              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-[#0b4da2] rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-900 outline-none"
+              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-[#0b4da2] rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 outline-none transition-all"
             />
           </div>
 
@@ -598,7 +672,7 @@ export default function EmployeeFormFullPage({
                   onClick={() => handleToggleCompany(c.id)}
                   className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
                     isChecked
-                      ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
+                      ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs ring-1 ring-blue-200'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -628,18 +702,137 @@ export default function EmployeeFormFullPage({
           </div>
         </div>
 
-        {/* CARD 3: Operational & Sidebar Module Permissions */}
+        {/* CARD 3: Service Cards Access & Clearances (NEW) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-2xs">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
+                  Service Cards Access &amp; Clearances
+                </h3>
+                <p className="text-xs text-slate-400 m-0 mt-0.5">
+                  Select which digital service cards this employee is permitted to view and manage across the portal.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAllServices}
+                className="text-[11px] font-bold text-[#0b4da2] hover:bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors cursor-pointer"
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllServices}
+                className="text-[11px] font-bold text-slate-500 hover:bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Select All Toggle Banner */}
+          <div
+            onClick={handleToggleAllServices}
+            className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer select-none transition-all ${
+              isAllServicesSelected
+                ? 'bg-amber-50/70 border-amber-300 text-amber-950 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/70'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors ${
+                  isAllServicesSelected ? 'bg-amber-600 text-white' : 'border border-slate-300 bg-white'
+                }`}
+              >
+                {isAllServicesSelected && <Check size={12} strokeWidth={3} />}
+              </div>
+              <div>
+                <div className="text-xs font-bold">Grant All Service Cards Clearance (Full Access)</div>
+                <div className="text-[11px] text-slate-500">Employee will be able to see all current and newly added service cards</div>
+              </div>
+            </div>
+
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                isAllServicesSelected ? 'bg-amber-200 text-amber-900 border border-amber-300' : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {isAllServicesSelected ? 'Full Clearance Active' : 'Custom Selection'}
+            </span>
+          </div>
+
+          {/* Service Cards Checkbox Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {serviceCardsList.map((card) => {
+              const checked = isCardChecked(card.id);
+              return (
+                <div
+                  key={card.id}
+                  onClick={() => handleToggleServiceCard(card.id)}
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                    checked
+                      ? 'border-[#0b4da2] bg-blue-50/70 shadow-2xs ring-1 ring-blue-200'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                      checked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                    }`}
+                  >
+                    {checked && <Check size={12} strokeWidth={3} />}
+                  </div>
+
+                  <div className="w-10 h-10 rounded-lg bg-white p-1.5 flex items-center justify-center shrink-0 border border-slate-200 shadow-2xs">
+                    <img src={card.image} alt="" className="max-h-full max-w-full object-contain" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="text-xs font-bold text-slate-900 truncate">{card.title}</div>
+                      {card.tag && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 uppercase shrink-0">
+                          {card.tag}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                      {card.description}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="text-xs text-slate-500 pt-1">
+            <strong>
+              {assignedServiceCards.includes('*') ? serviceCardsList.length : assignedServiceCards.length}
+            </strong>{' '}
+            of {serviceCardsList.length} service cards authorized for this employee.
+          </div>
+        </div>
+
+        {/* CARD 4: Operational & Sidebar Module Permissions */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
-                <ShieldCheck size={16} />
+              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shadow-2xs">
+                <ShieldCheck size={18} />
               </div>
               <div>
                 <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
                   Operational Permissions &amp; Sidebar Access Control
                 </h3>
-                <p className="text-xs text-slate-400 m-0">
+                <p className="text-xs text-slate-400 m-0 mt-0.5">
                   Granular control over which admin sidebar modules this employee can see, view, edit, or delete.
                 </p>
               </div>
