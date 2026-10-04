@@ -56,9 +56,11 @@ import {
 
 const DEFAULT_CUSTOMER_CARDS: PageStatCardConfig[] = [
   { id: 'total_customers', title: 'Total Customers', subtitle: 'Across all registered employers', icon: 'Users', order_num: 1 },
-  { id: 'active_permits', title: 'Active Permits', subtitle: 'Authorized status', icon: 'UserCheck', order_num: 2 },
-  { id: 'passport_verified', title: 'Passport Verified', subtitle: 'Valid biometric passports', icon: 'CheckCircle2', order_num: 3 },
-  { id: 'document_dossiers', title: 'Document Dossiers', subtitle: 'Total uploaded dossiers', icon: 'FolderOpen', order_num: 4 },
+  { id: 'active_permits', title: 'Active Permits', subtitle: 'Authorized worker status', icon: 'UserCheck', order_num: 2 },
+  { id: 'inactive_customers', title: 'Inactive Customers', subtitle: 'Suspended worker accounts', icon: 'UserX', order_num: 3 },
+  { id: 'absent_customers', title: 'Absent Customers', subtitle: 'Absent worker permits', icon: 'UserMinus', order_num: 4 },
+  { id: 'passport_verified', title: 'Passport Verified', subtitle: 'Valid biometric passports', icon: 'CheckCircle2', order_num: 5 },
+  { id: 'document_dossiers', title: 'Document Dossiers', subtitle: 'Total uploaded dossiers', icon: 'FolderOpen', order_num: 6 },
 ];
 
 export default function SuperAdminCustomersPage() {
@@ -174,6 +176,8 @@ export default function SuperAdminCustomersPage() {
   // Statistics
   const totalCustomers = customers.length;
   const activeCount = customers.filter((c) => c.status === 'active').length;
+  const inactiveCount = customers.filter((c) => c.status === 'inactive').length;
+  const absentCount = customers.filter((c) => c.status === 'absent').length;
   const passportCount = customers.filter((c) => Boolean(c.passport_no || c.passport_file)).length;
   const totalDocuments = customers.reduce((sum, c) => sum + (c.documents?.length || 0), 0);
 
@@ -245,8 +249,8 @@ export default function SuperAdminCustomersPage() {
         </div>
       </div>
 
-      {/* KPI Stats Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      {/* KPI Stats Cards (Dynamic from Card Priority Config) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card) => {
           let value: number | string = 0;
           let themeColor = 'text-slate-900';
@@ -260,14 +264,22 @@ export default function SuperAdminCustomersPage() {
             value = activeCount;
             themeColor = 'text-emerald-600';
             iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'inactive_customers') {
+            value = inactiveCount;
+            themeColor = 'text-rose-600';
+            iconBg = 'bg-rose-50 text-rose-600';
+          } else if (card.id === 'absent_customers') {
+            value = absentCount;
+            themeColor = 'text-purple-600';
+            iconBg = 'bg-purple-50 text-purple-600';
           } else if (card.id === 'passport_verified') {
             value = passportCount;
             themeColor = 'text-[#0b4da2]';
             iconBg = 'bg-blue-50 text-[#0b4da2]';
           } else if (card.id === 'document_dossiers') {
             value = totalDocuments;
-            themeColor = 'text-purple-600';
-            iconBg = 'bg-purple-50 text-purple-600';
+            themeColor = 'text-amber-600';
+            iconBg = 'bg-amber-50 text-amber-600';
           }
 
           return (
@@ -346,6 +358,7 @@ export default function SuperAdminCustomersPage() {
               <option value="active">Active</option>
               <option value="pending">Pending</option>
               <option value="inactive">Inactive</option>
+              <option value="absent">Absent</option>
             </select>
           </div>
         </div>
@@ -354,13 +367,14 @@ export default function SuperAdminCustomersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] border-b border-slate-200">
                 <th className="py-3 px-4">Customer / Worker</th>
                 <th className="py-3 px-4">Passport Details</th>
                 <th className="py-3 px-4">NID / IC No.</th>
                 <th className="py-3 px-4">Employer Company</th>
                 <th className="py-3 px-4">Working Sector</th>
-                <th className="py-3 px-4">Compensation</th>
+                <th className="py-3 px-4">Basic Salary</th>
+                <th className="py-3 px-4">OT(Over time)</th>
                 <th className="py-3 px-4">Contact</th>
                 <th className="py-3 px-4 text-center">Documents</th>
                 <th className="py-3 px-4 text-center">Status</th>
@@ -370,7 +384,7 @@ export default function SuperAdminCustomersPage() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     <Users size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-600 m-0">
                       No Customer Records Found
@@ -505,16 +519,18 @@ export default function SuperAdminCustomersPage() {
                         )}
                       </td>
 
-                      {/* Compensation */}
-                      <td className="py-3.5 px-4 font-mono text-xs">
-                        <div className="text-slate-800 font-semibold">
+                      {/* Basic Salary */}
+                      <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
+                        <span className="text-slate-800 font-semibold">
                           {cust.basic_salary || '—'}
-                        </div>
-                        {cust.overtime && (
-                          <div className="text-[10px] text-slate-500 font-sans">
-                            OT: {cust.overtime}
-                          </div>
-                        )}
+                        </span>
+                      </td>
+
+                      {/* OT(Over time) */}
+                      <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
+                        <span className="text-slate-700 font-medium">
+                          {cust.overtime || '—'}
+                        </span>
                       </td>
 
                       {/* Contact */}
@@ -551,6 +567,8 @@ export default function SuperAdminCustomersPage() {
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : cust.status === 'pending'
                               ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : cust.status === 'absent'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
                               : 'bg-rose-50 text-rose-700 border border-rose-200'
                           }`}
                         >
@@ -560,6 +578,8 @@ export default function SuperAdminCustomersPage() {
                                 ? 'bg-emerald-500'
                                 : cust.status === 'pending'
                                 ? 'bg-amber-500'
+                                : cust.status === 'absent'
+                                ? 'bg-purple-500'
                                 : 'bg-rose-500'
                             }`}
                           />
@@ -727,7 +747,7 @@ export default function SuperAdminCustomersPage() {
                 </div>
               </div>
 
-              {/* Working Sector & Compensation */}
+              {/* Working Sector, Basic Salary & OT */}
               <div className="bg-blue-50/40 p-3.5 rounded-xl border border-blue-200 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -739,7 +759,7 @@ export default function SuperAdminCustomersPage() {
                     <span className="font-mono font-bold text-slate-800">{viewingCustomer.basic_salary || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-blue-900 block font-bold">Our Time (Overtime)</span>
+                    <span className="text-[10px] text-blue-900 block font-bold">OT(Over time)</span>
                     <span className="font-mono font-bold text-slate-800">{viewingCustomer.overtime || 'N/A'}</span>
                   </div>
                 </div>
@@ -748,6 +768,29 @@ export default function SuperAdminCustomersPage() {
                   <span className="text-slate-700">{viewingCustomer.working_address || 'N/A'}</span>
                 </div>
               </div>
+
+              {/* Others Company Information */}
+              {(viewingCustomer.other_company_name || viewingCustomer.other_company_boss_phone || viewingCustomer.other_company_address) && (
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+                    Others Company Information
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Company Name</span>
+                      <span className="font-semibold text-slate-800">{viewingCustomer.other_company_name || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Boss Phone No</span>
+                      <span className="font-mono text-slate-800">{viewingCustomer.other_company_boss_phone || '—'}</span>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="text-[10px] text-slate-400 block font-semibold">Company Address</span>
+                      <span className="text-slate-700">{viewingCustomer.other_company_address || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Multiple Uploaded Documents */}
               <div>

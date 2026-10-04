@@ -75,6 +75,7 @@ import {
   updateCompanyStatCard,
 } from '@/lib/companyStatCards';
 import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
+import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -147,6 +148,7 @@ export default function SuperAdminCompaniesPage() {
   const [isSavingManage, setIsSavingManage] = useState(false);
 
   // Form states for Create & Edit Company
+  const [dbWorkingSectors, setDbWorkingSectors] = useState<WorkingSector[]>([]);
   const [formName, setFormName] = useState('');
   const [formRoc, setFormRoc] = useState('');
   const [formSector, setFormSector] = useState(SECTOR_OPTIONS[0]);
@@ -161,6 +163,12 @@ export default function SuperAdminCompaniesPage() {
     setCompanies(getStoredCompanies());
     fetchCompaniesFromBackend().then((list) => {
       setCompanies(list);
+    }).catch(() => {});
+
+    fetchWorkingSectors().then((secList) => {
+      if (Array.isArray(secList) && secList.length > 0) {
+        setDbWorkingSectors(secList);
+      }
     }).catch(() => {});
 
     setStatCards(getStoredCompanyStatCards());
@@ -499,6 +507,12 @@ export default function SuperAdminCompaniesPage() {
       description: formDescription.trim() || 'Newly registered employer entity within the Malaysian Immigration portal.',
     };
 
+    if (formSector === 'OTHER' && formCustomSector.trim()) {
+      createWorkingSector(formCustomSector.trim()).then((sec) => {
+        if (sec) setDbWorkingSectors((prev) => [...prev, sec]);
+      }).catch(() => {});
+    }
+
     if (editingCompany) {
       const updated = await updateStoredCompany(companyData);
       setCompanies(updated);
@@ -533,6 +547,16 @@ export default function SuperAdminCompaniesPage() {
     }
   };
 
+  const allSectorList = useMemo(() => {
+    const list = [...SECTOR_OPTIONS];
+    dbWorkingSectors.forEach((s) => {
+      if (s.name && !list.includes(s.name)) {
+        list.push(s.name);
+      }
+    });
+    return list;
+  }, [dbWorkingSectors]);
+
   // Filtered List for Table
   const filteredCompanies = companies.filter((c) => {
     const matchesSearch =
@@ -563,20 +587,20 @@ export default function SuperAdminCompaniesPage() {
 
   const sectorFilterOptions: Select2Option[] = useMemo(() => [
     { value: 'ALL', label: `All Sectors (${companies.length})`, badge: 'ALL' },
-    ...SECTOR_OPTIONS.map((sec) => ({
+    ...allSectorList.map((sec) => ({
       value: sec,
       label: sec,
       badge: `${companies.filter((c) => c.sector === sec).length}`,
     })),
-  ], [companies]);
+  ], [companies, allSectorList]);
 
   const modalSectorOptions: Select2Option[] = useMemo(() => [
-    ...SECTOR_OPTIONS.map((sec) => ({
+    ...allSectorList.map((sec) => ({
       value: sec,
       label: sec,
     })),
-    { value: 'OTHER', label: 'Other (Specify Below)' },
-  ], []);
+    { value: 'OTHER', label: '+ Other / Add New Sector (Specify Below)' },
+  ], [allSectorList]);
 
   return (
     <div className="space-y-6 max-w-full min-w-0">
@@ -620,14 +644,13 @@ export default function SuperAdminCompaniesPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-xs transition-colors cursor-pointer border-0"
+            <Link
+              href="/superadmin/companies/create"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-xs transition-colors cursor-pointer border-0 no-underline"
             >
               <Plus size={14} />
               <span>Add Company</span>
-            </button>
+            </Link>
             <button
               type="button"
               onClick={handleResetDefaults}

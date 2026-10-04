@@ -343,7 +343,7 @@ export default function MasterAdminCompaniesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] border-b border-slate-200">
                 <th className="py-3 px-4">Employer Company</th>
                 <th className="py-3 px-4">ROC / Registration</th>
                 <th className="py-3 px-4">Industry Sector</th>

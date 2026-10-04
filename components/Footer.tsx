@@ -9,10 +9,10 @@ export default function Footer() {
       <div className="container footer-top">
         <div className="footer-brand">
           <div className="flex flex-col gap-1 mb-2">
-            <strong className="text-white text-sm tracking-wider uppercase font-bold">
+            <strong className="text-white text-sm font-bold">
               Official Digital Portal
             </strong>
-            <small className="text-[#90a6c7] text-[10px] tracking-widest uppercase">
+            <small className="text-[#90a6c7] text-[10px]">
               Foreign Workers Management &amp; Employer Gateway
             </small>
           </div>

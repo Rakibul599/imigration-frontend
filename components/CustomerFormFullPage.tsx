@@ -31,7 +31,7 @@ import {
   X,
 } from 'lucide-react';
 import { Company } from '@/lib/companies';
-import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
+import { getStoredCompanies, fetchCompaniesFromBackend, updateStoredCompany } from '@/lib/companyStorage';
 import {
   CustomerDocument,
   CustomerRecord,
@@ -132,11 +132,14 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   const [workingSector, setWorkingSector] = useState('');
   const [workingAddress, setWorkingAddress] = useState('');
   const [basicSalary, setBasicSalary] = useState('RM 2,500');
-  const [overtime, setOvertime] = useState('RM 15.00 / hr'); // "our time"
+  const [overtime, setOvertime] = useState('RM 15.00 / hr'); // OT(Over time)
+  const [otherCompanyName, setOtherCompanyName] = useState('');
+  const [otherCompanyBossPhone, setOtherCompanyBossPhone] = useState('');
+  const [otherCompanyAddress, setOtherCompanyAddress] = useState('');
   const [profilePic, setProfilePic] = useState<string>('');
   const [profilePicName, setProfilePicName] = useState('');
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
-  const [status, setStatus] = useState<'active' | 'pending' | 'inactive'>('active');
+  const [status, setStatus] = useState<'active' | 'pending' | 'inactive' | 'absent'>('active');
 
   // Service cards for tagging uploaded documents
   const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
@@ -179,14 +182,16 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
           setAvailableServices(svcList);
         }
 
+        const defaultCompId = permitted[0]?.id || '';
         setCompanyId((prev) => {
           if (prev && permitted.some((c) => c.id.toLowerCase() === prev.toLowerCase())) {
             return prev;
           }
-          return permitted[0]?.id || '';
+          return defaultCompId;
         });
 
-        setWorkingSector((prev) => prev || secList[0]?.name || '');
+        const activeComp = permitted.find((c) => c.id.toLowerCase() === defaultCompId.toLowerCase());
+        setWorkingSector((prev) => prev || activeComp?.sector || secList[0]?.name || '');
       } catch (err) {
         console.error('Background initialization error:', err);
       }
@@ -217,6 +222,9 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     setWorkingAddress(cust.working_address || '');
     setBasicSalary(cust.basic_salary || 'RM 2,500');
     setOvertime(cust.overtime || 'RM 15.00 / hr');
+    setOtherCompanyName(cust.other_company_name || '');
+    setOtherCompanyBossPhone(cust.other_company_boss_phone || '');
+    setOtherCompanyAddress(cust.other_company_address || '');
     setProfilePic(cust.profile_pic || cust.profile_image || '');
     setProfilePicName(cust.profile_pic || cust.profile_image ? 'Existing Profile Image' : '');
     setDocuments(Array.isArray(cust.documents) ? cust.documents : []);
@@ -355,17 +363,34 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     setDocuments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Add new working sector to backend
+  // Add new working sector to backend & selected company
   const handleAddNewSector = async () => {
     if (!newSectorName.trim()) return;
     setIsSavingSector(true);
     try {
       const created = await createWorkingSector(newSectorName.trim());
       setSectors((prev) => [...prev, created]);
-      setWorkingSector(created.name);
+      const addedName = created.name;
+
+      if (companyId) {
+        const comp = companies.find((c) => c.id.toLowerCase() === companyId.toLowerCase());
+        if (comp) {
+          const currentSectors = comp.sectors && Array.isArray(comp.sectors)
+            ? [...comp.sectors]
+            : (comp.sector ? comp.sector.split(',').map((s) => s.trim()).filter(Boolean) : []);
+          if (!currentSectors.includes(addedName)) {
+            currentSectors.push(addedName);
+            comp.sectors = currentSectors;
+            comp.sector = currentSectors.join(', ');
+            updateStoredCompany(comp).catch(() => {});
+          }
+        }
+      }
+
+      setWorkingSector(addedName);
       setNewSectorName('');
       setIsAddingNewSector(false);
-      setFeedback({ type: 'success', message: `New sector "${created.name}" created and selected!` });
+      setFeedback({ type: 'success', message: `New sector "${addedName}" created and assigned to selected company!` });
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to create sector.' });
     } finally {
@@ -401,9 +426,16 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
       working_address: workingAddress.trim(),
       basic_salary: basicSalary.trim(),
       overtime: overtime.trim(),
+      other_company_name: otherCompanyName.trim() || undefined,
+      other_company_boss_phone: otherCompanyBossPhone.trim() || undefined,
+      other_company_address: otherCompanyAddress.trim() || undefined,
       profile_pic: profilePic,
       profile_image: profilePic,
-      documents: documents,
+      documents: documents.map((doc) => ({
+        ...doc,
+        issue_date: doc.issue_date && doc.issue_date.trim() ? doc.issue_date.trim() : null as any,
+        expire_date: doc.expire_date && doc.expire_date.trim() ? doc.expire_date.trim() : null as any,
+      })),
       role: 'Worker',
       status: status,
     };
@@ -616,7 +648,28 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <Select2Search
                 options={companyOptions}
                 value={companyId}
-                onChange={(val) => setCompanyId(val)}
+                onChange={(val) => {
+                  setCompanyId(val);
+                  const matched = companies.find((c) => c.id.toLowerCase() === val.toLowerCase());
+                  const compSectors: string[] = [];
+                  if (matched?.sectors && Array.isArray(matched.sectors)) {
+                    matched.sectors.forEach((s) => {
+                      const trimmed = s.trim();
+                      if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
+                    });
+                  }
+                  if (matched?.sector) {
+                    matched.sector.split(',').forEach((s) => {
+                      const trimmed = s.trim();
+                      if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
+                    });
+                  }
+                  if (compSectors.length > 0) {
+                    setWorkingSector(compSectors[0]);
+                  } else {
+                    setWorkingSector('');
+                  }
+                }}
                 placeholder="Search & select employer company..."
                 searchPlaceholder="Type company name, ROC or sector..."
                 icon={<Building2 size={15} className="text-slate-400" />}
@@ -757,12 +810,12 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
           </div>
         </div>
 
-        {/* Card 4: Working Sector & Compensation */}
+        {/* Card 4: Working Sector, Basic Salary & OT(Over time) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Building2 size={15} className="text-[#0b4da2]" />
-              <span>Working Sector &amp; Compensation</span>
+              <span>Working Sector, Basic Salary &amp; OT(Over time)</span>
             </div>
             <span className="text-[11px] text-blue-600 font-semibold">Admin Panel Manageable Sectors</span>
           </div>
@@ -809,11 +862,38 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               onChange={(e) => setWorkingSector(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer"
             >
-              {sectors.map((s) => (
-                <option key={s.id} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
+              {(() => {
+                const selectedComp = companies.find((c) => c.id.toLowerCase() === (companyId || '').toLowerCase());
+                const compSectors: string[] = [];
+                if (selectedComp?.sectors && Array.isArray(selectedComp.sectors)) {
+                  selectedComp.sectors.forEach((s) => {
+                    const trimmed = s.trim();
+                    if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
+                  });
+                }
+                if (selectedComp?.sector) {
+                  selectedComp.sector.split(',').forEach((s) => {
+                    const trimmed = s.trim();
+                    if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
+                  });
+                }
+
+                if (compSectors.length === 0) {
+                  return (
+                    <option value="">
+                      {selectedComp
+                        ? `-- No sector assigned to ${selectedComp.name} (Use "+ Add New Sector" above) --`
+                        : '-- Please select an employer company first --'}
+                    </option>
+                  );
+                }
+
+                return compSectors.map((s) => (
+                  <option key={s} value={s}>
+                    {s} ({selectedComp?.name})
+                  </option>
+                ));
+              })()}
             </select>
           </div>
 
@@ -854,7 +934,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
 
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
-                Our Time (Overtime Rate / Work Hours)
+                OT(Over time)
               </label>
               <div className="relative">
                 <Clock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -864,6 +944,76 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                   onChange={(e) => setOvertime(e.target.value)}
                   placeholder="e.g. 1.5x / RM 15.00/hr / 8 hrs"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card: Others Company Information */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
+              <Building2 size={15} />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 m-0">
+                Others Company Information
+              </h3>
+              <p className="text-[11px] text-slate-500 m-0">
+                Secondary employer or external subcontracting firm details for this foreign worker.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Company Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Name
+              </label>
+              <div className="relative">
+                <Building2 size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={otherCompanyName}
+                  onChange={(e) => setOtherCompanyName(e.target.value)}
+                  placeholder="e.g. Subcontractor or Partner Enterprise"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                />
+              </div>
+            </div>
+
+            {/* Boss Phone No */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Boss Phone No
+              </label>
+              <div className="relative">
+                <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="tel"
+                  value={otherCompanyBossPhone}
+                  onChange={(e) => setOtherCompanyBossPhone(e.target.value)}
+                  placeholder="e.g. +60 12-345 6789"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                />
+              </div>
+            </div>
+
+            {/* Company Address */}
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Address
+              </label>
+              <div className="relative">
+                <MapPin size={14} className="absolute left-3.5 top-3 text-slate-400" />
+                <textarea
+                  rows={2}
+                  value={otherCompanyAddress}
+                  onChange={(e) => setOtherCompanyAddress(e.target.value)}
+                  placeholder="Enter other company premises or office address..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
                 />
               </div>
             </div>
@@ -1061,6 +1211,17 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                   className="text-rose-600 focus:ring-rose-500"
                 />
                 <span className="text-rose-700 font-semibold">Inactive</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="status"
+                  value="absent"
+                  checked={status === 'absent'}
+                  onChange={() => setStatus('absent')}
+                  className="text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-purple-700 font-semibold">Absent</span>
               </label>
             </div>
           </div>

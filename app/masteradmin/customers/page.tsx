@@ -185,6 +185,8 @@ export default function MasterAdminCustomersPage() {
   // Statistics
   const totalInScope = customers.length;
   const activeCount = customers.filter((c) => c.status === 'active').length;
+  const inactiveCount = customers.filter((c) => c.status === 'inactive').length;
+  const absentCount = customers.filter((c) => c.status === 'absent').length;
   const passportCount = customers.filter((c) => Boolean(c.passport_no || c.passport_file)).length;
   const totalDocuments = customers.reduce((sum, c) => sum + (c.documents?.length || 0), 0);
 
@@ -247,7 +249,7 @@ export default function MasterAdminCustomersPage() {
       </div>
 
       {/* KPI Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
@@ -256,11 +258,11 @@ export default function MasterAdminCustomersPage() {
             <div className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
               {totalInScope}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Under your {permittedCompanies.length} employers
+            <div className="text-[11px] text-slate-500 mt-1 truncate max-w-[120px]">
+              In scope
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0">
             <Users size={20} />
           </div>
         </div>
@@ -273,12 +275,46 @@ export default function MasterAdminCustomersPage() {
             <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-1">
               {activeCount}
             </div>
-            <div className="text-[11px] text-emerald-600 mt-1">
-              Approved worker permits
+            <div className="text-[11px] text-emerald-600 mt-1 truncate max-w-[120px]">
+              Active workers
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <UserCheck size={20} />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+              Inactive Status
+            </span>
+            <div className="text-2xl font-bold text-rose-600 tracking-tight mt-1">
+              {inactiveCount}
+            </div>
+            <div className="text-[11px] text-rose-600 mt-1 truncate max-w-[120px]">
+              Suspended
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <Users size={20} />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+          <div>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+              Absent Status
+            </span>
+            <div className="text-2xl font-bold text-purple-600 tracking-tight mt-1">
+              {absentCount}
+            </div>
+            <div className="text-[11px] text-purple-600 mt-1 truncate max-w-[120px]">
+              Absent workers
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <Users size={20} />
           </div>
         </div>
 
@@ -287,14 +323,14 @@ export default function MasterAdminCustomersPage() {
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Passport Verified
             </span>
-            <div className="text-2xl font-bold text-purple-600 tracking-tight mt-1">
+            <div className="text-2xl font-bold text-blue-600 tracking-tight mt-1">
               {passportCount}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Registered passports
+            <div className="text-[11px] text-slate-500 mt-1 truncate max-w-[120px]">
+              Passports
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
             <FileCheck2 size={20} />
           </div>
         </div>
@@ -307,11 +343,11 @@ export default function MasterAdminCustomersPage() {
             <div className="text-2xl font-bold text-amber-600 tracking-tight mt-1">
               {totalDocuments}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Document dossiers attached
+            <div className="text-[11px] text-slate-500 mt-1 truncate max-w-[120px]">
+              Dossiers
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
             <FileText size={20} />
           </div>
         </div>
@@ -371,6 +407,7 @@ export default function MasterAdminCustomersPage() {
               <option value="active">Active</option>
               <option value="pending">Pending</option>
               <option value="inactive">Inactive</option>
+              <option value="absent">Absent</option>
             </select>
           </div>
         </div>
@@ -379,13 +416,14 @@ export default function MasterAdminCustomersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] border-b border-slate-200">
                 <th className="py-3 px-4">Worker Profile</th>
                 <th className="py-3 px-4">Passport Details</th>
                 <th className="py-3 px-4">NID / IC No.</th>
                 <th className="py-3 px-4">Employer Company</th>
                 <th className="py-3 px-4">Working Sector</th>
-                <th className="py-3 px-4">Compensation</th>
+                <th className="py-3 px-4">Basic Salary</th>
+                <th className="py-3 px-4">OT(Over time)</th>
                 <th className="py-3 px-4">Contact</th>
                 <th className="py-3 px-4 text-center">Documents</th>
                 <th className="py-3 px-4 text-center">Status</th>
@@ -395,7 +433,7 @@ export default function MasterAdminCustomersPage() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     <Users size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-600 m-0">
                       No Customer / Worker Records Found
@@ -530,16 +568,18 @@ export default function MasterAdminCustomersPage() {
                         )}
                       </td>
 
-                      {/* Compensation */}
-                      <td className="py-3.5 px-4 font-mono text-xs">
-                        <div className="text-slate-800 font-semibold">
+                      {/* Basic Salary */}
+                      <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
+                        <span className="text-slate-800 font-semibold">
                           {cust.basic_salary || '—'}
-                        </div>
-                        {cust.overtime && (
-                          <div className="text-[10px] text-slate-500 font-sans">
-                            OT: {cust.overtime}
-                          </div>
-                        )}
+                        </span>
+                      </td>
+
+                      {/* OT(Over time) */}
+                      <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
+                        <span className="text-slate-700 font-medium">
+                          {cust.overtime || '—'}
+                        </span>
                       </td>
 
                       {/* Contact */}
@@ -576,6 +616,8 @@ export default function MasterAdminCustomersPage() {
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : cust.status === 'pending'
                               ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : cust.status === 'absent'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
                               : 'bg-rose-50 text-rose-700 border border-rose-200'
                           }`}
                         >
@@ -585,6 +627,8 @@ export default function MasterAdminCustomersPage() {
                                 ? 'bg-emerald-500'
                                 : cust.status === 'pending'
                                 ? 'bg-amber-500'
+                                : cust.status === 'absent'
+                                ? 'bg-purple-500'
                                 : 'bg-rose-500'
                             }`}
                           />
@@ -752,7 +796,7 @@ export default function MasterAdminCustomersPage() {
                 </div>
               </div>
 
-              {/* Working Sector & Compensation */}
+              {/* Working Sector, Basic Salary & OT */}
               <div className="bg-blue-50/40 p-3.5 rounded-xl border border-blue-200 space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -764,7 +808,7 @@ export default function MasterAdminCustomersPage() {
                     <span className="font-mono font-bold text-slate-800">{viewingCustomer.basic_salary || 'N/A'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-blue-900 block font-bold">Our Time (Overtime)</span>
+                    <span className="text-[10px] text-blue-900 block font-bold">OT(Over time)</span>
                     <span className="font-mono font-bold text-slate-800">{viewingCustomer.overtime || 'N/A'}</span>
                   </div>
                 </div>
@@ -773,6 +817,29 @@ export default function MasterAdminCustomersPage() {
                   <span className="text-slate-700">{viewingCustomer.working_address || 'N/A'}</span>
                 </div>
               </div>
+
+              {/* Others Company Information */}
+              {(viewingCustomer.other_company_name || viewingCustomer.other_company_boss_phone || viewingCustomer.other_company_address) && (
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+                    Others Company Information
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Company Name</span>
+                      <span className="font-semibold text-slate-800">{viewingCustomer.other_company_name || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-semibold">Boss Phone No</span>
+                      <span className="font-mono text-slate-800">{viewingCustomer.other_company_boss_phone || '—'}</span>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="text-[10px] text-slate-400 block font-semibold">Company Address</span>
+                      <span className="text-slate-700">{viewingCustomer.other_company_address || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Multiple Uploaded Documents */}
               <div>

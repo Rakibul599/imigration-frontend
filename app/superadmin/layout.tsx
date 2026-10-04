@@ -31,6 +31,15 @@ import {
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
 import { getCurrentUser, getSuperAdminUser } from '@/lib/auth';
+import {
+  getStoredSettings,
+  fetchSiteSettings,
+  subscribeToSettingsChanges,
+  applySidebarStyling,
+  DEFAULT_SIDEBAR_STYLING,
+  SiteSettings,
+  isColorDark,
+} from '@/lib/settingsStorage';
 
 export default function SuperAdminLayout({
   children,
@@ -51,6 +60,28 @@ export default function SuperAdminLayout({
   const [customerCount, setCustomerCount] = useState<number>(0);
   const [passwordCount, setPasswordCount] = useState<number>(0);
   const [serviceCount, setServiceCount] = useState<number>(0);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SIDEBAR_STYLING as any);
+
+  // Subscribe to site and sidebar styling settings
+  useEffect(() => {
+    if (isLoginPage) return;
+    const current = getStoredSettings();
+    setSiteSettings(current);
+    applySidebarStyling(current);
+
+    fetchSiteSettings()
+      .then((data) => {
+        setSiteSettings(data);
+        applySidebarStyling(data);
+      })
+      .catch(() => {});
+
+    const unsub = subscribeToSettingsChanges((newSettings) => {
+      setSiteSettings(newSettings);
+      applySidebarStyling(newSettings);
+    });
+    return unsub;
+  }, [isLoginPage]);
 
   // Check superadmin authentication strictly
   useEffect(() => {
@@ -257,6 +288,13 @@ export default function SuperAdminLayout({
     },
   ];
 
+  const sidebarBg = siteSettings.sidebar_bg_color || DEFAULT_SIDEBAR_STYLING.sidebar_bg_color;
+  const sidebarText = siteSettings.sidebar_text_color || DEFAULT_SIDEBAR_STYLING.sidebar_text_color;
+  const sidebarActiveBg = siteSettings.sidebar_active_bg_color || DEFAULT_SIDEBAR_STYLING.sidebar_active_bg_color;
+  const sidebarActiveText = siteSettings.sidebar_active_text_color || DEFAULT_SIDEBAR_STYLING.sidebar_active_text_color;
+  const sidebarBorder = siteSettings.sidebar_border_color || DEFAULT_SIDEBAR_STYLING.sidebar_border_color;
+  const isDarkSidebar = isColorDark(sidebarBg);
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden">
       {/* Top Strip matching official frontend */}
@@ -290,9 +328,13 @@ export default function SuperAdminLayout({
           />
         )}
 
-        {/* Pure WHITE Sidebar */}
+        {/* Dynamic Styled Sidebar */}
         <aside
-          className={`fixed top-[32px] bottom-0 left-0 z-50 flex flex-col bg-white border-r border-slate-200 transition-all duration-300 shadow-sm ${
+          style={{
+            backgroundColor: sidebarBg,
+            borderColor: sidebarBorder,
+          }}
+          className={`fixed top-[32px] bottom-0 left-0 z-50 flex flex-col border-r transition-all duration-300 shadow-sm ${
             sidebarOpen ? 'w-64' : 'w-20'
           } ${
             mobileMenuOpen
@@ -301,17 +343,29 @@ export default function SuperAdminLayout({
           }`}
         >
           {/* Sidebar Top Header */}
-          <div className="h-16 border-b border-slate-200 flex items-center justify-between px-4 bg-white">
+          <div
+            style={{
+              backgroundColor: sidebarBg,
+              borderBottomColor: sidebarBorder,
+            }}
+            className="h-16 border-b flex items-center justify-between px-4"
+          >
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="w-10 h-10 rounded-xl bg-[#0b4da2] text-white flex items-center justify-center shrink-0 shadow-sm">
                 <ShieldCheck size={22} className="text-yellow-400" />
               </div>
               {sidebarOpen && (
                 <div className="truncate">
-                  <h2 className="text-xs font-bold text-slate-900 uppercase tracking-tight m-0 leading-tight">
+                  <h2
+                    style={{ color: isDarkSidebar ? '#f8fafc' : '#0f172a' }}
+                    className="text-xs font-bold uppercase tracking-tight m-0 leading-tight"
+                  >
                     Super Admin
                   </h2>
-                  <p className="text-[11px] text-[#0b4da2] font-semibold m-0 leading-tight">
+                  <p
+                    style={{ color: isDarkSidebar ? '#93c5fd' : '#0b4da2' }}
+                    className="text-[11px] font-semibold m-0 leading-tight"
+                  >
                     Control Console
                   </p>
                 </div>
@@ -320,13 +374,15 @@ export default function SuperAdminLayout({
 
             <button
               onClick={() => setMobileMenuOpen(false)}
-              className="lg:hidden text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
+              style={{ color: sidebarText }}
+              className="lg:hidden p-1 cursor-pointer bg-transparent border-0 opacity-70 hover:opacity-100"
             >
               <X size={18} />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="hidden lg:flex text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer bg-transparent border-0 transition-colors"
+              style={{ color: sidebarText }}
+              className="hidden lg:flex p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer bg-transparent border-0 transition-colors opacity-70 hover:opacity-100"
               title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
             >
               {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
@@ -334,10 +390,19 @@ export default function SuperAdminLayout({
           </div>
 
           {/* Navigation Items */}
-          <div className="flex-1 overflow-y-auto py-5 px-3 space-y-6 bg-white">
+          <div
+            style={{ backgroundColor: sidebarBg }}
+            className="flex-1 overflow-y-auto py-5 px-3 space-y-6"
+          >
             <div>
               {sidebarOpen && (
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
+                <p
+                  style={{
+                    color: isDarkSidebar ? 'rgba(255,255,255,0.45)' : sidebarText,
+                    opacity: isDarkSidebar ? 1 : 0.7,
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider px-3 mb-2"
+                >
                   Management
                 </p>
               )}
@@ -355,26 +420,28 @@ export default function SuperAdminLayout({
                       href={link.href}
                       onClick={() => setMobileMenuOpen(false)}
                       title={!sidebarOpen ? link.name : undefined}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all no-underline ${
-                        isActive
-                          ? 'bg-blue-50 text-[#0b4da2] border-l-4 border-[#0b4da2] shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-l-4 border-transparent'
-                      }`}
+                      style={{
+                        backgroundColor: isActive ? sidebarActiveBg : 'transparent',
+                        color: isActive ? sidebarActiveText : sidebarText,
+                        borderLeftColor: isActive ? sidebarActiveText : 'transparent',
+                      }}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all no-underline border-l-4 shadow-2xs hover:opacity-90`}
                     >
                       <Icon
                         size={18}
-                        className={isActive ? 'text-[#0b4da2] shrink-0' : 'text-slate-400 shrink-0'}
+                        style={{ color: isActive ? sidebarActiveText : sidebarText }}
+                        className="shrink-0"
                       />
                       {sidebarOpen && (
                         <div className="flex-1 flex items-center justify-between truncate">
                           <span className="truncate">{link.name}</span>
                           {link.badge && (
                             <span
-                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                                isActive
-                                  ? 'bg-[#0b4da2] text-white'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
+                              style={{
+                                backgroundColor: isActive ? sidebarActiveText : isDarkSidebar ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                color: isActive ? '#ffffff' : sidebarText,
+                              }}
+                              className="text-[10px] px-2 py-0.5 rounded-full font-bold"
                             >
                               {link.badge}
                             </span>
@@ -390,7 +457,13 @@ export default function SuperAdminLayout({
             {/* Public Links */}
             <div>
               {sidebarOpen && (
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
+                <p
+                  style={{
+                    color: isDarkSidebar ? 'rgba(255,255,255,0.45)' : sidebarText,
+                    opacity: isDarkSidebar ? 1 : 0.7,
+                  }}
+                  className="text-[10px] font-bold uppercase tracking-wider px-3 mb-2"
+                >
                   Public Portals
                 </p>
               )}
@@ -399,13 +472,14 @@ export default function SuperAdminLayout({
                   href="/customers"
                   target="_blank"
                   title={!sidebarOpen ? 'Customers & Workers Directory' : undefined}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-600 hover:text-[#0b4da2] hover:bg-slate-50 transition-all no-underline border-l-4 border-transparent"
+                  style={{ color: sidebarText }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium hover:opacity-80 transition-all no-underline border-l-4 border-transparent"
                 >
-                  <Users size={18} className="text-slate-400 shrink-0" />
+                  <Users size={18} style={{ color: sidebarText, opacity: 0.8 }} className="shrink-0" />
                   {sidebarOpen && (
                     <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">Customer Directory</span>
-                      <ExternalLink size={12} className="text-slate-400" />
+                      <ExternalLink size={12} style={{ color: sidebarText, opacity: 0.6 }} />
                     </div>
                   )}
                 </Link>
@@ -414,13 +488,14 @@ export default function SuperAdminLayout({
                   href="/companies"
                   target="_blank"
                   title={!sidebarOpen ? 'Public Employers Directory' : undefined}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-600 hover:text-[#0b4da2] hover:bg-slate-50 transition-all no-underline border-l-4 border-transparent"
+                  style={{ color: sidebarText }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium hover:opacity-80 transition-all no-underline border-l-4 border-transparent"
                 >
-                  <Globe2 size={18} className="text-slate-400 shrink-0" />
+                  <Globe2 size={18} style={{ color: sidebarText, opacity: 0.8 }} className="shrink-0" />
                   {sidebarOpen && (
                     <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">Public Employers</span>
-                      <ExternalLink size={12} className="text-slate-400" />
+                      <ExternalLink size={12} style={{ color: sidebarText, opacity: 0.6 }} />
                     </div>
                   )}
                 </Link>
@@ -429,13 +504,14 @@ export default function SuperAdminLayout({
                   href="/mypass"
                   target="_blank"
                   title={!sidebarOpen ? 'MYPASS Immigration System' : undefined}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-600 hover:text-[#0b4da2] hover:bg-slate-50 transition-all no-underline border-l-4 border-transparent"
+                  style={{ color: sidebarText }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium hover:opacity-80 transition-all no-underline border-l-4 border-transparent"
                 >
-                  <Shield size={18} className="text-slate-400 shrink-0" />
+                  <Shield size={18} style={{ color: sidebarText, opacity: 0.8 }} className="shrink-0" />
                   {sidebarOpen && (
                     <div className="flex-1 flex items-center justify-between truncate">
                       <span className="truncate">MYPASS Portal</span>
-                      <ExternalLink size={12} className="text-slate-400" />
+                      <ExternalLink size={12} style={{ color: sidebarText, opacity: 0.6 }} />
                     </div>
                   )}
                 </Link>
@@ -444,9 +520,19 @@ export default function SuperAdminLayout({
           </div>
 
           {/* User Profile & Sign Out at Bottom */}
-          <div className="p-3 border-t border-slate-200 bg-slate-50">
+          <div
+            style={{
+              backgroundColor: sidebarBg,
+              borderTopColor: sidebarBorder,
+            }}
+            className="p-3 border-t"
+          >
             <div
-              className={`flex items-center gap-3 p-2 rounded-xl bg-white border border-slate-200 shadow-xs ${
+              style={{
+                backgroundColor: isDarkSidebar ? 'rgba(255,255,255,0.06)' : '#ffffff',
+                borderColor: sidebarBorder,
+              }}
+              className={`flex items-center gap-3 p-2 rounded-xl border shadow-xs ${
                 !sidebarOpen ? 'justify-center' : ''
               }`}
             >
@@ -456,14 +542,20 @@ export default function SuperAdminLayout({
               {sidebarOpen && (
                 <div className="flex-1 truncate">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-slate-900 m-0 truncate">
+                    <p
+                      style={{ color: isDarkSidebar ? '#f8fafc' : '#0f172a' }}
+                      className="text-xs font-bold m-0 truncate"
+                    >
                       Super Admin
                     </p>
                     <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 py-0.2 rounded">
                       ROOT
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 m-0 truncate">
+                  <p
+                    style={{ color: sidebarText, opacity: 0.7 }}
+                    className="text-[10px] m-0 truncate"
+                  >
                     superadmin@admin.com
                   </p>
                 </div>

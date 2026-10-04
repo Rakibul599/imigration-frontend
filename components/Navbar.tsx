@@ -126,6 +126,13 @@ export default function Navbar() {
     setMenuOpen(false);
   }, [pathname]);
 
+  const formatRoleName = (role?: string) => {
+    if (!role) return '';
+    if (role === 'SUPER_ADMIN') return 'Super Admin';
+    if (role === 'MasterAdmin') return 'Master Admin';
+    return role.replace(/_/g, ' ');
+  };
+
   return (
     <>
       {/* Top Strip */}
@@ -152,12 +159,12 @@ export default function Navbar() {
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
                   <span className="underline decoration-emerald-400/40 hover:decoration-white truncate max-w-[180px]">
-                    {currentUser.name} ({currentUser.role})
+                    {currentUser.name} ({formatRoleName(currentUser.role)})
                   </span>
                 </Link>
               ) : (
                 <span className="text-emerald-300 font-semibold text-xs truncate max-w-[140px]">
-                  {currentUser.name} ({currentUser.role})
+                  {currentUser.name} ({formatRoleName(currentUser.role)})
                 </span>
               )}
               <button
@@ -234,8 +241,8 @@ export default function Navbar() {
                     <span className="font-bold text-slate-900 group-hover:text-[#0b4da2] max-w-[160px] truncate transition-colors">
                       {currentUser?.name}
                     </span>
-                    <span className="text-[10px] bg-blue-100 text-[#0b4da2] px-1.5 py-0.2 rounded font-black uppercase">
-                      {currentUser?.role}
+                    <span className="text-[10px] bg-blue-100 text-[#0b4da2] px-1.5 py-0.2 rounded font-bold">
+                      {formatRoleName(currentUser?.role)}
                     </span>
                   </Link>
                 ) : (
@@ -244,8 +251,8 @@ export default function Navbar() {
                     <span className="font-semibold text-slate-800 max-w-[140px] truncate">
                       {currentUser?.name}
                     </span>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">
-                      ({currentUser?.role})
+                    <span className="text-[10px] text-slate-500 font-bold">
+                      ({formatRoleName(currentUser?.role)})
                     </span>
                   </div>
                 )}
@@ -298,7 +305,7 @@ export default function Navbar() {
                     <div className="absolute -top-3 left-0 w-full h-3" />
 
                     {/* Header */}
-                    <div className="px-3 pt-1.5 pb-2 text-[10px] font-bold text-slate-400 tracking-wider uppercase flex items-center justify-between border-b border-slate-100 mb-1.5">
+                    <div className="px-3 pt-1.5 pb-2 text-[10px] font-bold text-slate-400 flex items-center justify-between border-b border-slate-100 mb-1.5">
                       <span>Portal Access</span>
                       <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold lowercase">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -406,7 +413,7 @@ export default function Navbar() {
 
                 {/* Mobile View Navigation Items for Login */}
                 <div className="min-[701px]:hidden border-t border-slate-100 pt-3 pb-2 mt-2">
-                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">
+                  <div className="text-[11px] font-bold text-slate-500 mb-2 px-1">
                     Portal Login
                   </div>
                   <div className="flex flex-col gap-2">
@@ -487,7 +494,7 @@ export default function Navbar() {
                 <div className="flex items-center justify-between px-1 mb-2">
                   <div>
                     <div className="text-xs font-bold text-slate-800">{currentUser?.name}</div>
-                    <div className="text-[10px] text-slate-500">{currentUser?.email} ({currentUser?.role})</div>
+                    <div className="text-[10px] text-slate-500">{currentUser?.email} ({formatRoleName(currentUser?.role)})</div>
                   </div>
                   <button
                     onClick={() => {

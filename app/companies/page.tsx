@@ -351,33 +351,13 @@ export default function CompaniesPage() {
       {/* Main Content Area */}
       <div className="w-full max-w-[1200px] mx-auto px-6 py-8 sm:py-10 flex-1 relative z-10">
         {/* Page Title with Underline */}
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-normal text-slate-800 tracking-tight m-0">
-              Please select a company
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Authorized employer entities registered with Malaysian Foreign Worker Portal.
-            </p>
-          </div>
-
-          {currentUser && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                <UserCheck size={14} className="text-emerald-600" />
-                <span>{currentUser.name}</span>
-                <span className="text-slate-400 font-mono text-[11px]">({currentUser.role})</span>
-              </span>
-              <button
-                onClick={handleLogOut}
-                className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer bg-white"
-                title="Log out of session"
-              >
-                <LogOut size={13} />
-                <span>Logout</span>
-              </button>
-            </div>
-          )}
+        <div className="mb-6">
+          <h1 className="text-xl sm:text-2xl font-normal text-slate-800 tracking-tight m-0">
+            Please select a company
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Authorized employer entities registered with Malaysian Foreign Worker Portal.
+          </p>
         </div>
         <div className="w-full border-b border-slate-200 mb-6" />
 
@@ -493,35 +473,6 @@ export default function CompaniesPage() {
           </div>
         )}
 
-        {/* Administrator Full Access Banner */}
-        {!isRestrictedRole && currentUser && (
-          <div className="mb-6 bg-blue-50/90 border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-[#0b4da2] text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
-                <ShieldCheck size={22} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-600 text-white px-2.5 py-0.5 rounded-md">
-                    Administrator Full Access Active
-                  </span>
-                  <span className="text-xs text-slate-500 font-mono font-medium">
-                    ID: {currentUser.employee_code || 'ADMIN'}
-                  </span>
-                </div>
-                <div className="text-sm font-bold text-slate-900 mt-1">
-                  Logged in as: {currentUser.name}{' '}
-                  <span className="text-xs font-normal text-slate-500">
-                    ({currentUser.email})
-                  </span>
-                </div>
-                <div className="text-xs text-slate-600 mt-1">
-                  Viewing all <strong>{accessibleCompanies.length}</strong> employer companies. Company registration is managed exclusively via the Super Administrator console.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Action Feedback Banner */}
         {actionFeedback && (

@@ -80,6 +80,7 @@ export type Company = {
   name: string;
   roc: string; // Registration of Companies number
   sector: string;
+  sectors?: string[];
   description: string;
   logo: string;
   tag?: string;

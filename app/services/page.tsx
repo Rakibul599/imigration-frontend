@@ -33,7 +33,11 @@ import {
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Company } from '@/lib/companies';
-import { getStoredCompanies } from '@/lib/companyStorage';
+import {
+  getStoredCompanies,
+  fetchCompaniesFromBackend,
+  subscribeToCompanyChanges,
+} from '@/lib/companyStorage';
 import {
   ServiceCard,
   getStoredServices,
@@ -72,7 +76,22 @@ function ServicesContent() {
   const companyParam = searchParams.get('company');
   const verifiedServiceParam = searchParams.get('verifiedService');
 
-  const allCompanies = typeof window !== 'undefined' ? getStoredCompanies() : [];
+  const [allCompanies, setAllCompanies] = useState<Company[]>(() => {
+    return typeof window !== 'undefined' ? getStoredCompanies() : [];
+  });
+
+  useEffect(() => {
+    fetchCompaniesFromBackend()
+      .then((comps) => {
+        if (comps && comps.length > 0) setAllCompanies(comps);
+      })
+      .catch(() => {});
+
+    const unsubComp = subscribeToCompanyChanges(() => {
+      setAllCompanies(getStoredCompanies());
+    });
+    return unsubComp;
+  }, []);
 
   const [query, setQuery] = useState('');
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -245,22 +264,77 @@ function ServicesContent() {
     }
   }, [searchParams, serviceList, currentUser]);
 
+  // Compute comma-separated list of sectors for active company
+  const companySectorsDisplay = useMemo(() => {
+    const list: string[] = [];
+
+    // 1. Check activeCompany.sectors array
+    if (activeCompany.sectors && Array.isArray(activeCompany.sectors)) {
+      activeCompany.sectors.forEach((s) => {
+        const trimmed = String(s).trim();
+        if (trimmed && !list.includes(trimmed)) list.push(trimmed);
+      });
+    }
+
+    // 2. Check activeCompany.sector string (may be comma-separated or JSON string)
+    if (activeCompany.sector) {
+      const raw = String(activeCompany.sector).trim();
+      if (raw.startsWith('[') && raw.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((s) => {
+              const trimmed = String(s).trim();
+              if (trimmed && !list.includes(trimmed)) list.push(trimmed);
+            });
+          }
+        } catch {}
+      } else {
+        raw.split(',').forEach((s) => {
+          const trimmed = s.trim();
+          if (trimmed && !list.includes(trimmed)) list.push(trimmed);
+        });
+      }
+    }
+
+    // 3. Check workingSector from existing customers of this company
+    if (companyCustomers && companyCustomers.length > 0) {
+      companyCustomers.forEach((cust) => {
+        const sec = (cust.working_sector || (cust as any).workingSector)?.trim();
+        if (sec && !list.includes(sec)) {
+          list.push(sec);
+        }
+      });
+    }
+
+    return list.length > 0 ? list.join(', ') : 'General Services';
+  }, [activeCompany, companyCustomers]);
+
   // Compute document count per service card for the active company
   const activeCompanyDocCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     companyCustomers.forEach((cust) => {
       if (Array.isArray(cust.documents)) {
         cust.documents.forEach((doc) => {
-          if (doc.service_id) {
-            counts[doc.service_id] = (counts[doc.service_id] || 0) + 1;
-          } else if (doc.service_name) {
-            const matched = serviceList.find(
-              (s) => s.title.toLowerCase() === doc.service_name?.toLowerCase()
-            );
-            if (matched) {
-              counts[matched.id] = (counts[matched.id] || 0) + 1;
+          const docSvcId = (doc.service_id || '').toLowerCase().trim();
+          const docSvcName = (doc.service_name || '').toLowerCase().trim();
+
+          serviceList.forEach((s) => {
+            const targetId = s.id.toLowerCase().trim();
+            const targetTitle = s.title.toLowerCase().trim();
+
+            const isMatch =
+              (docSvcId && docSvcId === targetId) ||
+              (targetTitle && docSvcName && docSvcName === targetTitle) ||
+              (docSvcId && targetTitle && docSvcId === targetTitle) ||
+              (targetId && docSvcName && targetId === docSvcName) ||
+              (docSvcId && targetId && docSvcId.replace(/-/g, '') === targetId.replace(/-/g, '')) ||
+              (docSvcName && targetTitle && docSvcName.replace(/\s+/g, '') === targetTitle.replace(/\s+/g, ''));
+
+            if (isMatch) {
+              counts[s.id] = (counts[s.id] || 0) + 1;
             }
-          }
+          });
         });
       }
     });
@@ -380,20 +454,28 @@ function ServicesContent() {
                 />
               </div>
               <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase">
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Authenticated Employer
                   </span>
-                  <span className="text-blue-200 text-xs font-mono">{activeCompany.roc}</span>
                 </div>
                 <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-white m-0">
                   {activeCompany.name}
                 </h1>
-                <p className="text-xs sm:text-sm text-blue-100/90 mt-1 font-medium">
-                  Sector: {activeCompany.sector} • Active Registered Foreign Workers:{' '}
-                  {activeCompany.totalWorkers.toLocaleString()}
-                </p>
+                <div className="mt-1.5 flex flex-col gap-0.5 text-xs sm:text-sm text-blue-100/90 font-medium">
+                  {activeCompany.roc && (
+                    <p className="m-0">
+                      ROC No: <span className="font-mono font-semibold text-white tracking-wide">{activeCompany.roc}</span>
+                    </p>
+                  )}
+                  <p className="m-0">
+                    Sector: <span className="font-semibold text-white">{companySectorsDisplay}</span> • Active Registered Foreign Workers:{' '}
+                    <strong className="text-white font-semibold">
+                      {activeCompany.totalWorkers.toLocaleString()}
+                    </strong>
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -407,7 +489,7 @@ function ServicesContent() {
                 >
                   <LayoutDashboard size={16} className="text-slate-950" />
                   <span className="tracking-wide">Your Panel</span>
-                  <span className="text-[10px] bg-slate-950/15 text-slate-950 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                  <span className="text-[10px] bg-slate-950/15 text-slate-950 px-1.5 py-0.5 rounded font-extrabold">
                     {panelInfo.panelBadge}
                   </span>
                 </Link>
@@ -448,7 +530,7 @@ function ServicesContent() {
                 <div>
                   <h4 className="text-sm font-bold m-0 text-emerald-950 flex items-center gap-2">
                     <span>Authenticated Session Active: {verifiedService.title}</span>
-                    <span className="text-[10px] font-mono bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded-full uppercase font-bold">
+                    <span className="text-[10px] font-mono bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded-full font-bold">
                       Connected
                     </span>
                   </h4>
@@ -469,38 +551,41 @@ function ServicesContent() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 mb-8">
-            <div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mb-1">
-                <Link href="/" className="hover:text-blue-600 transition-colors">
-                  Home
-                </Link>
-                <ChevronRight size={13} />
-                <Link href="/#companies" className="hover:text-blue-600 transition-colors">
-                  Employers
-                </Link>
-                <ChevronRight size={13} />
-                <span className="text-[#2b74c9] font-bold uppercase tracking-wider">
-                  {activeCompany.name} Services
-                </span>
-              </div>
-              <h2 className="text-[#1a283c] text-3xl md:text-4xl font-extrabold tracking-tight m-0">
-                Digital Immigration &amp; Employer Services ({allowedServiceList.length})
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                Select any digital service below to view tagged customer documents, passports, and
-                worker dossiers for {activeCompany.name}.
-              </p>
+          <div className="mb-6 flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+              <Link href="/" className="hover:text-blue-600 transition-colors">
+                Home
+              </Link>
+              <ChevronRight size={13} />
+              <Link href="/#companies" className="hover:text-blue-600 transition-colors">
+                Employers
+              </Link>
+              <ChevronRight size={13} />
+              <span className="text-[#2b74c9] font-bold">
+                {activeCompany.name} Services
+              </span>
             </div>
-            <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-lg px-3.5 py-2.5 w-full sm:w-72 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-sm">
-              <Search size={18} className="shrink-0 text-slate-400" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search services..."
-                aria-label="Search services"
-                className="border-0 bg-transparent text-slate-800 text-xs outline-none w-full placeholder:text-slate-400"
-              />
+
+            <div className="flex items-center justify-start">
+              <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 w-full sm:w-80 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
+                <Search size={18} className="shrink-0 text-slate-400" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search services..."
+                  aria-label="Search services"
+                  className="border-0 bg-transparent text-slate-800 text-xs outline-none w-full placeholder:text-slate-400 font-medium"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -541,22 +626,25 @@ function ServicesContent() {
                 const isCardVerified = verifiedServiceParam === service.id;
                 const docCount = activeCompanyDocCounts[service.id] || 0;
 
-                // Core cards preserve exact routing structure!
+                // Routing:
+                // 1. Customer card -> /customers?company=...
+                // 2. Download Document card -> /document-download?company=... (all documents)
+                // 3. Other service cards -> /document-download?company=...&service=... (only tagged documents)
                 const cardHref = isCoreCustomer
                   ? `/customers?company=${encodeURIComponent(activeCompany.id)}`
                   : isCoreDocDownload
                   ? `/document-download?company=${encodeURIComponent(activeCompany.id)}`
-                  : '#';
+                  : `/document-download?company=${encodeURIComponent(activeCompany.id)}&service=${encodeURIComponent(service.id)}`;
 
                 const actionText = isCoreCustomer
                   ? 'Open Customers'
                   : isCoreDocDownload
                   ? 'Download Documents'
                   : docCount > 0
-                  ? `View ${docCount} Document${docCount > 1 ? 's' : ''}`
-                  : 'View Documents';
+                  ? `Download Documents (${docCount})`
+                  : 'Download Documents';
 
-                const CardElement = isCoreCustomer || isCoreDocDownload ? Link : 'div';
+                const CardElement = Link;
                 const animClass = getServiceCardAnimationClass(cardAnimation, index);
 
                 return (
@@ -564,13 +652,6 @@ function ServicesContent() {
                     href={cardHref}
                     id={`service-card-${index}`}
                     key={service.id || service.title}
-                    onClick={(e: React.MouseEvent) => {
-                      if (!isCoreCustomer && !isCoreDocDownload) {
-                        e.preventDefault();
-                        setSelectedServiceModal(service);
-                        setDocSearchQuery('');
-                      }
-                    }}
                     style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
                     className={`group relative flex flex-col items-center text-center bg-white border rounded-[20px] p-8 md:p-9 shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:-translate-y-1.5 transition-all duration-300 cursor-pointer min-h-[300px] outline-none font-inherit no-underline select-none ${animClass} ${
                       isCardVerified
@@ -596,17 +677,17 @@ function ServicesContent() {
                         </h3>
                         <div className="flex items-center gap-2 mt-1 flex-wrap justify-center">
                           {service.tag && (
-                            <span className="inline-block bg-blue-50 border border-blue-200 text-blue-600 text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase pointer-events-none">
+                            <span className="inline-block bg-blue-50 border border-blue-200 text-blue-600 text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full pointer-events-none">
                               {service.tag}
                             </span>
                           )}
                           {!isCoreCustomer && !isCoreDocDownload && docCount > 0 && (
-                            <span className="inline-flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase pointer-events-none">
+                            <span className="inline-flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full pointer-events-none">
                               <FileText size={10} /> {docCount} Files Attached
                             </span>
                           )}
                           {isCardVerified && (
-                            <span className="inline-flex items-center gap-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full uppercase pointer-events-none">
+                            <span className="inline-flex items-center gap-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[9px] font-bold tracking-wider px-2 py-0.5 rounded-full pointer-events-none">
                               <CheckCircle2 size={10} className="text-emerald-600" /> Active
                             </span>
                           )}
@@ -620,7 +701,7 @@ function ServicesContent() {
                     {/* Card Action Link */}
                     <div className="mt-4 pt-3 border-t border-slate-100 w-full flex items-center justify-between text-xs text-slate-500 pointer-events-none">
                       <span className="text-[11px] text-slate-400 font-medium">
-                        {isCoreCustomer || isCoreDocDownload ? 'Official Portal' : 'Employer Dossier'}
+                        {isCoreCustomer ? 'Official Portal' : 'Download Service Repository'}
                       </span>
                       <span className="inline-flex items-center gap-1 font-semibold text-[#0b4da2] group-hover:translate-x-1 transition-transform">
                         {actionText} <ArrowRight size={14} />
@@ -656,11 +737,11 @@ function ServicesContent() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                    <span className="text-xs bg-white/20 text-white px-2.5 py-0.5 rounded-full font-bold tracking-wider">
                       Service Document Dossier
                     </span>
                     {selectedServiceModal.tag && (
-                      <span className="text-xs bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold uppercase">
+                      <span className="text-xs bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full font-bold">
                         {selectedServiceModal.tag}
                       </span>
                     )}

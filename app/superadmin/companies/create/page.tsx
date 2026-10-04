@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -50,6 +50,7 @@ import {
   saveStoredCompany,
   updateStoredCompany,
 } from '@/lib/companyStorage';
+import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
 import Select2Search from '@/components/Select2Search';
 import { ALL_WORLD_LANGUAGES } from '@/lib/languages';
 import { ALL_WORLD_CURRENCIES } from '@/lib/currencies';
@@ -143,6 +144,11 @@ function CreateCompanyFormContent() {
   const [bankAccountName, setBankAccountName] = useState('');
   const [bankAccountNo, setBankAccountNo] = useState('');
   const [sector, setSector] = useState(SECTOR_OPTIONS[0]);
+  const [companySectors, setCompanySectors] = useState<string[]>([SECTOR_OPTIONS[0]]);
+  const [sectorsList, setSectorsList] = useState<WorkingSector[]>([]);
+  const [isAddingSector, setIsAddingSector] = useState(false);
+  const [newSectorName, setNewSectorName] = useState('');
+  const [isSavingSector, setIsSavingSector] = useState(false);
   const [totalWorkers, setTotalWorkers] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState('Verified JIM');
@@ -171,6 +177,14 @@ function CreateCompanyFormContent() {
     doc: DirectorExcelDocument | null;
   } | null>(null);
 
+  useEffect(() => {
+    fetchWorkingSectors()
+      .then((list) => {
+        if (list && list.length > 0) setSectorsList(list);
+      })
+      .catch(() => {});
+  }, []);
+
   // Generate random default ROC on new company
   useEffect(() => {
     if (!editId) {
@@ -194,7 +208,13 @@ function CreateCompanyFormContent() {
         setBankName(comp.bankName || '');
         setBankAccountName(comp.bankAccountName || '');
         setBankAccountNo(comp.bankAccountNo || '');
-        setSector(comp.sector || SECTOR_OPTIONS[0]);
+        const secStr = comp.sector || SECTOR_OPTIONS[0];
+        const secArr = comp.sectors && Array.isArray(comp.sectors) && comp.sectors.length > 0
+          ? comp.sectors
+          : secStr.split(',').map((s) => s.trim()).filter(Boolean);
+        const finalSecs = secArr.length > 0 ? secArr : [SECTOR_OPTIONS[0]];
+        setCompanySectors(finalSecs);
+        setSector(finalSecs[0]);
         setTotalWorkers(comp.totalWorkers || 0);
         setDescription(comp.description || '');
         setTag(comp.tag || 'Verified JIM');
@@ -215,6 +235,53 @@ function CreateCompanyFormContent() {
       }
     }
   }, [editId]);
+
+  const allAvailableSectors = useMemo(() => {
+    const list = new Set<string>();
+    if (sector) list.add(sector);
+    companySectors.forEach((s) => list.add(s));
+    SECTOR_OPTIONS.forEach((s) => list.add(s));
+    sectorsList.forEach((s) => list.add(s.name));
+    return Array.from(list);
+  }, [sector, companySectors, sectorsList]);
+
+  const handleCreateSector = async () => {
+    if (!newSectorName.trim()) return;
+    setIsSavingSector(true);
+    try {
+      const created = await createWorkingSector(newSectorName.trim());
+      setSectorsList((prev) => [...prev, created]);
+      const addedName = created.name;
+      setCompanySectors((prev) => (prev.includes(addedName) ? prev : [...prev, addedName]));
+      setSector(addedName);
+      setNewSectorName('');
+      setIsAddingSector(false);
+    } catch (err) {
+      console.error('Failed to create working sector:', err);
+    } finally {
+      setIsSavingSector(false);
+    }
+  };
+
+  const handleAddExistingSectorToCompany = (secToAdd: string) => {
+    if (!secToAdd) return;
+    if (!companySectors.includes(secToAdd)) {
+      setCompanySectors((prev) => [...prev, secToAdd]);
+    }
+    setSector(secToAdd);
+  };
+
+  const handleRemoveSectorFromCompany = (secToRemove: string) => {
+    if (companySectors.length <= 1) {
+      alert('The company must have at least one assigned working sector.');
+      return;
+    }
+    const updated = companySectors.filter((s) => s !== secToRemove);
+    setCompanySectors(updated);
+    if (sector === secToRemove) {
+      setSector(updated[0]);
+    }
+  };
 
   // Handle Logo File Upload (Save to LocalStorage via Base64)
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -701,7 +768,8 @@ function CreateCompanyFormContent() {
         id: sanitizedId,
         name: name.trim().toUpperCase(),
         roc: roc.trim(),
-        sector,
+        sector: companySectors.join(', ') || sector,
+        sectors: companySectors.length > 0 ? companySectors : [sector],
         tag,
         totalWorkers: Number(totalWorkers) || 0,
         logo: logo || '',
@@ -864,6 +932,102 @@ function CreateCompanyFormContent() {
                   placeholder="ROC-202401045921"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                 />
+              </div>
+            </div>
+
+            {/* Working Sector */}
+            <div className="sm:col-span-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 m-0">
+                    Company Working Sector(s) <span className="text-red-500">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500 m-0">
+                    Only sectors assigned to this company will appear in customer registration dropdowns.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingSector(!isAddingSector)}
+                  className="px-2.5 py-1 bg-blue-50 text-[#0b4da2] hover:bg-blue-100 rounded-lg text-xs font-bold inline-flex items-center gap-1 border border-blue-200 cursor-pointer transition-colors"
+                >
+                  <Plus size={13} />
+                  <span>{isAddingSector ? 'Cancel' : '+ Add New Sector'}</span>
+                </button>
+              </div>
+
+              {/* Inline Add New Sector Box */}
+              {isAddingSector && (
+                <div className="flex items-center gap-2 mb-3 p-3 bg-blue-50/80 border border-blue-200 rounded-xl animate-in fade-in duration-150">
+                  <input
+                    type="text"
+                    value={newSectorName}
+                    onChange={(e) => setNewSectorName(e.target.value)}
+                    placeholder="Enter new sector name (e.g. Oil & Gas, Aviation, Security Services)..."
+                    className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCreateSector();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateSector}
+                    disabled={isSavingSector || !newSectorName.trim()}
+                    className="px-3.5 py-1.5 bg-[#0b4da2] hover:bg-[#083a7c] text-white rounded-lg text-xs font-bold cursor-pointer border-0 disabled:opacity-50"
+                  >
+                    {isSavingSector ? 'Saving...' : 'Create & Assign to Company'}
+                  </button>
+                </div>
+              )}
+
+              {/* Active Assigned Sectors Badges */}
+              <div className="mb-2 flex flex-wrap gap-2 items-center min-h-[38px] p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                  Assigned Sectors:
+                </span>
+                {companySectors.map((secName) => (
+                  <span
+                    key={secName}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-blue-100 text-[#0b4da2] border border-blue-200 shadow-2xs"
+                  >
+                    <Briefcase size={12} className="shrink-0" />
+                    <span>{secName}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSectorFromCompany(secName)}
+                      className="text-blue-500 hover:text-red-600 ml-0.5 p-0.5 rounded cursor-pointer bg-transparent border-0"
+                      title="Remove sector"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              {/* Add Existing Sector Dropdown */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Briefcase size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <select
+                    value={sector}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSector(val);
+                      handleAddExistingSectorToCompany(val);
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">-- Choose existing sector to add to this company --</option>
+                    {allAvailableSectors.map((s: string) => (
+                      <option key={s} value={s}>
+                        {s} {companySectors.includes(s) ? '✓ (Assigned)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 

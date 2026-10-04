@@ -31,8 +31,11 @@ export interface CustomerRecord {
   basic_salary?: string;
   overtime?: string; // "our time"
   company_id?: string;
+  other_company_name?: string;
+  other_company_boss_phone?: string;
+  other_company_address?: string;
   documents?: CustomerDocument[];
-  status: 'active' | 'pending' | 'inactive';
+  status: 'active' | 'pending' | 'inactive' | 'absent';
   created_at?: string;
   updated_at?: string;
   // Legacy fields for backward compatibility

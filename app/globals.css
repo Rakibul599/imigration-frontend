@@ -58,7 +58,7 @@ button, input { font: inherit; }
 .eyebrow, .section-kicker { color: #79bcff; font-size: 11px; font-weight: 700; letter-spacing: .15em; margin: 0 0 16px; }
 .eyebrow { align-items: center; color: #cfe7ff; display: flex; gap: 10px; }
 .eyebrow-line { background: var(--yellow); display: inline-block; height: 2px; width: 28px; }
-.hero h1 { font-size: clamp(38px, 5vw, 62px); letter-spacing: -.055em; line-height: .95; margin: 0; text-transform: uppercase; }
+.hero h1 { font-size: clamp(38px, 5vw, 62px); letter-spacing: -.055em; line-height: .95; margin: 0; text-transform: none; }
 .hero h1 em { color: var(--yellow); font-style: normal; }
 .hero-subtitle { color: #d8e9ff; font-size: 17px; letter-spacing: .1em; margin: 20px 0 28px; }
 .hero-actions { align-items: center; display: flex; gap: 25px; }
@@ -190,7 +190,12 @@ button, input { font: inherit; }
   font-weight: 700;
   letter-spacing: 0.04em;
   opacity: 0.85;
-  text-transform: uppercase;
+  text-transform: none;
+}
+
+/* Ensure table headers and column titles strictly follow Capitalized Word style and never forced to ALL-CAPS uppercase */
+th, table th {
+  text-transform: none !important;
 }
 @keyframes chartFloat {
   0%, 100% { transform: translateY(0); }
