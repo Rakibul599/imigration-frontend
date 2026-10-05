@@ -499,30 +499,36 @@ export function hasServiceCardAccess(
   if (!user) return true;
   if (user.role === 'SUPER_ADMIN' || user.role === 'MasterAdmin') return true;
 
-  // For Employee: check assigned_service_cards
-  let allowed = user.assigned_service_cards;
+  // For Employee/Customer: check assigned_service_cards
+  let allowedCards: string[] = ['*'];
+  const rawCards = user.assigned_service_cards;
 
-  if (typeof allowed === 'string') {
+  if (rawCards === undefined || rawCards === null) {
+    return true;
+  }
+
+  if (Array.isArray(rawCards)) {
+    allowedCards = rawCards;
+  } else if (typeof rawCards === 'string') {
+    const rawStr: string = rawCards;
     try {
-      const parsed = JSON.parse(allowed);
-      if (Array.isArray(parsed)) allowed = parsed;
-      else if (allowed === '*') allowed = ['*'];
-      else allowed = [allowed];
+      const parsed = JSON.parse(rawStr);
+      if (Array.isArray(parsed)) {
+        allowedCards = parsed.map(String);
+      } else if (parsed === '*') {
+        allowedCards = ['*'];
+      } else {
+        allowedCards = [String(parsed)];
+      }
     } catch {
-      allowed = allowed === '*' ? ['*'] : [allowed];
+      allowedCards = rawStr === '*' ? ['*'] : [rawStr];
     }
   }
 
-  if (allowed === undefined || allowed === null) {
+  if (allowedCards.includes('*') || allowedCards.includes('ALL')) {
     return true;
   }
-  if (!Array.isArray(allowed)) {
-    return true;
-  }
-  if (allowed.includes('*') || allowed.includes('ALL')) {
-    return true;
-  }
-  if (allowed.length === 0) {
+  if (allowedCards.length === 0) {
     return false;
   }
 
@@ -530,7 +536,7 @@ export function hasServiceCardAccess(
   const targetTitle = (cardTitle || '').trim().toLowerCase();
   const targetNormalizedTitle = targetTitle.replace(/[^a-z0-9]/g, '');
 
-  return allowed.some((id) => {
+  return allowedCards.some((id) => {
     const clean = (id || '').trim().toLowerCase();
     if (!clean) return false;
     if (clean === '*' || clean === 'all') return true;
