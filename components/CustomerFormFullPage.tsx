@@ -14,9 +14,13 @@ import {
   Clock,
   Coins,
   DollarSign,
+  Eye,
+  EyeOff,
   FileCheck2,
   FileText,
   Globe2,
+  KeyRound,
+  Lock,
   Mail,
   MapPin,
   Phone,
@@ -27,11 +31,13 @@ import {
   ShieldCheck,
   Trash2,
   Upload,
+  Briefcase,
   User,
   X,
 } from 'lucide-react';
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend, updateStoredCompany } from '@/lib/companyStorage';
+import { AgentRecord, fetchAgents, getStoredAgents } from '@/lib/agentStorage';
 import {
   CustomerDocument,
   CustomerRecord,
@@ -118,6 +124,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     const initialComps = filterPermittedCompanies(getStoredCompanies(), portalType);
     return initialComps[0]?.id || '';
   });
+  const [agents, setAgents] = useState<AgentRecord[]>(() => {
+    return typeof window !== 'undefined' ? getStoredAgents() : [];
+  });
+  const [agentId, setAgentId] = useState<string>('');
   const [passportNo, setPassportNo] = useState('');
   const [passportFile, setPassportFile] = useState<string>('');
   const [nidNo, setNidNo] = useState('');
@@ -141,10 +151,55 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive' | 'absent'>('active');
 
-  // Service cards for tagging uploaded documents
+  // Service cards for tagging uploaded documents & foreign worker portal clearance
   const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
     return typeof window !== 'undefined' ? getStoredServices() : [];
   });
+
+  // Customer Login Access & Clearances
+  const [canLogin, setCanLogin] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('password123');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [customerAssignedCards, setCustomerAssignedCards] = useState<string[]>(['*']);
+
+  const isAllCustomerServicesSelected =
+    customerAssignedCards.includes('*') ||
+    (availableServices.length > 0 &&
+      availableServices.every((s) => customerAssignedCards.includes(s.id)));
+
+  const handleToggleAllCustomerServices = () => {
+    if (isAllCustomerServicesSelected) {
+      setCustomerAssignedCards([]);
+    } else {
+      setCustomerAssignedCards(['*']);
+    }
+  };
+
+  const handleToggleCustomerServiceCard = (cardId: string) => {
+    if (customerAssignedCards.includes('*')) {
+      const allIds = availableServices.map((s) => s.id);
+      setCustomerAssignedCards(allIds.filter((id) => id !== cardId));
+      return;
+    }
+
+    setCustomerAssignedCards((prev) => {
+      const exists = prev.includes(cardId);
+      if (exists) {
+        return prev.filter((id) => id !== cardId);
+      } else {
+        const next = [...prev, cardId];
+        if (availableServices.length > 0 && next.length >= availableServices.length) {
+          return ['*'];
+        }
+        return next;
+      }
+    });
+  };
+
+  const isCustomerCardChecked = (cardId: string) => {
+    return customerAssignedCards.includes('*') || customerAssignedCards.includes(cardId);
+  };
 
   const selectableServices = useMemo(() => {
     return availableServices.filter(
@@ -168,16 +223,20 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     let isMounted = true;
     async function refreshBackgroundData() {
       try {
-        const [allComps, secList, svcList] = await Promise.all([
+        const [allComps, secList, svcList, agentList] = await Promise.all([
           fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
           fetchWorkingSectors(),
           fetchServiceCards().catch(() => getStoredServices()),
+          fetchAgents().catch(() => getStoredAgents()),
         ]);
 
         if (!isMounted) return;
         const permitted = filterPermittedCompanies(allComps, portalType);
         setCompanies(permitted);
         setSectors(secList);
+        if (Array.isArray(agentList)) {
+          setAgents(agentList);
+        }
         if (svcList && svcList.length > 0) {
           setAvailableServices(svcList);
         }
@@ -207,6 +266,9 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     if (cust.company_id) {
       setCompanyId(cust.company_id);
     }
+    if (cust.agent_id) {
+      setAgentId(String(cust.agent_id));
+    }
     setPassportNo(cust.passport_no || '');
     setPassportFile(cust.passport_file || '');
     setNidNo(cust.nid_no || '');
@@ -229,6 +291,14 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     setProfilePicName(cust.profile_pic || cust.profile_image ? 'Existing Profile Image' : '');
     setDocuments(Array.isArray(cust.documents) ? cust.documents : []);
     setStatus(cust.status || 'active');
+    setCanLogin(Boolean(cust.can_login));
+    setLoginUsername(cust.username || '');
+    setLoginPassword(cust.plain_password || cust.password || 'password123');
+    if (Array.isArray(cust.assigned_service_cards)) {
+      setCustomerAssignedCards(cust.assigned_service_cards);
+    } else {
+      setCustomerAssignedCards(['*']);
+    }
   };
 
   // Load customer if editing (immediate from cache, then background fetch)
@@ -268,6 +338,24 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
       badge: c.tag || 'Verified',
     }));
   }, [companies]);
+
+  // Select2 options for recruitment agents
+  const agentOptions: Select2Option[] = useMemo(() => {
+    return [
+      {
+        value: '',
+        label: 'No Agent / Direct Recruitment',
+        subLabel: 'Self-applied / Direct onboarding',
+        badge: 'Direct',
+      },
+      ...agents.map((a) => ({
+        value: String(a.id),
+        label: a.name,
+        subLabel: a.phone ? `Phone: ${a.phone}` : 'No phone recorded',
+        badge: a.notes ? 'With Note' : 'Agent',
+      })),
+    ];
+  }, [agents]);
 
   // File Upload Helper
   const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -408,9 +496,12 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     setIsSubmitting(true);
     setFeedback(null);
 
+    const selectedAgent = agents.find((a) => String(a.id) === agentId);
     const payload: Partial<CustomerRecord> = {
       full_name: fullName.trim(),
       company_id: companyId || (companies[0]?.id || ''),
+      agent_id: agentId || undefined,
+      agent_name: selectedAgent ? selectedAgent.name : undefined,
       passport_no: passportNo.trim(),
       passport_file: passportFile,
       nid_no: nidNo.trim(),
@@ -438,6 +529,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
       })),
       role: 'Worker',
       status: status,
+      can_login: canLogin,
+      username: canLogin ? loginUsername.trim() : undefined,
+      password: canLogin ? loginPassword : undefined,
+      assigned_service_cards: canLogin ? customerAssignedCards : undefined,
     };
 
     try {
@@ -684,6 +779,37 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                   {companies.length > 1 && (
                     <span className="text-slate-400">Searchable Select2</span>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Select Recruitment Agent - Placed below Assigned Employer Company */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Select Recruitment Agent
+              </label>
+              <Select2Search
+                options={agentOptions}
+                value={agentId}
+                onChange={(val) => setAgentId(val)}
+                placeholder="Search & select recruitment agent..."
+                searchPlaceholder="Type agent name, phone or note..."
+                icon={<Briefcase size={15} className="text-slate-400" />}
+              />
+              {agentId ? (
+                <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                  <span className="text-blue-700 font-medium truncate">
+                    Selected Agent: <strong className="font-semibold text-slate-800">{agents.find((a) => String(a.id) === agentId)?.name}</strong>
+                  </span>
+                  {agents.find((a) => String(a.id) === agentId)?.phone && (
+                    <span className="font-mono text-slate-600 shrink-0">
+                      {agents.find((a) => String(a.id) === agentId)?.phone}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-1.5 text-[11px] text-slate-400">
+                  Optional: Associate this foreign worker with a recruitment agent
                 </div>
               )}
             </div>
@@ -1018,6 +1144,201 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Card: Customer / Foreign Worker Login Access & Clearances */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                <KeyRound size={16} />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 m-0">
+                  Login Access &amp; Foreign Worker Portal Credentials
+                </h3>
+                <p className="text-[11px] text-slate-500 m-0">
+                  Enable login access for this worker to access their company&apos;s authorized service cards at <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-[#0b4da2]">/login</code>.
+                </p>
+              </div>
+            </div>
+
+            {/* Main Checkbox / Toggle */}
+            <label className="relative inline-flex items-center cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={canLogin}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setCanLogin(checked);
+                  if (checked && !loginUsername) {
+                    setLoginUsername(passportNo.trim() || `WORKER-${Math.floor(1000 + Math.random() * 9000)}`);
+                  }
+                  if (checked && !loginPassword) {
+                    setLoginPassword('password123');
+                  }
+                }}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0b4da2]"></div>
+              <span className="ml-3 text-xs font-bold text-slate-800">
+                {canLogin ? 'Login Access Enabled' : 'Login Access Disabled'}
+              </span>
+            </label>
+          </div>
+
+          {!canLogin ? (
+            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-center">
+              <p className="text-xs text-slate-500 m-0">
+                Login access is currently <strong className="text-slate-700">disabled</strong>.
+                Credentials will <strong className="text-slate-700">not</strong> be created and this worker will not be able to log in to the system.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Credentials Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                {/* User ID */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      User ID / Login ID <span className="text-red-500">*</span>
+                    </label>
+                    {passportNo && (
+                      <button
+                        type="button"
+                        onClick={() => setLoginUsername(passportNo.trim())}
+                        className="text-[10px] font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer p-0"
+                      >
+                        Use Passport ({passportNo.trim()})
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <User size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={loginUsername}
+                      onChange={(e) => setLoginUsername(e.target.value)}
+                      placeholder="e.g. Passport number or custom User ID"
+                      required={canLogin}
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 font-mono font-semibold focus:outline-hidden focus:border-[#0b4da2]"
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-800">
+                      Portal Password <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setLoginPassword('password123')}
+                      className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-transparent border-0 cursor-pointer p-0"
+                    >
+                      Default: password123
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Enter password"
+                      required={canLogin}
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 font-mono focus:outline-hidden focus:border-[#0b4da2]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 border-0 bg-transparent cursor-pointer p-0"
+                    >
+                      {showLoginPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Service Cards Access & Clearances Section */}
+              <div className="space-y-3 pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 m-0">
+                      Service Cards Clearance ({customerAssignedCards.includes('*') ? availableServices.length : customerAssignedCards.length} Selected)
+                    </h4>
+                    <p className="text-[11px] text-slate-500 m-0">
+                      Select which digital service cards this foreign worker can view in the portal.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerAssignedCards(['*'])}
+                      className="text-[11px] font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer p-0"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerAssignedCards([])}
+                      className="text-[11px] font-bold text-slate-500 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Service Cards Checkbox Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {availableServices.map((card) => {
+                    const checked = isCustomerCardChecked(card.id);
+                    return (
+                      <div
+                        key={card.id}
+                        onClick={() => handleToggleCustomerServiceCard(card.id)}
+                        className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                          checked
+                            ? 'border-[#0b4da2] bg-blue-50/70 shadow-2xs ring-1 ring-blue-200'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                            checked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                          }`}
+                        >
+                          {checked && <Check size={12} strokeWidth={3} />}
+                        </div>
+
+                        <div className="w-10 h-10 rounded-lg bg-white p-1.5 flex items-center justify-center shrink-0 border border-slate-200 shadow-2xs">
+                          <img src={card.image} alt="" className="max-h-full max-w-full object-contain" />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="text-xs font-bold text-slate-900 truncate">{card.title}</div>
+                            {card.tag && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 uppercase shrink-0">
+                                {card.tag}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
+                            {card.description}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 5: Multiple Upload Documents (Name + Date of Issue + Date of Expire + Attachment) */}

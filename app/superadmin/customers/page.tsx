@@ -505,6 +505,11 @@ export default function SuperAdminCustomersPage() {
                             {compMatch ? compMatch.name : (cust.company_id || 'Unassigned')}
                           </span>
                         </span>
+                        {cust.agent_name && (
+                          <div className="text-[10px] text-amber-700 font-medium truncate max-w-[130px] mt-0.5">
+                            Agent: {cust.agent_name}
+                          </div>
+                        )}
                       </td>
 
                       {/* Working Sector */}
@@ -767,6 +772,27 @@ export default function SuperAdminCustomersPage() {
                   <span className="text-[10px] text-blue-900 block font-bold">Working Address / Worksite</span>
                   <span className="text-slate-700">{viewingCustomer.working_address || 'N/A'}</span>
                 </div>
+              </div>
+
+              {/* Login Access Status */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-semibold">Portal Login Access</span>
+                  <span className="font-semibold text-slate-800">
+                    {viewingCustomer.can_login ? (
+                      <span className="text-emerald-700 font-bold">Enabled (User ID: {viewingCustomer.username})</span>
+                    ) : (
+                      <span className="text-slate-500">Disabled (No Login Access)</span>
+                    )}
+                  </span>
+                </div>
+                {viewingCustomer.can_login && (
+                  <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                    {viewingCustomer.assigned_service_cards?.includes('*')
+                      ? 'Full Cards Access'
+                      : `${viewingCustomer.assigned_service_cards?.length || 0} Cards Assigned`}
+                  </span>
+                )}
               </div>
 
               {/* Others Company Information */}

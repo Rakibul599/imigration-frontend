@@ -203,12 +203,13 @@ export default function CompaniesPage() {
 
   // Permission evaluation
   const isEmployeeRole = currentUser?.role === 'Employee';
+  const isCustomerRole = currentUser?.role === 'Customer' || currentUser?.role === 'Worker';
   const isMasterAdminRole = currentUser?.role === 'MasterAdmin';
-  const isRestrictedRole = isEmployeeRole || isMasterAdminRole;
+  const isRestrictedRole = isEmployeeRole || isMasterAdminRole || isCustomerRole;
 
-  const userCanCreate = !isMasterAdminRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_create));
-  const userCanEdit = isMasterAdminRole ? true : (!isEmployeeRole || Boolean(currentUser?.permissions?.can_edit));
-  const userCanDelete = !isMasterAdminRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_delete));
+  const userCanCreate = !isMasterAdminRole && !isCustomerRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_create));
+  const userCanEdit = isMasterAdminRole ? true : (!isCustomerRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_edit)));
+  const userCanDelete = !isMasterAdminRole && !isCustomerRole && (!isEmployeeRole || Boolean(currentUser?.permissions?.can_delete));
 
   // Filter companies: strictly restrict for employees and master admins to their assigned_companies
   const accessibleCompanies = isRestrictedRole
@@ -222,8 +223,13 @@ export default function CompaniesPage() {
         const cleanCompId = (c.id || '').trim().toLowerCase();
         const cleanCompName = (c.name || '').trim().toLowerCase();
         const cleanCompRoc = (c.roc || '').trim().toLowerCase();
-        const cleanDbId = String(c.db_id || '');
+        const cleanDbId = String(c.db_id || '').trim().toLowerCase();
         const cleanCompNormalized = cleanCompName.replace(/[^a-z0-9]/g, '');
+
+        const workerCompId = (currentUser as any)?.company_id ? String((currentUser as any).company_id).trim().toLowerCase() : '';
+        if (workerCompId && (workerCompId === cleanCompId || workerCompId === cleanDbId)) {
+          return true;
+        }
 
         return assigned.some((raw) => {
           const id = (raw || '').trim().toLowerCase();

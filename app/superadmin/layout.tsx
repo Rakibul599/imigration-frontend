@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  Briefcase,
   Building2,
   ChevronRight,
   ExternalLink,
@@ -60,6 +61,7 @@ export default function SuperAdminLayout({
   const [customerCount, setCustomerCount] = useState<number>(0);
   const [passwordCount, setPasswordCount] = useState<number>(0);
   const [serviceCount, setServiceCount] = useState<number>(0);
+  const [agentCount, setAgentCount] = useState<number>(0);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SIDEBAR_STYLING as any);
 
   // Subscribe to site and sidebar styling settings
@@ -196,6 +198,24 @@ export default function SuperAdminLayout({
         }
       })
       .catch(() => {});
+
+    // Fetch agents count
+    fetch(`${apiBase}/agents`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setAgentCount(data.length);
+        }
+      })
+      .catch(() => {});
+
+    const handleAgentsUpdate = (e: any) => {
+      if (Array.isArray(e.detail)) {
+        setAgentCount(e.detail.length);
+      }
+    };
+    window.addEventListener('superadmin_agents_updated', handleAgentsUpdate);
+    return () => window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
   }, [pathname, isLoginPage]);
 
   // If this is the login page, render children directly without admin sidebar
@@ -255,6 +275,12 @@ export default function SuperAdminLayout({
       href: '/superadmin/customers',
       icon: UserCheck,
       badge: customerCount > 0 ? `${customerCount}` : undefined,
+    },
+    {
+      name: 'Agent Management',
+      href: '/superadmin/agents',
+      icon: Briefcase,
+      badge: agentCount > 0 ? `${agentCount}` : undefined,
     },
     {
       name: 'Service Cards',

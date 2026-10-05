@@ -52,7 +52,7 @@ import {
   getStoredServices,
   fetchServiceCards,
 } from '@/lib/serviceStorage';
-import { AuthUser, getCurrentUser, getMasterAdminUser, hasCompanyAccess } from '@/lib/auth';
+import { AuthUser, getCurrentUser, getMasterAdminUser, hasCompanyAccess, hasServiceCardAccess } from '@/lib/auth';
 
 // Standardized flat document structure for the repository table
 export interface RepositoryDocument {
@@ -435,7 +435,7 @@ function DocumentDownloadContent() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | 'ALL'>('ALL');
   const [selectedDocType, setSelectedDocType] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'valid' | 'expiring_soon' | 'expired'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'valid' | 'expired'>('ALL');
 
   // Share modal state
   const [activeShareDoc, setActiveShareDoc] = useState<RepositoryDocument | null>(null);
@@ -456,6 +456,51 @@ function DocumentDownloadContent() {
     }
     setCurrentUser(user);
     setIsAuthChecking(false);
+
+    if (user && user.role === 'Employee' && (user.id || user.employee_code)) {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      fetch(`${apiBase}/employees/${user.id || user.employee_code}`, {
+        headers: { Accept: 'application/json' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((fresh) => {
+          if (fresh && fresh.id) {
+            let freshCards: string[] = ['*'];
+            if (Array.isArray(fresh.assigned_service_cards)) {
+              freshCards = fresh.assigned_service_cards;
+            } else if (typeof fresh.assigned_service_cards === 'string') {
+              try {
+                const parsed = JSON.parse(fresh.assigned_service_cards);
+                if (Array.isArray(parsed)) freshCards = parsed;
+                else if (fresh.assigned_service_cards === '*') freshCards = ['*'];
+                else freshCards = [fresh.assigned_service_cards];
+              } catch {
+                freshCards = fresh.assigned_service_cards === '*' ? ['*'] : [fresh.assigned_service_cards];
+              }
+            } else if (fresh.assigned_service_cards === null || fresh.assigned_service_cards === undefined) {
+              freshCards = ['*'];
+            }
+
+            const updatedUser: AuthUser = {
+              ...user,
+              assigned_companies: Array.isArray(fresh.assigned_companies)
+                ? fresh.assigned_companies
+                : user.assigned_companies,
+              assigned_service_cards: freshCards,
+              permissions: {
+                can_create: fresh.can_create !== undefined ? Boolean(fresh.can_create) : user.permissions.can_create,
+                can_edit: fresh.can_edit !== undefined ? Boolean(fresh.can_edit) : user.permissions.can_edit,
+                can_delete: fresh.can_delete !== undefined ? Boolean(fresh.can_delete) : user.permissions.can_delete,
+              },
+            };
+            setCurrentUser(updatedUser);
+            try {
+              localStorage.setItem('portal_current_user', JSON.stringify(updatedUser));
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    }
   }, [router]);
 
   // Load company info
@@ -706,9 +751,15 @@ function DocumentDownloadContent() {
         return false;
       }
 
-      // 3. Status Filter
-      if (statusFilter !== 'ALL' && doc.status !== statusFilter) {
-        return false;
+      // 3. Status Filter (Valid Document vs Expire Document)
+      if (statusFilter === 'valid') {
+        if (doc.status !== 'valid' && doc.status !== 'no_expiry') {
+          return false;
+        }
+      } else if (statusFilter === 'expired') {
+        if (doc.status !== 'expired' && doc.status !== 'expiring_soon') {
+          return false;
+        }
       }
 
       // 4. Keyword Search
@@ -741,9 +792,8 @@ function DocumentDownloadContent() {
   const metrics = useMemo(() => {
     const total = allGeneratedDocuments.length;
     const valid = allGeneratedDocuments.filter((d) => d.status === 'valid' || d.status === 'no_expiry').length;
-    const expiringSoon = allGeneratedDocuments.filter((d) => d.status === 'expiring_soon').length;
-    const expired = allGeneratedDocuments.filter((d) => d.status === 'expired').length;
-    return { total, valid, expiringSoon, expired };
+    const expired = allGeneratedDocuments.filter((d) => d.status === 'expired' || d.status === 'expiring_soon').length;
+    return { total, valid, expired };
   }, [allGeneratedDocuments]);
 
   // Trigger preview in dedicated new page / tab
@@ -977,7 +1027,15 @@ function DocumentDownloadContent() {
 
               {/* Statistics & Quick Summary Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-                <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs flex items-center gap-3">
+                <div
+                  onClick={() => setStatusFilter('ALL')}
+                  className={`bg-white rounded-xl p-3.5 border shadow-xs flex items-center gap-3 cursor-pointer transition-all ${
+                    statusFilter === 'ALL'
+                      ? 'border-blue-400 ring-2 ring-blue-100'
+                      : 'border-slate-200 hover:border-blue-300'
+                  }`}
+                  title="Click to view all documents"
+                >
                   <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                     <FileText size={20} />
                   </div>
@@ -1005,13 +1063,21 @@ function DocumentDownloadContent() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs flex items-center gap-3">
+                <div
+                  onClick={() => setStatusFilter(statusFilter === 'valid' ? 'ALL' : 'valid')}
+                  className={`bg-white rounded-xl p-3.5 border shadow-xs flex items-center gap-3 cursor-pointer transition-all ${
+                    statusFilter === 'valid'
+                      ? 'border-emerald-500 ring-2 ring-emerald-200 bg-emerald-50/30'
+                      : 'border-slate-200 hover:border-emerald-400'
+                  }`}
+                  title="Click to filter Valid Documents"
+                >
                   <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                     <CheckCircle size={20} />
                   </div>
                   <div>
                     <div className="text-[11px] font-bold text-slate-500">
-                      Active &amp; Valid
+                      Valid Documents
                     </div>
                     <div className="text-lg font-black text-emerald-700 leading-tight">
                       {metrics.valid}
@@ -1019,204 +1085,229 @@ function DocumentDownloadContent() {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <div
+                  onClick={() => setStatusFilter(statusFilter === 'expired' ? 'ALL' : 'expired')}
+                  className={`bg-white rounded-xl p-3.5 border shadow-xs flex items-center gap-3 cursor-pointer transition-all ${
+                    statusFilter === 'expired'
+                      ? 'border-rose-500 ring-2 ring-rose-200 bg-rose-50/30'
+                      : 'border-slate-200 hover:border-rose-400'
+                  }`}
+                  title="Click to filter Expire Documents"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
                     <Clock size={20} />
                   </div>
                   <div>
                     <div className="text-[11px] font-bold text-slate-500">
-                      Expiring / Expired
+                      Expire Documents
                     </div>
-                    <div className="text-lg font-black text-amber-700 leading-tight">
-                      {metrics.expiringSoon + metrics.expired}
+                    <div className="text-lg font-black text-rose-700 leading-tight">
+                      {metrics.expired}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* FILTERS CARD: Select Customer, Select Document, Search & Status */}
+              {/* FILTERS CARD: Service Card, Customer, Document Select & Validity Filters */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
-                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-                  {/* Left Filters: Service Card, Customer & Document Select */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1">
-                    {/* 1. Select Service Card */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                        <Layers size={14} className="text-blue-600" />
-                        <span>Select Service Card</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={selectedServiceId}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSelectedServiceId(val);
-                            setSelectedDocType('ALL');
-                            if (val === 'ALL' || val === 'document-download') {
-                              router.push(`/document-download?company=${encodeURIComponent(activeCompany.id)}`);
-                            } else {
-                              router.push(
-                                `/document-download?company=${encodeURIComponent(activeCompany.id)}&service=${encodeURIComponent(val)}`
-                              );
-                            }
-                          }}
-                          className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
-                        >
-                          <option value="ALL">📁 All Services (Entire Repository)</option>
-                          {availableServices
-                            .filter((s) => s.id !== 'customer')
-                            .map((svc) => (
-                              <option key={svc.id} value={svc.id}>
-                                {svc.id === 'document-download' ? '📥 Document Download (All)' : `📄 ${svc.title}`}
-                              </option>
-                            ))}
-                        </select>
-                        <ChevronDown
-                          size={15}
-                          className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                        />
-                      </div>
-                    </div>
+                {/* Top Row: Valid Document & Expire Document Quick Filter Tabs */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100 gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-500 mr-1 flex items-center gap-1.5">
+                      <Filter size={13} className="text-blue-600" />
+                      <span>Document Status:</span>
+                    </span>
 
-                    {/* 2. Select Customer with "All Customers" */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                        <Users size={14} className="text-blue-600" />
-                        <span>Select Customer</span>
-                      </label>
-                      <CustomerSelect2
-                        customers={companyCustomers}
-                        selectedCustomerId={selectedCustomerId}
-                        totalDocsCount={allGeneratedDocuments.length}
-                        onSelect={(id) => setSelectedCustomerId(id)}
-                      />
-                    </div>
-
-                    {/* 3. Select Document with "All Documents" */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                        <FileText size={14} className="text-blue-600" />
-                        <span>Select Document</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={selectedDocType}
-                          onChange={(e) => setSelectedDocType(e.target.value)}
-                          className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
-                        >
-                          <option value="ALL">
-                            📁 All Documents ({allGeneratedDocuments.length} total)
-                          </option>
-                          <optgroup label="Filter by Document Type:">
-                            {uniqueDocumentTypes.map((type, idx) => (
-                              <option key={idx} value={type}>
-                                📄 {type}
-                              </option>
-                            ))}
-                          </optgroup>
-                        </select>
-                        <ChevronDown
-                          size={15}
-                          className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Filters: Search Box & Reset */}
-                  <div className="flex flex-col sm:flex-row items-center gap-2.5 lg:w-[400px]">
-                    <div className="relative w-full">
-                      <Search
-                        size={15}
-                        className="text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"
-                      />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search document, worker, passport..."
-                        className="w-full min-h-[42px] pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-800 outline-none transition-all shadow-2xs"
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                        >
-                          <X size={13} />
-                        </button>
-                      )}
-                    </div>
-
-                    {(selectedCustomerId !== 'ALL' ||
-                      selectedDocType !== 'ALL' ||
-                      searchQuery ||
-                      statusFilter !== 'ALL') && (
-                      <button
-                        type="button"
-                        onClick={resetFilters}
-                        className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                        title="Clear all filters"
-                      >
-                        <RefreshCw size={13} />
-                        <span>Reset</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status Filter Chips */}
-                <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-slate-400 font-semibold text-[11px] mr-1">Status:</span>
+                    {/* All Documents Tab */}
                     <button
                       type="button"
                       onClick={() => setStatusFilter('ALL')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
                         statusFilter === 'ALL'
-                          ? 'bg-blue-600 text-white shadow-2xs'
+                          ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                       }`}
                     >
-                      All ({metrics.total})
+                      <span>All Documents</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          statusFilter === 'ALL' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {metrics.total}
+                      </span>
                     </button>
+
+                    {/* Valid Document Filter */}
                     <button
                       type="button"
-                      onClick={() => setStatusFilter('valid')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                      onClick={() => setStatusFilter(statusFilter === 'valid' ? 'ALL' : 'valid')}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
                         statusFilter === 'valid'
-                          ? 'bg-emerald-600 text-white shadow-2xs'
-                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
+                          ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/70'
                       }`}
+                      title="Filter Valid and Active documents"
                     >
-                      Active ({metrics.valid})
+                      <ShieldCheck size={14} className={statusFilter === 'valid' ? 'text-white' : 'text-emerald-600'} />
+                      <span>Valid Document</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          statusFilter === 'valid' ? 'bg-white/25 text-white' : 'bg-emerald-200/80 text-emerald-900'
+                        }`}
+                      >
+                        {metrics.valid}
+                      </span>
                     </button>
+
+                    {/* Expire Document Filter */}
                     <button
                       type="button"
-                      onClick={() => setStatusFilter('expiring_soon')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
-                        statusFilter === 'expiring_soon'
-                          ? 'bg-amber-600 text-white shadow-2xs'
-                          : 'bg-amber-50 hover:bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      Expiring Soon ({metrics.expiringSoon})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('expired')}
-                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                      onClick={() => setStatusFilter(statusFilter === 'expired' ? 'ALL' : 'expired')}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
                         statusFilter === 'expired'
-                          ? 'bg-rose-600 text-white shadow-2xs'
-                          : 'bg-rose-50 hover:bg-rose-100 text-rose-800'
+                          ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-300'
+                          : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200/70'
                       }`}
+                      title="Filter Expired and Expiring documents"
                     >
-                      Expired ({metrics.expired})
+                      <AlertTriangle size={14} className={statusFilter === 'expired' ? 'text-white' : 'text-rose-600'} />
+                      <span>Expire Document</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          statusFilter === 'expired' ? 'bg-white/25 text-white' : 'bg-rose-200/80 text-rose-900'
+                        }`}
+                      >
+                        {metrics.expired}
+                      </span>
                     </button>
                   </div>
 
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    Showing <strong>{filteredDocuments.length}</strong> of <strong>{metrics.total}</strong> documents
+                  {/* Reset All Filters Button */}
+                  {(selectedCustomerId !== 'ALL' ||
+                    selectedDocType !== 'ALL' ||
+                    searchQuery ||
+                    statusFilter !== 'ALL' ||
+                    selectedServiceId !== 'ALL') && (
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5 shadow-2xs self-end sm:self-auto"
+                      title="Clear all filters"
+                    >
+                      <RefreshCw size={13} />
+                      <span>Reset Filters</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdowns Row: Service Card, Customer, Document Select & Document Validity */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* 1. Select Service Card */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Layers size={14} className="text-blue-600" />
+                      <span>Select Service Card</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedServiceId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedServiceId(val);
+                          setSelectedDocType('ALL');
+                          if (val === 'ALL' || val === 'document-download') {
+                            router.push(`/document-download?company=${encodeURIComponent(activeCompany.id)}`);
+                          } else {
+                            router.push(
+                              `/document-download?company=${encodeURIComponent(activeCompany.id)}&service=${encodeURIComponent(val)}`
+                            );
+                          }
+                        }}
+                        className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
+                      >
+                        <option value="ALL">📁 All Services (Entire Repository)</option>
+                        {availableServices
+                          .filter((s) => s.id !== 'customer')
+                          .filter((s) => hasServiceCardAccess(s.id, s.title, currentUser))
+                          .map((svc) => (
+                            <option key={svc.id} value={svc.id}>
+                              {svc.id === 'document-download' ? '📥 Document Download (All)' : `📄 ${svc.title}`}
+                            </option>
+                          ))}
+                      </select>
+                      <ChevronDown
+                        size={15}
+                        className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 2. Select Customer with "All Customers" */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Users size={14} className="text-blue-600" />
+                      <span>Select Customer</span>
+                    </label>
+                    <CustomerSelect2
+                      customers={companyCustomers}
+                      selectedCustomerId={selectedCustomerId}
+                      totalDocsCount={allGeneratedDocuments.length}
+                      onSelect={(id) => setSelectedCustomerId(id)}
+                    />
+                  </div>
+
+                  {/* 3. Select Document with "All Documents" */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <FileText size={14} className="text-blue-600" />
+                      <span>Select Document</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={selectedDocType}
+                        onChange={(e) => setSelectedDocType(e.target.value)}
+                        className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
+                      >
+                        <option value="ALL">
+                          📁 All Documents ({allGeneratedDocuments.length} total)
+                        </option>
+                        <optgroup label="Filter by Document Type:">
+                          {uniqueDocumentTypes.map((type, idx) => (
+                            <option key={idx} value={type}>
+                              📄 {type}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      <ChevronDown
+                        size={15}
+                        className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 4. Document Validity Status Filter */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-blue-600" />
+                      <span>Document Validity</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'valid' | 'expired')}
+                        className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
+                      >
+                        <option value="ALL">All Documents ({metrics.total})</option>
+                        <option value="valid">✅ Valid Document ({metrics.valid})</option>
+                        <option value="expired">⚠️ Expire Document ({metrics.expired})</option>
+                      </select>
+                      <ChevronDown
+                        size={15}
+                        className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1244,36 +1335,73 @@ function DocumentDownloadContent() {
                   </div>
                 </div>
 
+                {/* Search Bar Directly Above Columns / List */}
+                <div className="bg-slate-50/90 border-b border-slate-200 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="relative w-full sm:max-w-md">
+                    <Search
+                      size={15}
+                      className="text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                    />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search document name, worker name, passport, category..."
+                      className="w-full min-h-[38px] pl-9 pr-8 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 focus:bg-white rounded-xl text-xs font-medium text-slate-800 outline-none transition-all shadow-2xs"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                        title="Clear search"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-600 font-medium w-full sm:w-auto justify-between sm:justify-end">
+                    <span>
+                      Showing <strong className="text-blue-700 font-bold">{filteredDocuments.length}</strong> of{' '}
+                      <strong>{metrics.total}</strong> documents
+                    </span>
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                      >
+                        Clear Search
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Table Data */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[950px]">
+                  <table className="w-full text-left border-collapse min-w-[1380px]">
                     <thead>
-                      <tr className="bg-[#0f5385] text-white text-[12px] font-bold border-b border-blue-900">
-                        <th className="py-3 px-3.5 text-center w-12 border-r border-blue-800/60">
+                      <tr className="bg-[#0f5385] text-white text-[12px] font-bold border-b border-blue-900 whitespace-nowrap">
+                        <th className="py-3 px-3.5 text-center w-14 min-w-[56px] border-r border-blue-800/60 whitespace-nowrap">
                           #
                         </th>
-                        <th className="py-3 px-4 border-r border-blue-800/60">
-                          Document Name &amp; Format
-                        </th>
-                        <th className="py-3 px-4 border-r border-blue-800/60">
+                        <th className="py-3 px-4 min-w-[270px] border-r border-blue-800/60 whitespace-nowrap">
                           Customer / Worker Name
                         </th>
-                        <th className="py-3 px-3.5 border-r border-blue-800/60">
+                        <th className="py-3 px-4 min-w-[290px] border-r border-blue-800/60 whitespace-nowrap">
+                          Document Name &amp; Format
+                        </th>
+                        <th className="py-3 px-4 min-w-[210px] border-r border-blue-800/60 whitespace-nowrap">
                           Service / Category
                         </th>
-                        <th className="py-3 px-3.5 border-r border-blue-800/60">
+                        <th className="py-3 px-4 min-w-[170px] border-r border-blue-800/60 whitespace-nowrap">
                           Date Issue
                         </th>
-                        <th className="py-3 px-3.5 border-r border-blue-800/60">
+                        <th className="py-3 px-4 min-w-[220px] border-r border-blue-800/60 whitespace-nowrap">
                           Date Expire
                         </th>
-                        <th className="py-3 px-3.5 border-r border-blue-800/60">
-                          Document Ref
-                        </th>
-                        <th className="py-3 px-3.5 border-r border-blue-800/60">
-                          File Size
-                        </th>
-                        <th className="py-3 px-4 text-center min-w-[230px]">
+                        <th className="py-3 px-4 text-center min-w-[260px] whitespace-nowrap">
                           Actions
                         </th>
                       </tr>
@@ -1281,7 +1409,7 @@ function DocumentDownloadContent() {
                     <tbody className="divide-y divide-slate-200 text-xs">
                       {loadingCustomers ? (
                         <tr>
-                          <td colSpan={9} className="py-16 text-center text-slate-500">
+                          <td colSpan={7} className="py-16 text-center text-slate-500">
                             <div className="flex flex-col items-center justify-center gap-3">
                               <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                               <span className="font-semibold text-slate-700">Loading documents...</span>
@@ -1290,7 +1418,7 @@ function DocumentDownloadContent() {
                         </tr>
                       ) : filteredDocuments.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-16 text-center text-slate-500">
+                          <td colSpan={7} className="py-16 text-center text-slate-500">
                             <div className="flex flex-col items-center justify-center gap-3 max-w-sm mx-auto">
                               <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
                                 <FileText size={24} />
@@ -1303,7 +1431,7 @@ function DocumentDownloadContent() {
                               <p className="text-xs text-slate-400 m-0">
                                 {activeService
                                   ? `No uploaded documents have been tagged with "${activeService.title}" for ${activeCompany.name}. To attach files, edit or register a customer and select this service card tag.`
-                                  : 'No document matched your selected customer, document type, or search query.'}
+                                  : 'No document matched your selected customer, document type, validity filter, or search query.'}
                               </p>
                               <div className="mt-2 flex items-center gap-2">
                                 <Link
@@ -1335,53 +1463,14 @@ function DocumentDownloadContent() {
                               className="hover:bg-blue-50/40 transition-colors bg-white group"
                             >
                               {/* 1. Index # */}
-                              <td className="py-3.5 px-3.5 text-center font-bold text-slate-600 bg-slate-50/60 border-r border-slate-200">
+                              <td className="py-3.5 px-3.5 text-center font-bold text-slate-600 bg-slate-50/60 border-r border-slate-200 w-14 min-w-[56px] whitespace-nowrap">
                                 {idx + 1}
                               </td>
 
-                              {/* 2. Document Name & Format */}
-                              <td className="py-3.5 px-4 border-r border-slate-200">
-                                <div className="flex items-center gap-2.5">
-                                  <div
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                      isEpass
-                                        ? 'bg-blue-100 text-blue-700'
-                                        : doc.documentUrl.match(/\.(jpeg|jpg|png|webp)$/i)
-                                        ? 'bg-amber-100 text-amber-700'
-                                        : 'bg-rose-100 text-rose-700'
-                                    }`}
-                                  >
-                                    {isEpass ? (
-                                      <ShieldCheck size={18} />
-                                    ) : doc.documentUrl.match(/\.(jpeg|jpg|png|webp)$/i) ? (
-                                      <ImageIcon size={18} />
-                                    ) : (
-                                      <FileText size={18} />
-                                    )}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="font-extrabold text-slate-900 group-hover:text-blue-700 transition-colors leading-tight">
-                                      {doc.documentName}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
-                                        {isEpass
-                                          ? 'Official Slip'
-                                          : (doc.documentUrl.split('.').pop() ? doc.documentUrl.split('.').pop()!.charAt(0).toUpperCase() + doc.documentUrl.split('.').pop()!.slice(1).toLowerCase() : 'Pdf')}
-                                      </span>
-                                      <span className="text-[10px] text-slate-400">•</span>
-                                      <span className="text-[10px] text-slate-500 font-mono">
-                                        JIM Digital
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* 3. Customer / Worker Name */}
-                              <td className="py-3.5 px-4 border-r border-slate-200">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden border border-slate-200">
+                              {/* 2. Customer / Worker Name */}
+                              <td className="py-3.5 px-4 border-r border-slate-200 min-w-[270px]">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden border border-slate-200 shadow-2xs">
                                     {doc.profilePic ? (
                                       <img
                                         src={getFileUrl(doc.profilePic)}
@@ -1392,73 +1481,100 @@ function DocumentDownloadContent() {
                                       doc.customerName.charAt(0).toUpperCase()
                                     )}
                                   </div>
-                                  <div className="truncate">
-                                    <div className="font-bold text-slate-900 leading-tight truncate">
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-slate-900 leading-tight whitespace-nowrap text-xs">
                                       {doc.customerName}
                                     </div>
-                                    <div className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                                      <span className="font-mono bg-slate-100 px-1 py-0.2 rounded text-slate-700 border border-slate-200">
+                                    <div className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-1 whitespace-nowrap">
+                                      <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 border border-slate-200 font-semibold">
                                         🛂 {doc.passportNo}
                                       </span>
                                       <span className="text-slate-400">•</span>
-                                      <span>{doc.country}</span>
+                                      <span className="font-medium">{doc.country}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* 3. Document Name & Format */}
+                              <td className="py-3.5 px-4 border-r border-slate-200 min-w-[290px]">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
+                                      isEpass
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : doc.documentUrl.match(/\.(jpeg|jpg|png|webp)$/i)
+                                        ? 'bg-amber-100 text-amber-700'
+                                        : 'bg-rose-100 text-rose-700'
+                                    }`}
+                                  >
+                                    {isEpass ? (
+                                      <ShieldCheck size={19} />
+                                    ) : doc.documentUrl.match(/\.(jpeg|jpg|png|webp)$/i) ? (
+                                      <ImageIcon size={19} />
+                                    ) : (
+                                      <FileText size={19} />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="font-extrabold text-slate-900 group-hover:text-blue-700 transition-colors leading-tight text-xs whitespace-nowrap">
+                                      {doc.documentName}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 mt-1 whitespace-nowrap">
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                        {isEpass
+                                          ? 'Official Slip'
+                                          : doc.documentUrl.split('.').pop()
+                                          ? doc.documentUrl.split('.').pop()!.toUpperCase()
+                                          : 'PDF'}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400">•</span>
+                                      <span className="text-[10px] text-slate-500 font-mono">
+                                        JIM Digital
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
                               </td>
 
                               {/* 4. Service / Category */}
-                              <td className="py-3.5 px-3.5 border-r border-slate-200">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 text-[11px] font-bold border border-blue-200/70">
+                              <td className="py-3.5 px-4 border-r border-slate-200 min-w-[210px] whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 text-[11px] font-bold border border-blue-200/70 whitespace-nowrap shadow-2xs">
                                   {doc.documentCategory}
                                 </span>
                               </td>
 
                               {/* 5. Date Issue */}
-                              <td className="py-3.5 px-3.5 border-r border-slate-200">
-                                <div className="flex items-center gap-1.5 text-slate-700 font-mono text-xs font-semibold">
-                                  <Calendar size={13} className="text-slate-400" />
+                              <td className="py-3.5 px-4 border-r border-slate-200 min-w-[170px] whitespace-nowrap">
+                                <div className="flex items-center gap-1.5 text-slate-700 font-mono text-xs font-semibold whitespace-nowrap">
+                                  <Calendar size={14} className="text-slate-400 shrink-0" />
                                   <span>{doc.issueDate || '2024-01-15'}</span>
                                 </div>
                               </td>
 
                               {/* 6. Date Expire with status indicator */}
-                              <td className="py-3.5 px-3.5 border-r border-slate-200">
+                              <td className="py-3.5 px-4 border-r border-slate-200 min-w-[220px] whitespace-nowrap">
                                 <div>
-                                  <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800">
-                                    <Clock size={13} className="text-slate-400" />
+                                  <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800 whitespace-nowrap">
+                                    <Clock size={14} className="text-slate-400 shrink-0" />
                                     <span>{doc.expireDate || 'Permanent'}</span>
                                   </div>
                                   <span
-                                    className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${expiryInfo.badgeClass}`}
+                                    className={`inline-block mt-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border whitespace-nowrap ${expiryInfo.badgeClass}`}
                                   >
                                     {expiryInfo.label}
                                   </span>
                                 </div>
                               </td>
 
-                              {/* 7. Document Ref Code */}
-                              <td className="py-3.5 px-3.5 border-r border-slate-200">
-                                <span className="font-mono text-[11px] font-bold text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-200/60 block text-center">
-                                  {doc.referenceNo}
-                                </span>
-                              </td>
-
-                              {/* 8. File Size */}
-                              <td className="py-3.5 px-3.5 border-r border-slate-200 text-center">
-                                <span className="text-[11px] font-mono text-slate-600 font-semibold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                                  {doc.documentSize}
-                                </span>
-                              </td>
-
-                              {/* 9. Actions: Preview, Download, Share */}
-                              <td className="py-3.5 px-4 text-center">
+                              {/* 7. Actions: Preview, Download, Share */}
+                              <td className="py-3.5 px-4 text-center min-w-[260px] whitespace-nowrap">
                                 <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                                   {/* Preview Button (opens in dedicated preview page) */}
                                   <button
                                     type="button"
                                     onClick={() => handlePreviewInNewPage(doc)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer whitespace-nowrap"
                                     title="Open document preview in new tab"
                                   >
                                     <Eye size={13} />
@@ -1469,7 +1585,7 @@ function DocumentDownloadContent() {
                                   <button
                                     type="button"
                                     onClick={() => handleDownloadClick(doc)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                                     title="Download this document"
                                   >
                                     <Download size={13} />
@@ -1480,7 +1596,7 @@ function DocumentDownloadContent() {
                                   <button
                                     type="button"
                                     onClick={() => handleShareClick(doc)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
                                     title="Share to WhatsApp or Apps"
                                   >
                                     <Share2 size={13} />

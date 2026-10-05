@@ -7,6 +7,7 @@ import {
   Building2,
   CheckCircle2,
   Edit2,
+  FileText,
   KeyRound,
   Plus,
   Search,
@@ -48,6 +49,7 @@ export type EmployeeRecord = {
     passwords?: { view: boolean; edit?: boolean };
   };
   status: 'active' | 'inactive';
+  documents?: Array<{ name: string; issue_date?: string; expire_date?: string; url?: string; size?: string }>;
   created_at?: string;
   updated_at?: string;
 };
@@ -336,6 +338,14 @@ export default function SuperAdminEmployeesPage() {
                             {emp.email}
                           </span>
                         </div>
+                        {Array.isArray(emp.documents) && emp.documents.length > 0 && (
+                          <div className="mt-1 flex items-center gap-1">
+                            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold inline-flex items-center gap-1">
+                              <FileText size={10} />
+                              <span>{emp.documents.length} {emp.documents.length === 1 ? 'doc' : 'docs'}</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>

@@ -215,6 +215,22 @@ export default function SuperAdminCompaniesPage() {
   const totalProfitWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
   const totalPendingWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyPendingWallet(c), 0);
 
+  // Additional wallet and profit cards metrics
+  const othersCostCard = statCards.find((c) => c.card_key === 'others_cost' || c.card_key === 'others_expense');
+  const othersProfitCard = statCards.find((c) => c.card_key === 'others_profit');
+  const othersPendingCard = statCards.find((c) => c.card_key === 'others_pending');
+  const totalProfitCard = statCards.find((c) => c.card_key === 'total_profit');
+
+  const totalOthersCost = othersCostCard?.custom_value !== undefined && othersCostCard.custom_value !== null ? Number(othersCostCard.custom_value) : 45000;
+  const totalOthersProfit = othersProfitCard?.custom_value !== undefined && othersProfitCard.custom_value !== null ? Number(othersProfitCard.custom_value) : 32500;
+  const totalOthersPending = othersPendingCard?.custom_value !== undefined && othersPendingCard.custom_value !== null ? Number(othersPendingCard.custom_value) : 18200;
+
+  // Total Combined Profit = Foreigner Profit + Others Profit
+  const computedGrandTotalProfit = totalProfitWallet + totalOthersProfit;
+  const grandTotalProfit = (totalProfitCard?.custom_value && totalProfitCard.custom_value > 0)
+    ? totalProfitCard.custom_value
+    : computedGrandTotalProfit;
+
   // Compute card metrics
   const getCardMetrics = (card: CompanyStatCard) => {
     switch (card.card_key) {
@@ -291,6 +307,19 @@ export default function SuperAdminCompaniesPage() {
             valColor: 'text-rose-700',
           },
         };
+      case 'others_cost':
+      case 'others_expense':
+        return {
+          value: `RM ${(card.custom_value ?? totalOthersCost).toLocaleString()}`,
+          sub: card.subtitle || 'Miscellaneous & Other Expenses',
+          isLink: false,
+          theme: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-100',
+            valColor: 'text-rose-700',
+          },
+        };
       case 'profit_wallet':
         return {
           value: `RM ${totalProfitWallet.toLocaleString()}`,
@@ -301,6 +330,18 @@ export default function SuperAdminCompaniesPage() {
             text: 'text-emerald-600',
             border: 'border-emerald-100',
             valColor: 'text-emerald-700',
+          },
+        };
+      case 'others_profit':
+        return {
+          value: `RM ${(card.custom_value ?? totalOthersProfit).toLocaleString()}`,
+          sub: card.subtitle || 'Auxiliary & Service Profits',
+          isLink: false,
+          theme: {
+            bg: 'bg-teal-50',
+            text: 'text-teal-700',
+            border: 'border-teal-100',
+            valColor: 'text-teal-700',
           },
         };
       case 'pending_wallet':
@@ -315,16 +356,28 @@ export default function SuperAdminCompaniesPage() {
             valColor: 'text-amber-700',
           },
         };
-      case 'others_expense':
+      case 'others_pending':
         return {
-          value: `RM ${(card.custom_value ?? 0).toLocaleString()}`,
-          sub: card.subtitle || 'Miscellaneous & Other Expenses',
+          value: `RM ${(card.custom_value ?? totalOthersPending).toLocaleString()}`,
+          sub: card.subtitle || 'Other Pending Invoices & Dues',
           isLink: false,
           theme: {
-            bg: 'bg-rose-50',
-            text: 'text-rose-600',
-            border: 'border-rose-100',
-            valColor: 'text-rose-700',
+            bg: 'bg-orange-50',
+            text: 'text-orange-600',
+            border: 'border-orange-100',
+            valColor: 'text-orange-700',
+          },
+        };
+      case 'total_profit':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : grandTotalProfit).toLocaleString()}`,
+          sub: card.subtitle || 'Foreigner Profit + Others Profit',
+          isLink: false,
+          theme: {
+            bg: 'bg-emerald-100/80',
+            text: 'text-emerald-800',
+            border: 'border-emerald-300',
+            valColor: 'text-emerald-800',
           },
         };
       default:
@@ -373,6 +426,9 @@ export default function SuperAdminCompaniesPage() {
       case 'DollarSign': return <DollarSign {...iconProps} />;
       case 'Briefcase': return <Briefcase {...iconProps} />;
       case 'ShieldCheck': return <ShieldCheck {...iconProps} />;
+      case 'Sparkles': return <Sparkles {...iconProps} />;
+      case 'Crown': return <Crown {...iconProps} />;
+      case 'PieChart': return <PieChart {...iconProps} />;
       default: return <Coins {...iconProps} />;
     }
   };
@@ -748,7 +804,11 @@ export default function SuperAdminCompaniesPage() {
             return (
               <div
                 key={card.id || card.card_key}
-                className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[125px]"
+                className={`bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] ${
+                  card.card_key === 'total_profit'
+                    ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
+                    : 'border-slate-200 hover:border-blue-400'
+                }`}
               >
                 {/* Top Row: Title on Left, Icon on Right */}
                 <div className="flex items-center justify-between gap-2 mb-2">
@@ -1087,7 +1147,7 @@ export default function SuperAdminCompaniesPage() {
                           </span>
                           <span className="text-[10px] text-slate-400 font-mono block leading-tight mt-0.5">
                             {rank === 1 ? '★ Priority #1 (First Position)' : `Priority Position #${rank}`}
-                            {card.card_key === 'others_expense' && card.custom_value !== undefined ? ` • RM ${card.custom_value.toLocaleString()}` : ''}
+                            {card.custom_value !== undefined && card.custom_value > 0 ? ` • RM ${card.custom_value.toLocaleString()}` : ''}
                           </span>
                         </div>
                       </div>
@@ -1182,11 +1242,15 @@ export default function SuperAdminCompaniesPage() {
                           />
                         </div>
 
-                        {/* If others_expense, allow editing amount */}
-                        {card.card_key === 'others_expense' && (
+                        {/* If custom amount card, allow editing amount */}
+                        {['others_cost', 'others_expense', 'others_profit', 'others_pending', 'total_profit'].includes(card.card_key) && (
                           <div>
                             <label className="text-xs font-bold text-slate-700 block mb-1">
-                              Expense Amount (RM)
+                              {card.card_key.includes('cost') || card.card_key.includes('expense')
+                                ? 'Expense / Cost Amount (RM)'
+                                : card.card_key.includes('profit')
+                                ? 'Profit Amount / Override (RM)'
+                                : 'Pending Amount / Override (RM)'}
                             </label>
                             <input
                               type="number"

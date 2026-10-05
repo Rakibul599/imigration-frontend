@@ -27,13 +27,16 @@ export interface AuthUser {
   username?: string;
   name: string;
   email: string;
-  role: 'Employee' | 'Admin' | 'SUPER_ADMIN' | 'MasterAdmin' | string;
+  role: 'Employee' | 'Admin' | 'SUPER_ADMIN' | 'MasterAdmin' | 'Customer' | string;
   assigned_companies: string[];
   assigned_service_cards?: string[];
   permissions: EmployeePermissions;
   master_admin_id?: string | null;
   master_admin_name?: string | null;
   module_permissions?: ModulePermissions;
+  customer_id?: number | string;
+  passport_no?: string;
+  can_login?: boolean;
 }
 
 const STORAGE_KEY = 'portal_current_user';
@@ -284,10 +287,21 @@ export function getUserPanelInfo(): {
   const masterLogged = localStorage.getItem(MASTER_ADMIN_LOGGED_KEY) === 'true';
   const masterUser = getMasterAdminUser();
 
+  // 0. Customer / Foreign Worker Check: Customer has NO administrative panel!
+  if (current?.role === 'Customer' || current?.role === 'Worker') {
+    return {
+      hasPanel: false,
+      panelUrl: '/services',
+      panelLabel: '',
+      panelBadge: '',
+      roleType: 'User',
+    };
+  }
+
   // 1. Employee Check: An employee can NEVER access Super Admin!
   const isEmployeeUser =
     current?.role === 'Employee' ||
-    (current?.role !== 'SUPER_ADMIN' && current?.role !== 'MasterAdmin' && Boolean(current?.employee_code));
+    (current?.role !== 'SUPER_ADMIN' && current?.role !== 'MasterAdmin' && current?.role !== 'Customer' && current?.role !== 'Worker' && Boolean(current?.employee_code));
 
   if (isEmployeeUser) {
     return {
@@ -438,8 +452,14 @@ export function hasCompanyAccess(companyId: string, companyName?: string, roc?: 
   if (!user) return true; // Unauthenticated public view
   if (user.role === 'SUPER_ADMIN') return true;
 
-  // MasterAdmin and Employee (including admin staff) are strictly restricted to assigned_companies only
-  if (user.role === 'MasterAdmin' || user.role === 'Employee' || user.role === 'Admin') {
+  // MasterAdmin, Employee, and Customer/Worker are strictly restricted to assigned_companies only
+  if (
+    user.role === 'MasterAdmin' ||
+    user.role === 'Employee' ||
+    user.role === 'Admin' ||
+    user.role === 'Customer' ||
+    user.role === 'Worker'
+  ) {
     if (!Array.isArray(user.assigned_companies) || user.assigned_companies.length === 0) {
       return false;
     }
@@ -468,13 +488,31 @@ export function hasCompanyAccess(companyId: string, companyName?: string, roc?: 
 /**
  * Check if the currently logged-in employee has access to a specific service card
  */
-export function hasServiceCardAccess(cardId: string, cardTitle?: string): boolean {
-  const user = getCurrentUser() || getMasterAdminUser() || getSuperAdminUser();
+export function hasServiceCardAccess(
+  cardId: string,
+  cardTitle?: string,
+  userOverride?: AuthUser | null
+): boolean {
+  const user = userOverride !== undefined
+    ? userOverride
+    : (getCurrentUser() || getMasterAdminUser() || getSuperAdminUser());
   if (!user) return true;
   if (user.role === 'SUPER_ADMIN' || user.role === 'MasterAdmin') return true;
 
   // For Employee: check assigned_service_cards
-  const allowed = user.assigned_service_cards;
+  let allowed = user.assigned_service_cards;
+
+  if (typeof allowed === 'string') {
+    try {
+      const parsed = JSON.parse(allowed);
+      if (Array.isArray(parsed)) allowed = parsed;
+      else if (allowed === '*') allowed = ['*'];
+      else allowed = [allowed];
+    } catch {
+      allowed = allowed === '*' ? ['*'] : [allowed];
+    }
+  }
+
   if (allowed === undefined || allowed === null) {
     return true;
   }
@@ -490,6 +528,7 @@ export function hasServiceCardAccess(cardId: string, cardTitle?: string): boolea
 
   const targetId = (cardId || '').trim().toLowerCase();
   const targetTitle = (cardTitle || '').trim().toLowerCase();
+  const targetNormalizedTitle = targetTitle.replace(/[^a-z0-9]/g, '');
 
   return allowed.some((id) => {
     const clean = (id || '').trim().toLowerCase();
@@ -497,6 +536,7 @@ export function hasServiceCardAccess(cardId: string, cardTitle?: string): boolea
     if (clean === '*' || clean === 'all') return true;
     if (clean === targetId) return true;
     if (targetTitle && clean === targetTitle) return true;
+    if (targetNormalizedTitle && clean.replace(/[^a-z0-9]/g, '') === targetNormalizedTitle) return true;
     return false;
   });
 }
@@ -508,7 +548,7 @@ export function hasServiceCardAccess(cardId: string, cardTitle?: string): boolea
 export function canCreate(): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
-  if (user.role === 'MasterAdmin') return false; // Masteradmin CANNOT create companies!
+  if (user.role === 'MasterAdmin' || user.role === 'Customer' || user.role === 'Worker') return false; // Masteradmin/Customer CANNOT create companies!
   if (user.role === 'SUPER_ADMIN') return true;
   return Boolean(user.permissions?.can_create);
 }
@@ -519,6 +559,7 @@ export function canCreate(): boolean {
 export function canEdit(): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
+  if (user.role === 'Customer' || user.role === 'Worker') return false;
   if (user.role === 'SUPER_ADMIN' || user.role === 'MasterAdmin') return true;
   return Boolean(user.permissions?.can_edit);
 }
@@ -529,7 +570,7 @@ export function canEdit(): boolean {
 export function canDelete(): boolean {
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return false;
-  if (user.role === 'MasterAdmin') return false;
+  if (user.role === 'MasterAdmin' || user.role === 'Customer' || user.role === 'Worker') return false;
   if (user.role === 'SUPER_ADMIN') return true;
   return Boolean(user.permissions?.can_delete);
 }
@@ -555,6 +596,7 @@ export async function authenticateEmployee(
         userId: userId.trim(),
         password,
         role,
+        portal: role ? role.toLowerCase() : 'employee',
       }),
     });
 
@@ -567,6 +609,22 @@ export async function authenticateEmployee(
       };
     }
 
+    let parsedAssignedCards: string[] = ['*'];
+    if (Array.isArray(data.user.assigned_service_cards)) {
+      parsedAssignedCards = data.user.assigned_service_cards;
+    } else if (typeof data.user.assigned_service_cards === 'string') {
+      try {
+        const parsed = JSON.parse(data.user.assigned_service_cards);
+        if (Array.isArray(parsed)) parsedAssignedCards = parsed;
+        else if (data.user.assigned_service_cards === '*') parsedAssignedCards = ['*'];
+        else parsedAssignedCards = [data.user.assigned_service_cards];
+      } catch {
+        parsedAssignedCards = data.user.assigned_service_cards === '*' ? ['*'] : [data.user.assigned_service_cards];
+      }
+    } else if (data.user.assigned_service_cards === null || data.user.assigned_service_cards === undefined) {
+      parsedAssignedCards = ['*'];
+    }
+
     const authUser: AuthUser = {
       id: data.user.id,
       employee_code: data.user.employee_code || userId.trim(),
@@ -576,11 +634,15 @@ export async function authenticateEmployee(
       assigned_companies: Array.isArray(data.user.assigned_companies)
         ? data.user.assigned_companies
         : [],
+      assigned_service_cards: parsedAssignedCards,
       permissions: {
         can_create: Boolean(data.user.permissions?.can_create),
         can_edit: Boolean(data.user.permissions?.can_edit),
         can_delete: Boolean(data.user.permissions?.can_delete),
       },
+      master_admin_id: data.user.master_admin_id ?? null,
+      master_admin_name: data.user.master_admin_name ?? null,
+      module_permissions: data.user.module_permissions ?? undefined,
     };
 
     if (authUser.role === 'MasterAdmin') {
@@ -656,6 +718,7 @@ export async function authenticateEmployee(
         email: 'ahmad@demo.com',
         role: 'Employee',
         assigned_companies: ['natasha-construction', 'gamuda'],
+        assigned_service_cards: ['*'],
         permissions: {
           can_create: true,
           can_edit: true,

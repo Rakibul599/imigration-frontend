@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Shield,
@@ -225,12 +224,6 @@ export default function MasterAdminLayout({
       href: '/companies',
       icon: Sparkles,
       badge: 'Cards',
-    },
-    {
-      name: 'Theme Settings',
-      href: '/masteradmin/theme',
-      icon: Palette,
-      badge: 'Home',
     },
     {
       name: 'Change Password',

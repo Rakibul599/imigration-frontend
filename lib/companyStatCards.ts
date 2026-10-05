@@ -72,37 +72,67 @@ export const DEFAULT_COMPANY_STAT_CARDS: CompanyStatCard[] = [
   },
   {
     id: 7,
-    card_key: 'profit_wallet',
-    name: 'TOTAL FOREIGNER PROFIT WALLET',
-    icon: 'TrendingUp',
-    subtitle: 'Net Retained Margin',
+    card_key: 'others_cost',
+    name: 'TOTAL OTHERS COST/EXPENSE',
+    icon: 'Receipt',
+    subtitle: 'Miscellaneous / Other Expenses',
     order_num: 7,
-    custom_value: 0,
+    custom_value: 45000,
     status: 'active',
   },
   {
     id: 8,
-    card_key: 'pending_wallet',
-    name: 'TOTAL FOREIGNER PENDING WALLET',
-    icon: 'Clock',
-    subtitle: 'Pending Approvals & Dues',
+    card_key: 'profit_wallet',
+    name: 'TOTAL FOREIGNER PROFIT WALLET',
+    icon: 'TrendingUp',
+    subtitle: 'Net Retained Margin',
     order_num: 8,
     custom_value: 0,
     status: 'active',
   },
   {
     id: 9,
-    card_key: 'others_expense',
-    name: 'OTHERS EXPENSE',
-    icon: 'Receipt',
-    subtitle: 'Miscellaneous / Other Expenses',
+    card_key: 'others_profit',
+    name: 'TOTAL OTHERS PROFIT',
+    icon: 'Coins',
+    subtitle: 'Auxiliary & Service Profits',
     order_num: 9,
+    custom_value: 32500,
+    status: 'active',
+  },
+  {
+    id: 10,
+    card_key: 'pending_wallet',
+    name: 'TOTAL FOREIGNER PENDING WALLET',
+    icon: 'Clock',
+    subtitle: 'Pending Approvals & Dues',
+    order_num: 10,
+    custom_value: 0,
+    status: 'active',
+  },
+  {
+    id: 11,
+    card_key: 'others_pending',
+    name: 'TOTAL OTHERS PENDING WALLET',
+    icon: 'CreditCard',
+    subtitle: 'Other Pending Invoices & Dues',
+    order_num: 11,
+    custom_value: 18200,
+    status: 'active',
+  },
+  {
+    id: 12,
+    card_key: 'total_profit',
+    name: 'TOTAL PROFIT',
+    icon: 'Sparkles',
+    subtitle: 'Foreigner Profit + Others Profit',
+    order_num: 12,
     custom_value: 0,
     status: 'active',
   },
 ];
 
-const STORAGE_KEY = 'agency_company_stat_cards_v1';
+const STORAGE_KEY = 'agency_company_stat_cards_v2';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 
 export function getStoredCompanyStatCards(): CompanyStatCard[] {
@@ -115,7 +145,12 @@ export function getStoredCompanyStatCards(): CompanyStatCard[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
+      // Ensure all 12 cards exist even if upgrading from an older version
+      const merged = DEFAULT_COMPANY_STAT_CARDS.map((def) => {
+        const found = parsed.find((p) => p.card_key === def.card_key || (def.card_key === 'others_cost' && p.card_key === 'others_expense'));
+        return found ? { ...def, ...found, id: def.id } : def;
+      });
+      return merged.sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
     }
     return DEFAULT_COMPANY_STAT_CARDS;
   } catch (err) {

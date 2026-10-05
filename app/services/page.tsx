@@ -124,6 +124,88 @@ function ServicesContent() {
     setCurrentUser(user);
     setIsAuthChecking(false);
 
+    // If Employee, refresh live permissions & assigned_service_cards from backend to ensure real-time accuracy!
+    if (user.role === 'Employee' && (user.id || user.employee_code)) {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      fetch(`${apiBase}/employees/${user.id || user.employee_code}`, {
+        headers: { Accept: 'application/json' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((fresh) => {
+          if (fresh && fresh.id) {
+            let freshCards: string[] = ['*'];
+            if (Array.isArray(fresh.assigned_service_cards)) {
+              freshCards = fresh.assigned_service_cards;
+            } else if (typeof fresh.assigned_service_cards === 'string') {
+              try {
+                const parsed = JSON.parse(fresh.assigned_service_cards);
+                if (Array.isArray(parsed)) freshCards = parsed;
+                else if (fresh.assigned_service_cards === '*') freshCards = ['*'];
+                else freshCards = [fresh.assigned_service_cards];
+              } catch {
+                freshCards = fresh.assigned_service_cards === '*' ? ['*'] : [fresh.assigned_service_cards];
+              }
+            } else if (fresh.assigned_service_cards === null || fresh.assigned_service_cards === undefined) {
+              freshCards = ['*'];
+            }
+
+            const updatedUser: AuthUser = {
+              ...user,
+              assigned_companies: Array.isArray(fresh.assigned_companies)
+                ? fresh.assigned_companies
+                : user.assigned_companies,
+              assigned_service_cards: freshCards,
+              permissions: {
+                can_create: fresh.can_create !== undefined ? Boolean(fresh.can_create) : user.permissions.can_create,
+                can_edit: fresh.can_edit !== undefined ? Boolean(fresh.can_edit) : user.permissions.can_edit,
+                can_delete: fresh.can_delete !== undefined ? Boolean(fresh.can_delete) : user.permissions.can_delete,
+              },
+            };
+            setCurrentUser(updatedUser);
+            try {
+              localStorage.setItem('portal_current_user', JSON.stringify(updatedUser));
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    } else if (user.role === 'Customer' && user.id) {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      fetch(`${apiBase}/customers/${user.id}`, {
+        headers: { Accept: 'application/json' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((fresh) => {
+          if (fresh && fresh.id) {
+            let freshCards: string[] = ['*'];
+            if (Array.isArray(fresh.assigned_service_cards)) {
+              freshCards = fresh.assigned_service_cards;
+            } else if (typeof fresh.assigned_service_cards === 'string') {
+              try {
+                const parsed = JSON.parse(fresh.assigned_service_cards);
+                if (Array.isArray(parsed)) freshCards = parsed;
+                else if (fresh.assigned_service_cards === '*') freshCards = ['*'];
+                else freshCards = [fresh.assigned_service_cards];
+              } catch {
+                freshCards = fresh.assigned_service_cards === '*' ? ['*'] : [fresh.assigned_service_cards];
+              }
+            } else if (fresh.assigned_service_cards === null || fresh.assigned_service_cards === undefined) {
+              freshCards = ['*'];
+            }
+
+            const updatedUser: AuthUser = {
+              ...user,
+              assigned_companies: fresh.company_id ? [fresh.company_id] : user.assigned_companies,
+              assigned_service_cards: freshCards,
+            };
+            setCurrentUser(updatedUser);
+            try {
+              localStorage.setItem('portal_current_user', JSON.stringify(updatedUser));
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    }
+
     // If no company query parameter is provided, enforce company list selection first
     if (!companyParam) {
       router.replace('/companies');
@@ -257,7 +339,7 @@ function ServicesContent() {
     if (modalParam && serviceList.length > 0) {
       const matched = serviceList.find((s) => s.id === modalParam);
       if (matched && matched.id !== 'customer' && matched.id !== 'document-download') {
-        if (!currentUser || currentUser.role !== 'Employee' || hasServiceCardAccess(matched.id, matched.title)) {
+        if (!currentUser || (currentUser.role !== 'Employee' && currentUser.role !== 'Customer') || hasServiceCardAccess(matched.id, matched.title, currentUser)) {
           setSelectedServiceModal(matched);
         }
       }
@@ -383,10 +465,10 @@ function ServicesContent() {
   }, [selectedServiceModal, companyCustomers, docSearchQuery]);
 
   const allowedServiceList = useMemo(() => {
-    if (!currentUser || currentUser.role !== 'Employee') {
+    if (!currentUser || (currentUser.role !== 'Employee' && currentUser.role !== 'Customer')) {
       return serviceList;
     }
-    return serviceList.filter((s) => hasServiceCardAccess(s.id, s.title));
+    return serviceList.filter((s) => hasServiceCardAccess(s.id, s.title, currentUser));
   }, [serviceList, currentUser]);
 
   const verifiedService = allowedServiceList.find(
@@ -715,7 +797,9 @@ function ServicesContent() {
 
           {hasAccess && filteredServices.length === 0 && (
             <div className="text-slate-500 py-12 text-center text-sm w-full">
-              No service found matching your search.
+              {query
+                ? 'No service found matching your search.'
+                : 'No service cards currently accessible for your employee profile.'}
             </div>
           )}
         </div>

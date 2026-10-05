@@ -31,6 +31,8 @@ export interface CustomerRecord {
   basic_salary?: string;
   overtime?: string; // "our time"
   company_id?: string;
+  agent_id?: string;
+  agent_name?: string;
   other_company_name?: string;
   other_company_boss_phone?: string;
   other_company_address?: string;
@@ -43,6 +45,9 @@ export interface CustomerRecord {
   guardian_phone?: string;
   username?: string;
   password?: string;
+  plain_password?: string;
+  can_login?: boolean;
+  assigned_service_cards?: string[];
   bank_account_name?: string;
   bank_account_number?: string;
   total_payment?: string;

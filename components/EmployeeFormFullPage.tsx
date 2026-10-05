@@ -11,6 +11,8 @@ import {
   CheckSquare,
   Eye,
   EyeOff,
+  FileCheck2,
+  FileText,
   FolderLock,
   Globe2,
   KeyRound,
@@ -26,6 +28,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  Upload,
   User,
   UserCheck,
   Users,
@@ -34,6 +37,16 @@ import {
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { ServiceCard, getStoredServices, fetchServiceCards } from '@/lib/serviceStorage';
+
+export interface EmployeeDocument {
+  name: string;
+  issue_date?: string;
+  expire_date?: string;
+  url?: string;
+  dataUrl?: string;
+  size?: string;
+  type?: string;
+}
 
 export interface ModuleAccessSettings {
   view: boolean;
@@ -104,6 +117,9 @@ export default function EmployeeFormFullPage({
   // Module permissions
   const [permissions, setPermissions] = useState<EmployeeModulePermissions>(DEFAULT_PERMISSIONS);
 
+  // Employee documents state
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
+
   // Load companies, service cards & master admins
   useEffect(() => {
     setCompaniesList(getStoredCompanies());
@@ -148,6 +164,10 @@ export default function EmployeeFormFullPage({
               setAssignedServiceCards(emp.assigned_service_cards);
             } else {
               setAssignedServiceCards(['*']);
+            }
+
+            if (Array.isArray(emp.documents)) {
+              setDocuments(emp.documents);
             }
 
             if (emp.module_permissions && typeof emp.module_permissions === 'object') {
@@ -294,6 +314,72 @@ export default function EmployeeFormFullPage({
     }
   };
 
+  // File Upload Helper
+  const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Add Document row to employee multiple documents list
+  const handleAddDocumentRow = () => {
+    setDocuments((prev) => [
+      ...prev,
+      {
+        name: '',
+        issue_date: '',
+        expire_date: '',
+        url: '',
+        dataUrl: '',
+        size: '',
+        type: 'application/pdf',
+      },
+    ]);
+  };
+
+  const handleDocumentFieldChange = (
+    index: number,
+    field: keyof EmployeeDocument,
+    value: string
+  ) => {
+    setDocuments((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleDocumentFileChange = async (index: number, file: File) => {
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const sizeStr = file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+        : `${Math.round(file.size / 1024)} KB`;
+
+      setDocuments((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          url: dataUrl,
+          dataUrl,
+          size: sizeStr,
+          type: file.type || 'application/pdf',
+          name: copy[index].name || file.name,
+        };
+        return copy;
+      });
+    } catch {
+      setFeedback({ type: 'error', message: 'Failed to read document attachment.' });
+    }
+  };
+
+  const handleRemoveDocumentRow = (index: number) => {
+    setDocuments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -335,6 +421,11 @@ export default function EmployeeFormFullPage({
       can_delete: Boolean(permissions.customers.delete),
       module_permissions: permissions,
       status,
+      documents: documents.map((doc) => ({
+        ...doc,
+        issue_date: doc.issue_date && doc.issue_date.trim() ? doc.issue_date.trim() : null,
+        expire_date: doc.expire_date && doc.expire_date.trim() ? doc.expire_date.trim() : null,
+      })),
     };
 
     try {
@@ -1133,6 +1224,155 @@ export default function EmployeeFormFullPage({
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Card: Multiple Upload Documents (Name + Date of Issue + Date of Expire + Attachment) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <FileText size={15} className="text-[#0b4da2]" />
+                <span>Upload Documents (NID, Passport, Contract, Certificates &amp; Files)</span>
+              </div>
+              <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+                Attach employee documents with document name, date of issue, date of expire, and file upload.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddDocumentRow}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl border border-blue-200 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+            >
+              <Plus size={14} />
+              <span>Add Document Attachment</span>
+            </button>
+          </div>
+
+          {documents.length === 0 ? (
+            <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 bg-slate-50/50">
+              <FileText size={32} className="mx-auto text-slate-300 mb-2" />
+              <p className="text-xs font-semibold text-slate-600 m-0">No document attachments added yet.</p>
+              <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                Upload national ID, passport copy, employment contract, appointment letter, or certificates.
+              </p>
+              <button
+                type="button"
+                onClick={handleAddDocumentRow}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] px-3.5 py-1.5 rounded-lg border-0 transition-colors cursor-pointer shadow-xs"
+              >
+                <Plus size={13} />
+                <span>Add First Document</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {documents.map((doc, idx) => (
+                <div
+                  key={idx}
+                  className="bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl p-4 transition-all"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
+                    {/* 1. Document Name */}
+                    <div className="lg:col-span-4">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Document Name #{idx + 1}
+                      </label>
+                      <input
+                        type="text"
+                        value={doc.name}
+                        onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
+                        placeholder="e.g. NID, Passport, Contract, Certificate"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
+                      />
+                    </div>
+
+                    {/* 2. Date of Issue */}
+                    <div className="lg:col-span-3">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Date of Issue
+                      </label>
+                      <input
+                        type="date"
+                        value={doc.issue_date || ''}
+                        onChange={(e) => handleDocumentFieldChange(idx, 'issue_date', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                      />
+                    </div>
+
+                    {/* 3. Date of Expire */}
+                    <div className="lg:col-span-3">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                        Date of Expire
+                      </label>
+                      <input
+                        type="date"
+                        value={doc.expire_date || ''}
+                        onChange={(e) => handleDocumentFieldChange(idx, 'expire_date', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                      />
+                    </div>
+
+                    {/* 4. Action / Delete */}
+                    <div className="lg:col-span-2 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDocumentRow(idx)}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-2 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                        title="Remove Document Row"
+                      >
+                        <Trash2 size={13} />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+
+                    {/* 5. File Upload Attachment */}
+                    <div className="sm:col-span-2 lg:col-span-12 pt-2 border-t border-slate-200/70">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-300 transition-colors cursor-pointer shadow-2xs">
+                            <Upload size={13} className="text-[#0b4da2]" />
+                            <span>Choose File (PDF, Image, Word)</span>
+                            <input
+                              type="file"
+                              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleDocumentFileChange(idx, file);
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {doc.size && (
+                            <span className="text-[11px] font-mono text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded">
+                              {doc.size}
+                            </span>
+                          )}
+                        </div>
+
+                        {doc.url && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-emerald-700 font-medium truncate max-w-[200px]">
+                              {doc.name || 'Attached file'}
+                            </span>
+                            <a
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#0b4da2] hover:underline font-semibold text-[11px] inline-flex items-center gap-1"
+                            >
+                              <FileCheck2 size={12} />
+                              <span>View File</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action Buttons Bar */}

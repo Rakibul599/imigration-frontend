@@ -124,8 +124,15 @@ export default function CompanyOrderStatisticsChart({
           return getCompanyProfitWallet(comp);
         case 'pending_wallet':
           return getCompanyPendingWallet(comp);
+        case 'others_cost':
         case 'others_expense':
-          return Number(currentCard.custom_value) || 0;
+          return Number(currentCard.custom_value) || 45000;
+        case 'others_profit':
+          return Number(currentCard.custom_value) || 32500;
+        case 'others_pending':
+          return Number(currentCard.custom_value) || 18200;
+        case 'total_profit':
+          return getCompanyProfitWallet(comp) + 32500;
         default:
           return getCompanyIncomeWallet(comp);
       }
@@ -136,7 +143,7 @@ export default function CompanyOrderStatisticsChart({
       return val > 0 ? val : 50000;
     }
 
-    if (key === 'others_expense') {
+    if (['others_cost', 'others_expense', 'others_profit', 'others_pending'].includes(key)) {
       return Number(currentCard.custom_value) || 45000;
     }
 

@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Briefcase,
   Building2,
   CheckCircle2,
   ChevronDown,
@@ -52,8 +53,9 @@ function LoginForm() {
         c.name.toLowerCase().includes((companyParam || '').toLowerCase())
     ) || companies[0];
 
-  type LoginRole = 'Employee';
+  type LoginRole = 'Employee' | 'Customer';
 
+  const [activePortalTab, setActivePortalTab] = useState<'employee' | 'customer'>('employee');
   const [selectedService, setSelectedService] = useState<Service>(matchedService);
   const [selectedCompany, setSelectedCompany] = useState<Company>(matchedCompany);
   const [role, setRole] = useState<LoginRole>('Employee');
@@ -114,14 +116,32 @@ function LoginForm() {
     setIsLoading(true);
     setFeedback(null);
 
-    // Call backend POST /api/login
-    const authRes = await authenticateEmployee(userId, password, role);
+    const targetPortal = activePortalTab === 'customer' ? 'Customer' : 'Employee';
+    const authRes = await authenticateEmployee(userId, password, targetPortal);
 
     if (!authRes.success || !authRes.user) {
       setIsLoading(false);
       setFeedback({
         type: 'error',
-        message: authRes.message || 'Authentication failed. Please verify your User ID and password.',
+        message: authRes.message || 'Authentication failed. Please verify your credentials.',
+      });
+      return;
+    }
+
+    if (activePortalTab === 'employee' && authRes.user.role === 'Customer') {
+      setIsLoading(false);
+      setFeedback({
+        type: 'error',
+        message: 'This account is a Foreign Worker profile. Please switch to the "Foreign Worker Portal" tab to log in.',
+      });
+      return;
+    }
+
+    if (activePortalTab === 'customer' && authRes.user.role !== 'Customer') {
+      setIsLoading(false);
+      setFeedback({
+        type: 'error',
+        message: 'This account is a Staff/Employee profile. Please switch to the "Local Employee" tab to log in.',
       });
       return;
     }
@@ -258,6 +278,47 @@ function LoginForm() {
       localStorage.removeItem('masterAdminToken');
     } catch {}
 
+    // 2.5 FOREIGN WORKER / CUSTOMER LOGIN: Strictly limited to authorized company and assigned service cards!
+    if (authenticatedUser.role === 'Customer') {
+      const allowedCompanies = authenticatedUser.assigned_companies || [];
+      let targetCompany = selectedCompany;
+      if (allowedCompanies.length > 0) {
+        const found = companies.find((c) => c.id.toLowerCase() === allowedCompanies[0].toLowerCase());
+        if (found) targetCompany = found;
+      }
+
+      try {
+        setCurrentUser(authenticatedUser, authRes.token);
+        localStorage.setItem('activeCompany', JSON.stringify(targetCompany));
+        if (isServiceLogin) {
+          localStorage.setItem('activeService', JSON.stringify(selectedService));
+        }
+        localStorage.setItem('isLoggedIn', 'true');
+      } catch {}
+
+      setIsLoading(false);
+      if (isServiceLogin) {
+        setFeedback({
+          type: 'success',
+          message: `Authenticated as ${authenticatedUser.name}! Opening authorized service...`,
+        });
+        setTimeout(() => {
+          router.push(
+            `/services?company=${encodeURIComponent(targetCompany.id)}&verifiedService=${encodeURIComponent(selectedService.id)}`
+          );
+        }, 400);
+      } else {
+        setFeedback({
+          type: 'success',
+          message: `Welcome, ${authenticatedUser.name}! Opening employer company selection...`,
+        });
+        setTimeout(() => {
+          window.location.href = '/companies';
+        }, 400);
+      }
+      return;
+    }
+
     if (authenticatedUser.role === 'Employee' || !authenticatedUser.role) {
       const allowedCompanies = authenticatedUser.assigned_companies || [];
       const hasWildcard = allowedCompanies.includes('*');
@@ -288,6 +349,7 @@ function LoginForm() {
 
     // Store active session in localStorage
     try {
+      setCurrentUser(authenticatedUser, authRes.token);
       localStorage.setItem('activeCompany', JSON.stringify(selectedCompany));
       if (isServiceLogin) {
         localStorage.setItem('activeService', JSON.stringify(selectedService));
@@ -465,16 +527,26 @@ function LoginForm() {
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-amber-600 shrink-0" />
             <span>
-              <strong>Employee Portal:</strong> User ID: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
+              {activePortalTab === 'employee' ? (
+                <>
+                  <strong>Employee Portal:</strong> User ID: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_USER_ID}</code> • Pass: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-amber-950 font-bold">{DEFAULT_PASSWORD}</code>
+                </>
+              ) : (
+                <>
+                  <strong>Foreign Worker Portal:</strong> Enter your assigned User ID or Passport No. &amp; password.
+                </>
+              )}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={handleQuickFill}
-            className="text-[11px] bg-amber-200 hover:bg-amber-300 text-amber-950 px-2.5 py-1 rounded-md font-bold transition-colors shrink-0 cursor-pointer border-0"
-          >
-            Auto Fill
-          </button>
+          {activePortalTab === 'employee' && (
+            <button
+              type="button"
+              onClick={handleQuickFill}
+              className="text-[11px] bg-amber-200 hover:bg-amber-300 text-amber-950 px-2.5 py-1 rounded-md font-bold transition-colors shrink-0 cursor-pointer border-0"
+            >
+              Auto Fill
+            </button>
+          )}
         </div>
 
         {/* Card Form */}
@@ -501,14 +573,59 @@ function LoginForm() {
             </div>
           )}
 
+          {/* Dual Portal Switcher: Local Employee vs Foreign Worker Portal */}
+          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => {
+                setActivePortalTab('employee');
+                if (userId === '') {
+                  setUserId(DEFAULT_USER_ID);
+                  setPassword(DEFAULT_PASSWORD);
+                }
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 ${
+                activePortalTab === 'employee'
+                  ? 'bg-white text-[#0b4da2] shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 bg-transparent'
+              }`}
+            >
+              <Briefcase size={14} />
+              <span>Local Employee</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActivePortalTab('customer');
+                if (userId === DEFAULT_USER_ID) {
+                  setUserId('');
+                  setPassword('');
+                }
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 ${
+                activePortalTab === 'customer'
+                  ? 'bg-[#0b4da2] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900 bg-transparent'
+              }`}
+            >
+              <Globe2 size={14} />
+              <span>Foreign Worker Portal</span>
+            </button>
+          </div>
+
           {/* Account Type Indicator */}
           <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200/80 rounded-xl px-4 py-2.5">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#0b4da2] animate-pulse" />
-              <span className="text-xs font-bold text-[#0b4da2]">Employee Account Login</span>
+              <span className="text-xs font-bold text-[#0b4da2]">
+                {activePortalTab === 'employee'
+                  ? 'Local Employee Account Login'
+                  : 'Foreign Worker Portal Login'}
+              </span>
             </div>
             <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-blue-100 font-bold uppercase">
-              Staff Portal
+              {activePortalTab === 'employee' ? 'Staff Clearance' : 'Worker Access'}
             </span>
           </div>
 

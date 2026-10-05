@@ -818,6 +818,27 @@ export default function MasterAdminCustomersPage() {
                 </div>
               </div>
 
+              {/* Login Access Status */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-semibold">Portal Login Access</span>
+                  <span className="font-semibold text-slate-800">
+                    {viewingCustomer.can_login ? (
+                      <span className="text-emerald-700 font-bold">Enabled (User ID: {viewingCustomer.username})</span>
+                    ) : (
+                      <span className="text-slate-500">Disabled (No Login Access)</span>
+                    )}
+                  </span>
+                </div>
+                {viewingCustomer.can_login && (
+                  <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                    {viewingCustomer.assigned_service_cards?.includes('*')
+                      ? 'Full Cards Access'
+                      : `${viewingCustomer.assigned_service_cards?.length || 0} Cards Assigned`}
+                  </span>
+                )}
+              </div>
+
               {/* Others Company Information */}
               {(viewingCustomer.other_company_name || viewingCustomer.other_company_boss_phone || viewingCustomer.other_company_address) && (
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
