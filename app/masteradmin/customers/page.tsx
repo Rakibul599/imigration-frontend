@@ -369,19 +369,21 @@ export default function MasterAdminCustomersPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Scope Restricted Company Filter */}
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#0b4da2]"
-            >
-              <option value="ALL">All Assigned Employers ({permittedCompanies.length})</option>
-              {permittedCompanies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            {/* Scope Restricted Company Filter: Only show if more than 1 company */}
+            {permittedCompanies.length > 1 && (
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
+                className="bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 font-medium focus:outline-hidden focus:border-[#0b4da2]"
+              >
+                <option value="ALL">All Assigned Employers ({permittedCompanies.length})</option>
+                {permittedCompanies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Sector Filter */}
             <select

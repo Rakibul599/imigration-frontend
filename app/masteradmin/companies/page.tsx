@@ -48,7 +48,16 @@ import {
   subscribeToCompanyChanges,
   updateStoredCompany,
 } from '@/lib/companyStorage';
-import { getMasterAdminUser } from '@/lib/auth';
+import {
+  CompanyStatCard,
+  DEFAULT_COMPANY_STAT_CARDS,
+  getStoredCompanyStatCards,
+  fetchCompanyStatCards,
+  subscribeToCompanyStatCardsChange,
+} from '@/lib/companyStatCards';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
+import { getMasterAdminUser, AuthUser } from '@/lib/auth';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -62,10 +71,12 @@ const SECTOR_OPTIONS = [
 ];
 
 export default function MasterAdminCompaniesPage() {
-  const [allCompanies, setAllCompanies] = useState<Company[]>(() => {
-    if (typeof window === 'undefined') return [];
-    return getStoredCompanies();
-  });
+  const [mounted, setMounted] = useState(false);
+  const [allCompanies, setAllCompanies] = useState<Company[]>([]);
+  const [statCards, setStatCards] = useState<CompanyStatCard[]>(DEFAULT_COMPANY_STAT_CARDS);
+  const [selectedCardKey, setSelectedCardKey] = useState<string>('deposit_wallet');
+  const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
@@ -85,24 +96,47 @@ export default function MasterAdminCompaniesPage() {
   const [formBankName, setFormBankName] = useState('');
   const [formBankAccountNo, setFormBankAccountNo] = useState('');
 
-  const currentUser = getMasterAdminUser();
+  // Current logged in Master Admin user
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
   const assignedList = useMemo(() => {
     return (currentUser && Array.isArray(currentUser.assigned_companies))
       ? currentUser.assigned_companies
       : [];
   }, [currentUser]);
 
-  // Load companies
+  // Load companies & stat cards safely on mount to eliminate hydration mismatches
   useEffect(() => {
+    setMounted(true);
+    const user = getMasterAdminUser();
+    setCurrentUser(user);
     setAllCompanies(getStoredCompanies());
+    setStatCards(getStoredCompanyStatCards());
+
     fetchCompaniesFromBackend().then((list) => {
-      setAllCompanies(list);
+      if (Array.isArray(list) && list.length > 0) {
+        setAllCompanies(list);
+      }
     }).catch(() => {});
 
-    const unsub = subscribeToCompanyChanges(() => {
+    fetchCompanyStatCards().then((cards) => {
+      if (Array.isArray(cards) && cards.length > 0) {
+        setStatCards(cards);
+      }
+    }).catch(() => {});
+
+    const unsubCompanies = subscribeToCompanyChanges(() => {
       setAllCompanies(getStoredCompanies());
     });
-    return unsub;
+
+    const unsubCards = subscribeToCompanyStatCardsChange(() => {
+      setStatCards(getStoredCompanyStatCards());
+    });
+
+    return () => {
+      unsubCompanies();
+      unsubCards();
+    };
   }, []);
 
   const showToast = (type: 'success' | 'info', message: string) => {
@@ -138,7 +172,36 @@ export default function MasterAdminCompaniesPage() {
     });
   }, [allCompanies, assignedList]);
 
-  // Filter with search & sector
+  // Options for Company Card Filter
+  const companyCardFilterOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'ALL',
+      label: `All Permitted Companies (${permittedCompanies.length})`,
+      subLabel: '',
+      badge: 'ALL',
+    },
+    ...permittedCompanies.map((c) => ({
+      value: String(c.id),
+      label: c.name,
+      subLabel: c.sector,
+      badge: c.roc,
+    })),
+  ], [permittedCompanies]);
+
+  // Currently selected single company (either by filter or if only 1 permitted company exists)
+  const selectedSingleCompany = useMemo(() => {
+    if (permittedCompanies.length === 1) return permittedCompanies[0];
+    if (selectedCompanyCardId === 'ALL') return null;
+    return permittedCompanies.find((c) => String(c.id) === String(selectedCompanyCardId)) || null;
+  }, [permittedCompanies, selectedCompanyCardId]);
+
+  // Filtered scope for treasury cards and statistics chart
+  const selectedCardCompanies = useMemo(() => {
+    if (selectedSingleCompany) return [selectedSingleCompany];
+    return permittedCompanies;
+  }, [selectedSingleCompany, permittedCompanies]);
+
+  // Filter table with search & sector
   const filteredCompanies = useMemo(() => {
     return permittedCompanies.filter((c) => {
       const matchSearch =
@@ -147,9 +210,233 @@ export default function MasterAdminCompaniesPage() {
         c.sector.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchSector = selectedSector === 'ALL' || c.sector === selectedSector;
-      return matchSearch && matchSector;
+      const matchCardCompany = !selectedSingleCompany || String(c.id) === String(selectedSingleCompany.id);
+      return matchSearch && matchSector && matchCardCompany;
     });
-  }, [permittedCompanies, searchTerm, selectedSector]);
+  }, [permittedCompanies, searchTerm, selectedSector, selectedSingleCompany]);
+
+  // Aggregated totals strictly for selected scope (single company or all permitted)
+  const totalActiveWorkers = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
+  }, [selectedCardCompanies]);
+
+  const totalInactiveWorkers = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
+  }, [selectedCardCompanies]);
+
+  const totalWorkerWallet = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
+  }, [selectedCardCompanies]);
+
+  const totalIncomeWallet = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
+  }, [selectedCardCompanies]);
+
+  const totalCostWallet = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
+  }, [selectedCardCompanies]);
+
+  const totalProfitWallet = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
+  }, [selectedCardCompanies]);
+
+  const totalPendingWallet = useMemo(() => {
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyPendingWallet(c), 0);
+  }, [selectedCardCompanies]);
+
+  // Compute card metrics strictly for permitted / selected scope
+  const getCardMetrics = (card: CompanyStatCard) => {
+    switch (card.card_key) {
+      case 'registered_companies':
+        if (selectedSingleCompany) {
+          return {
+            value: selectedSingleCompany.name,
+            sub: `${selectedSingleCompany.roc || 'Verified Entity'} • View Profile →`,
+            link: `/masteradmin/companies/${encodeURIComponent(selectedSingleCompany.id)}`,
+            isLink: true,
+            isCompanyEntity: true,
+            theme: {
+              bg: 'bg-blue-50',
+              text: 'text-[#0b4da2]',
+              border: 'border-blue-100',
+              valColor: 'text-slate-900',
+            },
+          };
+        }
+        return {
+          value: `${permittedCompanies.length}`,
+          sub: 'Permitted Employer Entities',
+          link: '/masteradmin/companies',
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-blue-50',
+            text: 'text-[#0b4da2]',
+            border: 'border-blue-100',
+            valColor: 'text-slate-900',
+          },
+        };
+      case 'active_workers':
+        return {
+          value: totalActiveWorkers.toLocaleString(),
+          sub: selectedSingleCompany ? 'Active for this Company' : (card.subtitle || 'Approved & Active Permits'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-emerald-50',
+            text: 'text-emerald-600',
+            border: 'border-emerald-100',
+            valColor: 'text-emerald-600',
+          },
+        };
+      case 'inactive_workers':
+        return {
+          value: totalInactiveWorkers.toLocaleString(),
+          sub: selectedSingleCompany ? 'Inactive for this Company' : (card.subtitle || 'Expired / Renewal Pending'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-amber-50',
+            text: 'text-amber-600',
+            border: 'border-amber-100',
+            valColor: 'text-slate-700',
+          },
+        };
+      case 'target_wallet':
+        return {
+          value: `RM ${totalWorkerWallet.toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Worker Target for this Company' : (card.subtitle || 'Total Worker Target Pool'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-purple-50',
+            text: 'text-purple-700',
+            border: 'border-purple-100',
+            valColor: 'text-purple-700',
+          },
+        };
+      case 'deposit_wallet':
+        return {
+          value: `RM ${totalIncomeWallet.toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Deposit Inflow for this Company' : (card.subtitle || 'Total Received Inflow'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-blue-50',
+            text: 'text-blue-700',
+            border: 'border-blue-100',
+            valColor: 'text-blue-700',
+          },
+        };
+      case 'cost_wallet':
+        return {
+          value: `RM ${totalCostWallet.toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Cost & Levy for this Company' : (card.subtitle || 'Operational & Levy Outflow'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-100',
+            valColor: 'text-rose-700',
+          },
+        };
+      case 'others_cost':
+      case 'others_expense':
+        return {
+          value: `RM ${(Number(card.custom_value) || 0).toLocaleString()}`,
+          sub: card.subtitle || 'Miscellaneous & Other Expenses',
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-100',
+            valColor: 'text-rose-700',
+          },
+        };
+      case 'profit_wallet':
+        return {
+          value: `RM ${totalProfitWallet.toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Net Margin for this Company' : (card.subtitle || 'Net Retained Margin'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-emerald-50',
+            text: 'text-emerald-600',
+            border: 'border-emerald-100',
+            valColor: 'text-emerald-700',
+          },
+        };
+      case 'others_profit':
+        return {
+          value: `RM ${(Number(card.custom_value) || 0).toLocaleString()}`,
+          sub: card.subtitle || 'Auxiliary & Service Profits',
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-teal-50',
+            text: 'text-teal-700',
+            border: 'border-teal-100',
+            valColor: 'text-teal-700',
+          },
+        };
+      case 'pending_wallet':
+        return {
+          value: `RM ${totalPendingWallet.toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Pending Dues for this Company' : (card.subtitle || 'Pending Approvals & Dues'),
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-amber-50',
+            text: 'text-amber-600',
+            border: 'border-amber-100',
+            valColor: 'text-amber-700',
+          },
+        };
+      case 'others_pending':
+        return {
+          value: `RM ${(Number(card.custom_value) || 0).toLocaleString()}`,
+          sub: card.subtitle || 'Other Pending Invoices & Dues',
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-amber-50',
+            text: 'text-amber-600',
+            border: 'border-amber-100',
+            valColor: 'text-amber-700',
+          },
+        };
+      case 'total_profit':
+        return {
+          value: `RM ${(totalProfitWallet + (Number(card.custom_value) || 0)).toLocaleString()}`,
+          sub: card.subtitle || 'Foreigner Profit + Auxiliary Profit',
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-emerald-100',
+            text: 'text-emerald-800',
+            border: 'border-emerald-200',
+            valColor: 'text-emerald-700',
+          },
+        };
+      default:
+        return {
+          value: typeof card.custom_value === 'number'
+            ? (card.custom_value >= 1000 ? `RM ${card.custom_value.toLocaleString()}` : card.custom_value.toLocaleString())
+            : '0',
+          sub: card.subtitle || 'Custom Treasury Metric',
+          isLink: false,
+          isCompanyEntity: false,
+          theme: {
+            bg: 'bg-slate-100',
+            text: 'text-slate-700',
+            border: 'border-slate-200',
+            valColor: 'text-slate-800',
+          },
+        };
+    }
+  };
 
   // Open Edit Modal
   const openEditModal = (comp: Company) => {
@@ -198,11 +485,23 @@ export default function MasterAdminCompaniesPage() {
     }
   };
 
-  // Aggregated Stats for assigned companies
-  const totalAssignedWorkers = permittedCompanies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
-  const totalIncome = permittedCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
-  const totalCost = permittedCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
-  const totalProfit = permittedCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
+  // Safe SSR Skeleton to prevent Next.js React hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white rounded-2xl p-6 sm:p-7 shadow-sm">
+          <div className="h-4 w-40 bg-white/20 rounded mb-2" />
+          <div className="h-7 w-72 bg-white/30 rounded mb-2" />
+          <div className="h-4 w-96 bg-white/20 rounded" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white border border-slate-200 rounded-xl p-5 h-32" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -226,13 +525,13 @@ export default function MasterAdminCompaniesPage() {
           <div>
             <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase mb-2">
               <ShieldAlert size={12} className="text-yellow-400" />
-              <span>Assigned Scope Only • Company Creation Disabled</span>
+              <span>Assigned Scope Only • Read-Only Treasury Cards</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white m-0">
               Permitted Companies Management
             </h1>
             <p className="text-xs text-blue-100/90 mt-1 max-w-xl leading-relaxed m-0">
-              Welcome, {currentUser?.name || 'Master Admin'}. You have administrative clearance to view and manage records, directors, and workers for your {assignedList.length} permitted companies.
+              Welcome, {currentUser?.name || 'Master Admin'}. You have administrative clearance to view records, financial metrics, and workers for your {permittedCompanies.length} permitted {permittedCompanies.length === 1 ? 'company' : 'companies'}.
             </p>
           </div>
 
@@ -247,52 +546,240 @@ export default function MasterAdminCompaniesPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Permitted Employers</span>
+      {/* Company Select Filter Bar (Matching Super Admin: Select2 Search or Single Scope indicator + Quick 1-click pills) */}
+      {permittedCompanies.length > 1 ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 flex-wrap">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap">
+              <Building2 size={16} className="text-[#0b4da2]" />
+              <span>Filter Cards by Company:</span>
+            </div>
+            <div className="w-full sm:w-72 md:w-80">
+              <Select2Search
+                options={companyCardFilterOptions}
+                value={selectedCompanyCardId}
+                onChange={(val) => setSelectedCompanyCardId(val)}
+                placeholder="All Permitted Companies (Aggregated)"
+                searchPlaceholder="Search company by name, ROC, sector..."
+                icon={<Building2 size={14} className="text-slate-400" />}
+              />
+            </div>
+            {selectedCompanyCardId !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedCompanyCardId('ALL')}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer w-fit"
+                title="Reset card metrics to all permitted companies"
+              >
+                <X size={13} />
+                <span>Reset to All</span>
+              </button>
+            )}
+
+            {/* Quick 1-click Company Selection Buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setSelectedCompanyCardId('ALL')}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
+                  selectedCompanyCardId === 'ALL'
+                    ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                All ({permittedCompanies.length})
+              </button>
+              {permittedCompanies.map((c) => {
+                const isSelected = selectedCompanyCardId === String(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedCompanyCardId(String(c.id))}
+                    className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-200'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-[#0b4da2]'
+                    }`}
+                    title={`View ${c.name} cards & statistics`}
+                  >
+                    {c.logo ? (
+                      <img
+                        src={resolveFileUrl(c.logo)}
+                        alt=""
+                        className="w-4 h-4 object-contain rounded shrink-0 bg-white"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <Building2 size={13} className="shrink-0 text-slate-400" />
+                    )}
+                    <span className="truncate max-w-[130px]">{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedSingleCompany && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Viewing: {selectedSingleCompany.name}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : permittedCompanies.length === 1 ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-xs text-slate-700 flex-wrap">
             <Building2 size={16} className="text-[#0b4da2]" />
+            <span className="font-bold">Assigned Employer Company:</span>
+            <span className="font-extrabold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+              {permittedCompanies[0].name}
+            </span>
+            {permittedCompanies[0].roc && (
+              <span className="text-slate-400 font-mono text-[11px]">
+                ({permittedCompanies[0].roc})
+              </span>
+            )}
           </div>
-          <div className="text-2xl font-bold text-slate-900 tracking-tight">
-            {permittedCompanies.length}
+          <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit">
+            1 Company Scope
+          </span>
+        </div>
+      ) : null}
+
+      {/* Financial Treasury Cards Section (Read-Only: No Add Card, No Manage Priority) */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
+              Overview & Financial Treasury Cards
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0b4da2] border border-blue-200 text-[10px] font-bold font-mono">
+              {statCards.length} Cards
+            </span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-1">Assigned by Super Admin</div>
+
+          <div className="text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1 rounded-lg">
+            Scope: <span className="font-bold text-slate-700">{selectedSingleCompany ? selectedSingleCompany.name : `${permittedCompanies.length} Permitted Companies`}</span>
+          </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Workers</span>
-            <Users size={16} className="text-emerald-600" />
-          </div>
-          <div className="text-2xl font-bold text-emerald-600 tracking-tight">
-            {totalAssignedWorkers.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-emerald-600 mt-1">Under permitted companies</div>
-        </div>
+        {/* Stat Cards Grid (Clickable to switch chart metric) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {statCards.map((card) => {
+            const metrics = getCardMetrics(card);
+            const isCurrency = metrics.value.startsWith('RM');
+            const isCompanyEntity = metrics.isCompanyEntity && selectedSingleCompany;
+            const isSelected = selectedCardKey === card.card_key;
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Total Incomes</span>
-            <TrendingUp size={16} className="text-blue-600" />
-          </div>
-          <div className="text-2xl font-bold text-blue-700 tracking-tight">
-            RM {totalIncome.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-slate-500 mt-1">Collected wallet credits</div>
-        </div>
+            const cardClasses = `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+              isSelected
+                ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10'
+                : card.card_key === 'total_profit'
+                ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
+                : 'border-slate-200 hover:border-blue-400'
+            } ${metrics.isLink && metrics.link ? 'cursor-pointer' : 'cursor-pointer'}`;
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Net Profit</span>
-            <Wallet size={16} className="text-purple-600" />
-          </div>
-          <div className="text-2xl font-bold text-purple-700 tracking-tight">
-            RM {totalProfit.toLocaleString()}
-          </div>
-          <div className="text-[10px] text-purple-600 mt-1">Permitted company profit</div>
+            const cardContent = (
+              <>
+                {/* Top Row: Title on Left, Icon or Logo on Right */}
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span
+                    className="text-xs text-slate-600 font-bold tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight line-clamp-2"
+                    title={isCompanyEntity ? selectedSingleCompany.name : card.name}
+                  >
+                    {isCompanyEntity ? 'REGISTERED COMPANY' : card.name}
+                  </span>
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors p-0.5 ${
+                      isCompanyEntity && selectedSingleCompany.logo
+                        ? 'bg-white border border-slate-200 shadow-2xs'
+                        : `${metrics.theme.bg} ${metrics.theme.text}`
+                    }`}
+                  >
+                    {isCompanyEntity && selectedSingleCompany.logo ? (
+                      <img
+                        src={resolveFileUrl(selectedSingleCompany.logo)}
+                        alt={selectedSingleCompany.name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <DynamicCardIcon icon={card.icon} size={16} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Middle Row: Full Width Value or Company Name */}
+                {isCompanyEntity ? (
+                  <div
+                    className="font-extrabold tracking-tight text-slate-900 text-sm sm:text-base line-clamp-2 leading-snug my-1 min-h-[44px] flex items-center"
+                    title={selectedSingleCompany.name}
+                  >
+                    {selectedSingleCompany.name}
+                  </div>
+                ) : (
+                  <div
+                    className={`font-bold tracking-tight font-mono my-0.5 ${
+                      isCurrency ? 'text-[20px] sm:text-[22px] xl:text-[24px]' : 'text-2xl'
+                    } ${metrics.theme.valColor}`}
+                  >
+                    {metrics.value}
+                  </div>
+                )}
+
+                {/* Bottom Row: Subtitle / Link */}
+                {metrics.isLink && metrics.link ? (
+                  <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium group-hover:underline">
+                    <TrendingUp size={12} className="shrink-0" />
+                    <span className="truncate">{metrics.sub}</span>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-500 mt-1 truncate" title={metrics.sub}>
+                    {metrics.sub}
+                  </div>
+                )}
+              </>
+            );
+
+            if (metrics.isLink && metrics.link) {
+              return (
+                <Link
+                  key={card.id || card.card_key}
+                  href={metrics.link}
+                  className={cardClasses}
+                >
+                  {cardContent}
+                </Link>
+              );
+            }
+
+            return (
+              <div
+                key={card.id || card.card_key}
+                onClick={() => setSelectedCardKey(card.card_key)}
+                className={cardClasses}
+                title={`Click to view ${card.name} in statistics graph`}
+              >
+                {cardContent}
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* Interactive Date-Wise Order & Metric Statistics Chart (Strictly Permitted Scope) */}
+      <CompanyOrderStatisticsChart
+        companies={selectedCardCompanies}
+        statCards={statCards}
+        initialCardKey={selectedCardKey}
+      />
 
       {/* Main Companies List & Table Card */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
@@ -330,6 +817,7 @@ export default function MasterAdminCompaniesPage() {
               onClick={() => {
                 setSearchTerm('');
                 setSelectedSector('ALL');
+                setSelectedCompanyCardId('ALL');
               }}
               className="p-2 text-slate-500 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
               title="Reset filters"
@@ -395,7 +883,7 @@ export default function MasterAdminCompaniesPage() {
                           </div>
                           <div>
                             <Link
-                              href={`/superadmin/companies/${comp.id}`}
+                              href={`/masteradmin/companies/${comp.id}`}
                               className="font-bold text-slate-900 text-xs hover:text-[#0b4da2] no-underline block"
                             >
                               {comp.name}
@@ -450,6 +938,20 @@ export default function MasterAdminCompaniesPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCompanyCardId(selectedCompanyCardId === String(comp.id) ? 'ALL' : String(comp.id))}
+                            className={`px-2.5 py-1 rounded text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer border ${
+                              selectedCompanyCardId === String(comp.id)
+                                ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
+                                : 'bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-[#0b4da2] border-slate-200'
+                            }`}
+                            title="Filter cards and metrics to this company"
+                          >
+                            <Building2 size={12} />
+                            <span>{selectedCompanyCardId === String(comp.id) ? 'Active' : 'Filter Cards'}</span>
+                          </button>
+
                           <Link
                             href={`/services?company=${encodeURIComponent(comp.id)}`}
                             className="px-2.5 py-1 rounded bg-blue-50 hover:bg-blue-100 text-[#0b4da2] text-[11px] font-bold inline-flex items-center gap-1 transition-colors no-underline border border-blue-200"
@@ -460,7 +962,7 @@ export default function MasterAdminCompaniesPage() {
                           </Link>
 
                           <Link
-                            href={`/superadmin/companies/${comp.id}`}
+                            href={`/masteradmin/companies/${comp.id}`}
                             className="p-1.5 text-slate-600 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center"
                             title="Open Company Details"
                           >

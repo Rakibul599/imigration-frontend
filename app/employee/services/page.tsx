@@ -273,21 +273,23 @@ export default function EmployeeServicesPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Building2 size={14} className="text-slate-400 shrink-0 hidden sm:inline" />
-          <select
-            value={selectedCompanyId}
-            onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="w-full sm:w-auto bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:bg-white focus:outline-none font-medium cursor-pointer"
-          >
-            <option value="ALL">All Authorized Companies ({permittedCompanies.length})</option>
-            {permittedCompanies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {permittedCompanies.length > 1 && (
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Building2 size={14} className="text-slate-400 shrink-0 hidden sm:inline" />
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="w-full sm:w-auto bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:bg-white focus:outline-none font-medium cursor-pointer"
+            >
+              <option value="ALL">All Authorized Companies ({permittedCompanies.length})</option>
+              {permittedCompanies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Service Cards Grid */}

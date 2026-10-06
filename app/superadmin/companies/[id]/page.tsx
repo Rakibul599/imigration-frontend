@@ -114,10 +114,11 @@ export default function SuperAdminCompanyDetailsPage() {
       // 2. Fetch fresh from backend and update if matched
       fetchCompaniesFromBackend()
         .then((list) => {
+          const target = String(companyId || '').toLowerCase();
           const fresh = list.find(
             (c) =>
-              c.id.toLowerCase() === companyId.toLowerCase() ||
-              c.roc.toLowerCase() === companyId.toLowerCase() ||
+              (c.id && String(c.id).toLowerCase() === target) ||
+              (c.roc && String(c.roc).toLowerCase() === target) ||
               c.id === companyId ||
               c.roc === companyId
           );

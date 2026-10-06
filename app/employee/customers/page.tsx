@@ -415,19 +415,21 @@ export default function EmployeeCustomersPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-          {/* Company Filter (Restricted to Permitted) */}
-          <select
-            value={selectedCompanyId}
-            onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:bg-white focus:outline-none font-medium cursor-pointer max-w-[200px]"
-          >
-            <option value="ALL">All Authorized Companies ({permittedCompanies.length})</option>
-            {permittedCompanies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          {/* Company Filter (Only if more than 1 company) */}
+          {permittedCompanies.length > 1 && (
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:bg-white focus:outline-none font-medium cursor-pointer max-w-[200px]"
+            >
+              <option value="ALL">All Authorized Companies ({permittedCompanies.length})</option>
+              {permittedCompanies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Status Filter */}
           <select

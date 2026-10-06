@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
@@ -358,13 +359,13 @@ export default function MasterAdminEmployeesPage() {
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-0 shrink-0"
+          <Link
+            href="/masteradmin/employees/create"
+            className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer no-underline shrink-0"
           >
             <Plus size={16} />
             <span>Add Staff Member</span>
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -642,14 +643,13 @@ export default function MasterAdminEmployeesPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(emp)}
-                            className="p-1.5 text-slate-600 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
+                          <Link
+                            href={`/masteradmin/employees/edit?id=${emp.id}`}
+                            className="p-1.5 text-slate-600 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center no-underline"
                             title="Edit Staff Member"
                           >
                             <Edit2 size={14} />
-                          </button>
+                          </Link>
 
                           <button
                             type="button"

@@ -11,6 +11,9 @@ export interface ModuleAccess {
   create?: boolean;
   edit?: boolean;
   delete?: boolean;
+  statistics?: boolean;
+  cards?: string[];
+  [key: string]: any;
 }
 
 export interface ModulePermissions {
@@ -19,6 +22,33 @@ export interface ModulePermissions {
   services?: ModuleAccess;
   passwords?: ModuleAccess;
   [key: string]: ModuleAccess | undefined;
+}
+
+export function canEmployeeViewCompanyCards(user: AuthUser | null): boolean {
+  if (!user) return false;
+  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin' || user.role === 'MasterAdmin') return true;
+  if (!user.module_permissions?.companies) return true;
+  if (user.module_permissions.companies.view === false) return false;
+  const cards = user.module_permissions.companies.cards;
+  if (cards !== undefined && Array.isArray(cards) && cards.length === 0) return false;
+  return true;
+}
+
+export function getEmployeeAllowedCompanyCards(user: AuthUser | null): string[] {
+  if (!user) return [];
+  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin' || user.role === 'MasterAdmin') return ['*'];
+  const cards = user.module_permissions?.companies?.cards;
+  if (Array.isArray(cards)) return cards;
+  return ['*'];
+}
+
+export function canEmployeeViewCompanyStatistics(user: AuthUser | null): boolean {
+  if (!user) return false;
+  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin' || user.role === 'MasterAdmin') return true;
+  if (!user.module_permissions?.companies) return true;
+  if (user.module_permissions.companies.view === false) return false;
+  if (user.module_permissions.companies.statistics === false) return false;
+  return true;
 }
 
 export interface AuthUser {

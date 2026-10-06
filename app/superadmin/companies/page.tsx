@@ -73,6 +73,9 @@ import {
   resetCompanyStatCards,
   subscribeToCompanyStatCardsChange,
   updateCompanyStatCard,
+  createCompanyStatCard,
+  deleteCompanyStatCard,
+  uploadCompanyStatCardIcon,
 } from '@/lib/companyStatCards';
 import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
 import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
@@ -141,11 +144,22 @@ export default function SuperAdminCompaniesPage() {
   const [manageCardsList, setManageCardsList] = useState<CompanyStatCard[]>([]);
   const [editingCardIdInModal, setEditingCardIdInModal] = useState<number | null>(null);
   const [modalEditName, setModalEditName] = useState('');
+  const [modalEditSubtitle, setModalEditSubtitle] = useState('');
   const [modalEditIcon, setModalEditIcon] = useState('');
   const [modalEditCustomValue, setModalEditCustomValue] = useState<number>(0);
   const [modalEditIconPreview, setModalEditIconPreview] = useState<string | null>(null);
   const [modalEditIconFile, setModalEditIconFile] = useState<File | null>(null);
   const [isSavingManage, setIsSavingManage] = useState(false);
+
+  // Add Card Modal State
+  const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
+  const [addCardName, setAddCardName] = useState('');
+  const [addCardSubtitle, setAddCardSubtitle] = useState('');
+  const [addCardValue, setAddCardValue] = useState<number>(0);
+  const [addCardIcon, setAddCardIcon] = useState('Wallet');
+  const [addCardIconPreview, setAddCardIconPreview] = useState<string | null>(null);
+  const [addCardIconFile, setAddCardIconFile] = useState<File | null>(null);
+  const [isSubmittingAddCard, setIsSubmittingAddCard] = useState(false);
 
   // Form states for Create & Edit Company
   const [dbWorkingSectors, setDbWorkingSectors] = useState<WorkingSector[]>([]);
@@ -235,11 +249,27 @@ export default function SuperAdminCompaniesPage() {
   const getCardMetrics = (card: CompanyStatCard) => {
     switch (card.card_key) {
       case 'registered_companies':
+        if (selectedSingleCompany) {
+          return {
+            value: selectedSingleCompany.name,
+            sub: `${selectedSingleCompany.roc || 'Verified Entity'} • View Profile →`,
+            link: `/superadmin/companies/${encodeURIComponent(selectedSingleCompany.id)}`,
+            isLink: true,
+            isCompanyEntity: true,
+            theme: {
+              bg: 'bg-blue-50',
+              text: 'text-[#0b4da2]',
+              border: 'border-blue-100',
+              valColor: 'text-slate-900',
+            },
+          };
+        }
         return {
-          value: selectedSingleCompany ? '1' : `${companies.length}`,
-          sub: selectedSingleCompany ? selectedSingleCompany.roc : (card.subtitle || 'View Company List →'),
-          link: selectedSingleCompany ? `/superadmin/companies/${encodeURIComponent(selectedSingleCompany.id)}` : '/superadmin/companies/registered',
+          value: `${companies.length}`,
+          sub: card.subtitle || 'View Company List →',
+          link: '/superadmin/companies/registered',
           isLink: true,
+          isCompanyEntity: false,
           theme: {
             bg: 'bg-blue-50',
             text: 'text-[#0b4da2]',
@@ -468,6 +498,7 @@ export default function SuperAdminCompaniesPage() {
     }
     setEditingCardIdInModal(card.id);
     setModalEditName(card.name);
+    setModalEditSubtitle(card.subtitle || '');
     setModalEditIcon(card.icon || 'Receipt');
     setModalEditCustomValue(card.custom_value ?? 0);
     setModalEditIconPreview(null);
@@ -480,6 +511,7 @@ export default function SuperAdminCompaniesPage() {
         return {
           ...c,
           name: modalEditName.trim() || c.name,
+          subtitle: modalEditSubtitle.trim() || c.subtitle,
           icon: modalEditIconPreview || modalEditIcon,
           custom_value: modalEditCustomValue,
         };
@@ -491,7 +523,7 @@ export default function SuperAdminCompaniesPage() {
     showToast('info', 'Card updated in list. Click "Save Changes" to persist.');
   };
 
-  const handleModalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleModalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setModalEditIconFile(file);
@@ -501,20 +533,63 @@ export default function SuperAdminCompaniesPage() {
       setModalEditIconPreview(reader.result as string);
     };
     reader.readAsDataURL(file);
+
+    uploadCompanyStatCardIcon(file).then((url) => {
+      if (url) {
+        setModalEditIcon(url);
+        setModalEditIconPreview(url);
+      }
+    }).catch(() => {});
   };
 
   // Save all changes in Manage modal
   const handleSaveManageModal = async () => {
     setIsSavingManage(true);
     try {
-      const updated = await reorderCompanyStatCards(manageCardsList);
+      // Auto-apply currently edited card if user forgot to click "Done Editing"
+      let currentList = [...manageCardsList];
+      if (editingCardIdInModal !== null) {
+        currentList = currentList.map((c) => {
+          if (c.id === editingCardIdInModal) {
+            return {
+              ...c,
+              name: modalEditName.trim() || c.name,
+              subtitle: modalEditSubtitle.trim() || c.subtitle,
+              icon: modalEditIconPreview || modalEditIcon,
+              custom_value: modalEditCustomValue,
+            };
+          }
+          return c;
+        });
+        setManageCardsList(currentList);
+        setEditingCardIdInModal(null);
+      }
+
+      const updated = await reorderCompanyStatCards(currentList);
       setStatCards(updated);
-      showToast('success', 'Stat & Wallet cards priority and settings saved to database.');
+      showToast('success', 'Stat & Wallet cards priority and settings saved successfully.');
       setIsManageModalOpen(false);
     } catch (err) {
       console.error('Failed to save manage modal:', err);
+      showToast('info', 'Failed to save card changes.');
     } finally {
       setIsSavingManage(false);
+    }
+  };
+
+  const handleDeleteCard = async (card: CompanyStatCard) => {
+    if (!confirm(`Are you sure you want to delete card "${card.name}"?`)) return;
+    try {
+      const updated = await deleteCompanyStatCard(card.id);
+      setStatCards(updated);
+      setManageCardsList(updated);
+      if (editingCardIdInModal === card.id) {
+        setEditingCardIdInModal(null);
+      }
+      showToast('info', `Card "${card.name}" deleted successfully.`);
+    } catch (err) {
+      console.error('Failed to delete card:', err);
+      showToast('info', 'Failed to delete card.');
     }
   };
 
@@ -525,6 +600,72 @@ export default function SuperAdminCompaniesPage() {
       setManageCardsList(reset);
       setEditingCardIdInModal(null);
       showToast('info', 'Stat & wallet cards reset to original defaults.');
+    }
+  };
+
+  // Add Card handlers
+  const openAddCardModal = () => {
+    setAddCardName('');
+    setAddCardSubtitle('');
+    setAddCardValue(0);
+    setAddCardIcon('Wallet');
+    setAddCardIconPreview(null);
+    setAddCardIconFile(null);
+    setIsAddCardModalOpen(true);
+  };
+
+  const handleAddCardFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAddCardIconFile(file);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAddCardIconPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    uploadCompanyStatCardIcon(file).then((url) => {
+      if (url) {
+        setAddCardIcon(url);
+        setAddCardIconPreview(url);
+      }
+    }).catch(() => {});
+  };
+
+  const handleCreateNewCard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addCardName.trim()) {
+      showToast('info', 'Please enter a card title/name.');
+      return;
+    }
+    setIsSubmittingAddCard(true);
+    try {
+      let iconUrl = addCardIconPreview || addCardIcon;
+      if (addCardIconFile && !iconUrl.startsWith('/storage/')) {
+        const uploaded = await uploadCompanyStatCardIcon(addCardIconFile);
+        if (uploaded) {
+          iconUrl = uploaded;
+        }
+      }
+
+      const { card, cards } = await createCompanyStatCard({
+        name: addCardName.trim(),
+        subtitle: addCardSubtitle.trim() || 'Custom Financial Metric',
+        custom_value: Number(addCardValue) || 0,
+        icon: iconUrl,
+        icon_file: addCardIconFile || undefined,
+      });
+
+      setStatCards(cards);
+      setManageCardsList(cards);
+      setIsAddCardModalOpen(false);
+      showToast('success', `Card "${card.name}" created and added successfully!`);
+    } catch (err) {
+      console.error('Failed to create stat card:', err);
+      showToast('info', 'Failed to create new card.');
+    } finally {
+      setIsSubmittingAddCard(false);
     }
   };
 
@@ -615,11 +756,14 @@ export default function SuperAdminCompaniesPage() {
 
   // Filtered List for Table
   const filteredCompanies = companies.filter((c) => {
+    if (!c) return false;
+    const lowerTerm = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.roc.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.sector.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.tag && c.tag.toLowerCase().includes(searchTerm.toLowerCase()));
+      !lowerTerm ||
+      (c.name && String(c.name).toLowerCase().includes(lowerTerm)) ||
+      (c.roc && String(c.roc).toLowerCase().includes(lowerTerm)) ||
+      (c.sector && String(c.sector).toLowerCase().includes(lowerTerm)) ||
+      (c.tag && String(c.tag).toLowerCase().includes(lowerTerm));
 
     const matchesSector = selectedSector === 'ALL' || c.sector === selectedSector;
     const matchesCardCompany = !syncTableWithCardFilter || selectedCompanyCardId === 'ALL' || c.id === selectedCompanyCardId;
@@ -719,53 +863,55 @@ export default function SuperAdminCompaniesPage() {
           </div>
         </div>
 
-        {/* Company Select2 Filter for Cards Information */}
-        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap">
-              <Building2 size={16} className="text-[#0b4da2]" />
-              <span>Filter Cards by Company:</span>
+        {/* Company Select2 Filter for Cards Information: Only shown if more than 1 company */}
+        {companies.length > 1 && (
+          <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap">
+                <Building2 size={16} className="text-[#0b4da2]" />
+                <span>Filter Cards by Company:</span>
+              </div>
+              <div className="w-full sm:w-80 md:w-96">
+                <Select2Search
+                  options={companyCardFilterOptions}
+                  value={selectedCompanyCardId}
+                  onChange={(val) => setSelectedCompanyCardId(val)}
+                  placeholder="All Companies (Aggregated)"
+                  searchPlaceholder="Search company by name, ROC, sector..."
+                  icon={<Building2 size={14} className="text-slate-400" />}
+                />
+              </div>
+              {selectedCompanyCardId !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCompanyCardId('ALL')}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer w-fit"
+                  title="Reset card metrics to all companies"
+                >
+                  <X size={13} />
+                  <span>Reset to All</span>
+                </button>
+              )}
             </div>
-            <div className="w-full sm:w-80 md:w-96">
-              <Select2Search
-                options={companyCardFilterOptions}
-                value={selectedCompanyCardId}
-                onChange={(val) => setSelectedCompanyCardId(val)}
-                placeholder="All Companies (Aggregated)"
-                searchPlaceholder="Search company by name, ROC, sector..."
-                icon={<Building2 size={14} className="text-slate-400" />}
-              />
-            </div>
-            {selectedCompanyCardId !== 'ALL' && (
-              <button
-                type="button"
-                onClick={() => setSelectedCompanyCardId('ALL')}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer w-fit"
-                title="Reset card metrics to all companies"
-              >
-                <X size={13} />
-                <span>Reset to All</span>
-              </button>
+
+            {selectedSingleCompany && (
+              <div className="flex items-center gap-3">
+                <label className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={syncTableWithCardFilter}
+                    onChange={(e) => setSyncTableWithCardFilter(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  Filter table below as well
+                </label>
+                <span className="hidden lg:inline text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Viewing: {selectedSingleCompany.name}
+                </span>
+              </div>
             )}
           </div>
-
-          {selectedSingleCompany && (
-            <div className="flex items-center gap-3">
-              <label className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={syncTableWithCardFilter}
-                  onChange={(e) => setSyncTableWithCardFilter(e.target.checked)}
-                  className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-3.5 h-3.5 cursor-pointer"
-                />
-                Filter table below as well
-              </label>
-              <span className="hidden lg:inline text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Viewing: {selectedSingleCompany.name}
-              </span>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* TOP STAT & WALLET CARDS SECTION (Clean Design Matching Screenshot with Top Manage Button) */}
@@ -782,6 +928,17 @@ export default function SuperAdminCompaniesPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Add New Card Button */}
+            <button
+              type="button"
+              onClick={openAddCardModal}
+              title="Add a new custom financial or metric card"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs hover:shadow transition-all cursor-pointer border-0"
+            >
+              <Plus size={14} />
+              <span>Add New Card</span>
+            </button>
+
             {/* Manage Cards & Priority Button */}
             <button
               type="button"
@@ -801,53 +958,100 @@ export default function SuperAdminCompaniesPage() {
             const metrics = getCardMetrics(card);
             const isCurrency = metrics.value.startsWith('RM');
 
-            return (
-              <div
-                key={card.id || card.card_key}
-                className={`bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] ${
-                  card.card_key === 'total_profit'
-                    ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
-                    : 'border-slate-200 hover:border-blue-400'
-                }`}
-              >
+            const cardClasses = `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+              metrics.isLink && metrics.link
+                ? 'cursor-pointer hover:border-[#0b4da2] hover:ring-2 hover:ring-blue-100 active:scale-[0.99]'
+                : ''
+            } ${
+              card.card_key === 'total_profit'
+                ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
+                : 'border-slate-200 hover:border-blue-400'
+            }`;
+
+            const isCompanyEntity = metrics.isCompanyEntity && selectedSingleCompany;
+
+            const cardContent = (
+              <>
                 {/* Top Row: Title on Left, Icon on Right */}
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span
-                    className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight line-clamp-2"
-                    title={card.name}
+                    className="text-xs text-slate-600 font-bold tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight line-clamp-2"
+                    title={isCompanyEntity ? selectedSingleCompany.name : card.name}
                   >
-                    {card.name}
+                    {isCompanyEntity ? 'REGISTERED COMPANY' : card.name}
                   </span>
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${metrics.theme.bg} ${metrics.theme.text}`}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors p-0.5 ${
+                      isCompanyEntity && selectedSingleCompany.logo
+                        ? 'bg-white border border-slate-200 shadow-2xs'
+                        : `${metrics.theme.bg} ${metrics.theme.text}`
+                    }`}
                   >
-                    {renderCardIcon(card.icon, 16)}
+                    {isCompanyEntity && selectedSingleCompany.logo ? (
+                      <img
+                        src={resolveFileUrl(selectedSingleCompany.logo)}
+                        alt={selectedSingleCompany.name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      renderCardIcon(card.icon, 16)
+                    )}
                   </div>
                 </div>
 
-                {/* Middle Row: Full Width Value */}
-                <div
-                  className={`font-bold tracking-tight font-mono my-0.5 ${
-                    isCurrency ? 'text-[20px] sm:text-[22px] xl:text-[24px]' : 'text-2xl'
-                  } ${metrics.theme.valColor}`}
-                >
-                  {metrics.value}
-                </div>
+                {/* Middle Row: Full Width Value / Company Name */}
+                {isCompanyEntity ? (
+                  <div
+                    className="font-extrabold tracking-tight text-slate-900 text-sm sm:text-base line-clamp-2 leading-snug my-1 min-h-[44px] flex items-center"
+                    title={selectedSingleCompany.name}
+                  >
+                    {selectedSingleCompany.name}
+                  </div>
+                ) : (
+                  <div
+                    className={`font-bold tracking-tight font-mono my-0.5 ${
+                      isCurrency ? 'text-[20px] sm:text-[22px] xl:text-[24px]' : 'text-2xl'
+                    } ${metrics.theme.valColor}`}
+                  >
+                    {metrics.value}
+                  </div>
+                )}
 
                 {/* Bottom Row: Subtitle / Link */}
                 {metrics.isLink && metrics.link ? (
-                  <Link
-                    href={metrics.link}
-                    className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium hover:underline no-underline"
-                  >
+                  <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium group-hover:underline">
                     <TrendingUp size={12} className="shrink-0" />
-                    <span className="truncate">{metrics.sub.replace(/→/g, '').trim()} • View Directory →</span>
-                  </Link>
+                    <span className="truncate">{metrics.sub}</span>
+                  </div>
                 ) : (
                   <div className="text-[11px] text-slate-500 mt-1 truncate" title={metrics.sub}>
                     {metrics.sub}
                   </div>
                 )}
+              </>
+            );
+
+            if (metrics.isLink && metrics.link) {
+              return (
+                <Link
+                  key={card.id || card.card_key}
+                  href={metrics.link}
+                  className={cardClasses}
+                >
+                  {cardContent}
+                </Link>
+              );
+            }
+
+            return (
+              <div
+                key={card.id || card.card_key}
+                className={cardClasses}
+              >
+                {cardContent}
               </div>
             );
           })}
@@ -1076,7 +1280,7 @@ export default function SuperAdminCompaniesPage() {
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-200">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-200 shadow-2xs">
                   <SlidersHorizontal size={20} />
                 </div>
                 <div>
@@ -1091,13 +1295,24 @@ export default function SuperAdminCompaniesPage() {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsManageModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer bg-transparent border-0"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={openAddCardModal}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer border-0"
+                  title="Create and add a new card"
+                >
+                  <Plus size={14} />
+                  <span>+ Add Card</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsManageModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer bg-transparent border-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body: Cards List with inline edit capabilities */}
@@ -1142,17 +1357,18 @@ export default function SuperAdminCompaniesPage() {
 
                         {/* Card Name */}
                         <div className="min-w-0 flex-1">
-                          <span className="text-xs font-bold text-slate-900 block uppercase leading-tight break-words">
+                          <span className="text-xs font-bold text-slate-900 block leading-tight break-words">
                             {card.name}
                           </span>
                           <span className="text-[10px] text-slate-400 font-mono block leading-tight mt-0.5">
                             {rank === 1 ? '★ Priority #1 (First Position)' : `Priority Position #${rank}`}
-                            {card.custom_value !== undefined && card.custom_value > 0 ? ` • RM ${card.custom_value.toLocaleString()}` : ''}
+                            {card.subtitle ? ` • ${card.subtitle}` : ''}
+                            {card.custom_value !== undefined && Number(card.custom_value) > 0 ? ` • RM ${Number(card.custom_value).toLocaleString()}` : ''}
                           </span>
                         </div>
                       </div>
 
-                      {/* Action Buttons: Rank input, Arrow icons, and Edit button */}
+                      {/* Action Buttons: Rank input, Arrow icons, Edit button, Delete button */}
                       <div className="flex items-center gap-1.5 shrink-0">
                         <div className="flex items-center gap-1 mr-1">
                           <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">Rank:</span>
@@ -1222,6 +1438,16 @@ export default function SuperAdminCompaniesPage() {
                           <Edit2 size={12} />
                           <span>{isEditing ? 'Close' : 'Edit'}</span>
                         </button>
+
+                        {/* Delete Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCard(card)}
+                          title="Delete card"
+                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-800 cursor-pointer transition-colors border-0"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </div>
 
@@ -1237,31 +1463,45 @@ export default function SuperAdminCompaniesPage() {
                             type="text"
                             value={modalEditName}
                             onChange={(e) => setModalEditName(e.target.value)}
-                            className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 uppercase font-semibold"
+                            className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-semibold"
                             placeholder="Enter card title..."
                           />
                         </div>
 
-                        {/* If custom amount card, allow editing amount */}
-                        {['others_cost', 'others_expense', 'others_profit', 'others_pending', 'total_profit'].includes(card.card_key) && (
-                          <div>
-                            <label className="text-xs font-bold text-slate-700 block mb-1">
-                              {card.card_key.includes('cost') || card.card_key.includes('expense')
-                                ? 'Expense / Cost Amount (RM)'
-                                : card.card_key.includes('profit')
-                                ? 'Profit Amount / Override (RM)'
-                                : 'Pending Amount / Override (RM)'}
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={modalEditCustomValue}
-                              onChange={(e) => setModalEditCustomValue(Number(e.target.value))}
-                              className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-bold"
-                              placeholder="0"
-                            />
-                          </div>
-                        )}
+                        {/* Subtitle Field */}
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">
+                            Card Subtitle / Description
+                          </label>
+                          <input
+                            type="text"
+                            value={modalEditSubtitle}
+                            onChange={(e) => setModalEditSubtitle(e.target.value)}
+                            className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-medium"
+                            placeholder="Enter card subtitle or description..."
+                          />
+                        </div>
+
+                        {/* Custom amount field for financial/custom cards */}
+                        <div>
+                          <label className="text-xs font-bold text-slate-700 block mb-1">
+                            {['others_cost', 'others_expense'].includes(card.card_key)
+                              ? 'Expense / Cost Amount (RM)'
+                              : ['others_profit', 'total_profit'].includes(card.card_key)
+                              ? 'Profit Amount / Override (RM)'
+                              : card.card_key.includes('pending')
+                              ? 'Pending Amount / Override (RM)'
+                              : 'Card Amount / Value (RM)'}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={modalEditCustomValue}
+                            onChange={(e) => setModalEditCustomValue(Number(e.target.value))}
+                            className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-bold"
+                            placeholder="0"
+                          />
+                        </div>
 
                         {/* Icon Upload & Selection */}
                         <div>
@@ -1388,6 +1628,169 @@ export default function SuperAdminCompaniesPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD NEW CARD MODAL */}
+      {isAddCardModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200 shadow-2xs">
+                  <Plus size={20} />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 m-0">
+                    Add New Financial / Metric Card
+                  </h2>
+                  <p className="text-xs text-slate-500 m-0">
+                    Create a custom card to display in Companies Overview &amp; Treasury.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddCardModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer bg-transparent border-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleCreateNewCard} className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Card Title / Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={addCardName}
+                  onChange={(e) => setAddCardName(e.target.value)}
+                  className="w-full h-10 px-3 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  placeholder="e.g. Special Welfare Fund, VIP Reserve..."
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Subtitle / Description
+                </label>
+                <input
+                  type="text"
+                  value={addCardSubtitle}
+                  onChange={(e) => setAddCardSubtitle(e.target.value)}
+                  className="w-full h-10 px-3 border border-slate-300 rounded-xl text-xs font-medium outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  placeholder="e.g. Monthly Operational Reserve, Auxiliary Pool..."
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Amount / Value (RM)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={addCardValue}
+                  onChange={(e) => setAddCardValue(Number(e.target.value))}
+                  className="w-full h-10 px-3 border border-slate-300 rounded-xl text-xs font-mono font-bold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  Card Icon / Logo
+                </label>
+                <div className="flex flex-col sm:flex-row items-center gap-3 mb-2">
+                  <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 p-2 flex items-center justify-center shrink-0 shadow-2xs text-emerald-600">
+                    {addCardIconPreview ? (
+                      <img src={addCardIconPreview} alt="Preview" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      renderCardIcon(addCardIcon, 20)
+                    )}
+                  </div>
+                  <label className="flex-1 flex items-center justify-center gap-2 p-2 border-2 border-dashed border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50/50 rounded-xl text-xs font-bold text-emerald-700 cursor-pointer transition-all w-full">
+                    <Upload size={14} />
+                    <span>Upload Custom Icon (SVG, PNG, JPG)</span>
+                    <input
+                      type="file"
+                      accept="image/*,.svg"
+                      className="hidden"
+                      onChange={handleAddCardFileUpload}
+                    />
+                  </label>
+                  {addCardIconPreview && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddCardIconPreview(null);
+                        setAddCardIconFile(null);
+                      }}
+                      className="text-xs text-red-600 hover:underline bg-transparent border-0 cursor-pointer font-semibold"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-semibold text-slate-400 block mb-1">
+                    Or Select Preset Icon:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 border border-slate-100 rounded-xl">
+                    {STAT_ICON_PRESETS.map((preset) => {
+                      const isSelected = !addCardIconPreview && addCardIcon === preset.icon;
+                      return (
+                        <button
+                          key={preset.icon}
+                          type="button"
+                          onClick={() => {
+                            setAddCardIcon(preset.icon);
+                            setAddCardIconPreview(null);
+                            setAddCardIconFile(null);
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-medium transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600'
+                              : 'border-slate-200 hover:border-slate-300 bg-white text-slate-600'
+                          }`}
+                        >
+                          <span className="w-4 h-4 flex items-center justify-center">
+                            {renderCardIcon(preset.icon, 14)}
+                          </span>
+                          <span>{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCardModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 bg-white border border-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAddCard}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50 border-0"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>{isSubmittingAddCard ? 'Creating Card...' : 'Add Card'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -155,24 +155,32 @@ export default function RegisteredCompaniesListPage() {
 
   // Filtered List
   const filteredCompanies = companies.filter((c) => {
-    const term = searchTerm.toLowerCase();
-    const nameMatch = c.name.toLowerCase().includes(term);
-    const rocMatch = c.roc.toLowerCase().includes(term);
-    const sectorMatch = c.sector.toLowerCase().includes(term);
-    const emailMatch = c.email ? c.email.toLowerCase().includes(term) : false;
-    const phoneMatch = c.phone ? c.phone.toLowerCase().includes(term) : false;
-    const directorMatch = c.directors
-      ? c.directors.some((d) => d.name.toLowerCase().includes(term) || d.nidNo.toLowerCase().includes(term))
+    if (!c) return false;
+    const term = (searchTerm || '').toLowerCase().trim();
+    if (!term && selectedSector === 'ALL') return true;
+
+    const nameMatch = c.name ? String(c.name).toLowerCase().includes(term) : false;
+    const rocMatch = c.roc ? String(c.roc).toLowerCase().includes(term) : false;
+    const sectorMatch = c.sector ? String(c.sector).toLowerCase().includes(term) : false;
+    const emailMatch = c.email ? String(c.email).toLowerCase().includes(term) : false;
+    const phoneMatch = c.phone ? String(c.phone).toLowerCase().includes(term) : false;
+    const directorMatch = Array.isArray(c.directors)
+      ? c.directors.some((d) => {
+          if (!d) return false;
+          const dName = d.name ? String(d.name).toLowerCase() : '';
+          const dNid = d.nidNo ? String(d.nidNo).toLowerCase() : '';
+          return dName.includes(term) || dNid.includes(term);
+        })
       : false;
 
-    const matchesSearch = nameMatch || rocMatch || sectorMatch || emailMatch || phoneMatch || directorMatch;
+    const matchesSearch = !term || nameMatch || rocMatch || sectorMatch || emailMatch || phoneMatch || directorMatch;
     const matchesSector = selectedSector === 'ALL' || c.sector === selectedSector;
     return matchesSearch && matchesSector;
   });
 
-  const totalWorkersCount = companies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
-  const totalDirectorsCount = companies.reduce((acc, c) => acc + (c.directors?.length || 0), 0);
-  const distinctSectors = Array.from(new Set(companies.map((c) => c.sector)));
+  const totalWorkersCount = companies.reduce((acc, c) => acc + (c?.totalWorkers || 0), 0);
+  const totalDirectorsCount = companies.reduce((acc, c) => acc + (Array.isArray(c?.directors) ? c.directors.length : 0), 0);
+  const distinctSectors = Array.from(new Set(companies.map((c) => c?.sector).filter(Boolean))) as string[];
 
   const sectorOptions: Select2Option[] = useMemo(() => {
     return [
@@ -180,7 +188,7 @@ export default function RegisteredCompaniesListPage() {
       ...distinctSectors.map((sec) => ({
         value: sec,
         label: sec,
-        badge: `${companies.filter((c) => c.sector === sec).length}`,
+        badge: `${companies.filter((c) => c?.sector === sec).length}`,
       })),
     ];
   }, [companies, distinctSectors]);

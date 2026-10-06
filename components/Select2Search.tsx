@@ -108,7 +108,7 @@ export default function Select2Search({
               <span className="font-semibold text-slate-800 truncate">
                 {selectedOption.label}
               </span>
-              {selectedOption.subLabel && (
+              {selectedOption.subLabel && selectedOption.value !== 'ALL' && (
                 <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
                   ({selectedOption.subLabel})
                 </span>

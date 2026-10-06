@@ -145,12 +145,19 @@ export function getStoredCompanyStatCards(): CompanyStatCard[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      // Ensure all 12 cards exist even if upgrading from an older version
-      const merged = DEFAULT_COMPANY_STAT_CARDS.map((def) => {
-        const found = parsed.find((p) => p.card_key === def.card_key || (def.card_key === 'others_cost' && p.card_key === 'others_expense'));
-        return found ? { ...def, ...found, id: def.id } : def;
+      // Retain all stored cards preserving their real DB id, custom values, and newly added cards
+      const cardList: CompanyStatCard[] = [...parsed];
+
+      // Ensure any default card key exists even if upgrading from an older version
+      DEFAULT_COMPANY_STAT_CARDS.forEach((def) => {
+        const found = cardList.find(
+          (p) => p.card_key === def.card_key || (def.card_key === 'others_cost' && p.card_key === 'others_expense')
+        );
+        if (!found) {
+          cardList.push(def);
+        }
       });
-      return merged.sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
+      return cardList.sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
     }
     return DEFAULT_COMPANY_STAT_CARDS;
   } catch (err) {
@@ -241,6 +248,90 @@ export async function updateCompanyStatCard(
   return getStoredCompanyStatCards();
 }
 
+export async function createCompanyStatCard(
+  cardData: Partial<CompanyStatCard> & { icon_file?: File }
+): Promise<{ card: CompanyStatCard; cards: CompanyStatCard[] }> {
+  const current = getStoredCompanyStatCards();
+  const maxOrder = current.reduce((max, c) => Math.max(max, c.order_num ?? 0), 0);
+  
+  const generatedId = Date.now();
+  const cardKey = cardData.card_key || `custom_${Date.now()}`;
+  
+  let newCard: CompanyStatCard = {
+    id: generatedId,
+    card_key: cardKey,
+    name: cardData.name?.trim() || 'NEW CARD',
+    icon: cardData.icon || 'Wallet',
+    subtitle: cardData.subtitle || 'Custom Card',
+    order_num: cardData.order_num ?? (maxOrder + 1),
+    custom_value: cardData.custom_value ?? 0,
+    status: 'active',
+  };
+
+  try {
+    const formData = new FormData();
+    formData.append('name', newCard.name);
+    if (newCard.card_key) formData.append('card_key', newCard.card_key);
+    if (newCard.icon) formData.append('icon', newCard.icon);
+    if (newCard.subtitle) formData.append('subtitle', newCard.subtitle);
+    formData.append('order_num', String(newCard.order_num));
+    formData.append('custom_value', String(newCard.custom_value));
+    if (cardData.icon_file) formData.append('icon_file', cardData.icon_file);
+
+    const res = await fetch(`${API_BASE}/company-stat-cards`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.card) {
+        newCard = json.card;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend create unreachable, saving locally:', err);
+  }
+
+  const updatedCards = [...current.filter((c) => c.id !== newCard.id && c.card_key !== newCard.card_key), newCard];
+  saveStoredCompanyStatCards(updatedCards);
+
+  return { card: newCard, cards: getStoredCompanyStatCards() };
+}
+
+export async function deleteCompanyStatCard(id: number | string): Promise<CompanyStatCard[]> {
+  const current = getStoredCompanyStatCards().filter((c) => c.id !== Number(id) && c.card_key !== String(id));
+  saveStoredCompanyStatCards(current);
+
+  try {
+    await fetch(`${API_BASE}/company-stat-cards/${id}`, {
+      method: 'DELETE',
+    });
+  } catch (err) {
+    console.warn('Backend delete unreachable:', err);
+  }
+
+  return getStoredCompanyStatCards();
+}
+
+export async function uploadCompanyStatCardIcon(file: File): Promise<string | null> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/company-stat-cards/upload-icon`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.url) return data.url;
+    }
+  } catch (err) {
+    console.warn('Failed to upload icon to backend:', err);
+  }
+  return null;
+}
+
 export async function reorderCompanyStatCards(orderedCards: CompanyStatCard[]): Promise<CompanyStatCard[]> {
   const formatted = orderedCards.map((card, idx) => ({
     ...card,
@@ -256,8 +347,10 @@ export async function reorderCompanyStatCards(orderedCards: CompanyStatCard[]): 
       body: JSON.stringify({
         cards: formatted.map((c) => ({
           id: c.id,
+          card_key: c.card_key,
           order_num: c.order_num,
           name: c.name,
+          subtitle: c.subtitle,
           icon: c.icon,
           custom_value: c.custom_value,
         })),
@@ -266,7 +359,7 @@ export async function reorderCompanyStatCards(orderedCards: CompanyStatCard[]): 
     });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.cards)) {
+      if (Array.isArray(data.cards) && data.cards.length > 0) {
         saveStoredCompanyStatCards(data.cards);
         return data.cards;
       }

@@ -9,6 +9,7 @@ import {
   Check,
   CheckCircle2,
   CheckSquare,
+  CreditCard,
   Eye,
   EyeOff,
   FileCheck2,
@@ -28,6 +29,7 @@ import {
   Sparkles,
   Square,
   Trash2,
+  TrendingUp,
   Upload,
   User,
   UserCheck,
@@ -37,6 +39,14 @@ import {
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { ServiceCard, getStoredServices, fetchServiceCards } from '@/lib/serviceStorage';
+import {
+  CompanyStatCard,
+  DEFAULT_COMPANY_STAT_CARDS,
+  getStoredCompanyStatCards,
+  fetchCompanyStatCards,
+} from '@/lib/companyStatCards';
+import { DynamicCardIcon } from '@/components/DynamicCardIcon';
+import { getMasterAdminUser } from '@/lib/auth';
 
 export interface EmployeeDocument {
   name: string;
@@ -53,6 +63,9 @@ export interface ModuleAccessSettings {
   create?: boolean;
   edit?: boolean;
   delete?: boolean;
+  statistics?: boolean;
+  cards?: string[];
+  [key: string]: any;
 }
 
 export interface EmployeeModulePermissions {
@@ -63,7 +76,7 @@ export interface EmployeeModulePermissions {
 }
 
 const DEFAULT_PERMISSIONS: EmployeeModulePermissions = {
-  companies: { view: true, create: false, edit: true, delete: false },
+  companies: { view: true, create: false, edit: true, delete: false, statistics: true, cards: ['*'] },
   customers: { view: true, create: true, edit: true, delete: false },
   services: { view: true, create: false, edit: false, delete: false },
   passwords: { view: false, create: false, edit: false, delete: false },
@@ -117,10 +130,27 @@ export default function EmployeeFormFullPage({
   // Module permissions
   const [permissions, setPermissions] = useState<EmployeeModulePermissions>(DEFAULT_PERMISSIONS);
 
+  // Treasury stat cards list for granular company card clearances
+  const [companyStatCardsList, setCompanyStatCardsList] = useState<CompanyStatCard[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_COMPANY_STAT_CARDS;
+    const stored = getStoredCompanyStatCards();
+    return stored && stored.length > 0 ? stored : DEFAULT_COMPANY_STAT_CARDS;
+  });
+
   // Employee documents state
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
 
-  // Load companies, service cards & master admins
+  // Master Admin user identification
+  const masterUser = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    return getMasterAdminUser();
+  }, []);
+
+  const isMasterAdminActor = Boolean(
+    masterUser && (backUrl.includes('masteradmin') || masterUser.role === 'MasterAdmin')
+  );
+
+  // Load companies, service cards, stat cards & master admins
   useEffect(() => {
     setCompaniesList(getStoredCompanies());
     fetchCompaniesFromBackend()
@@ -131,6 +161,13 @@ export default function EmployeeFormFullPage({
     fetchServiceCards()
       .then((cards) => {
         if (cards && cards.length > 0) setServiceCardsList(cards);
+      })
+      .catch(() => {});
+
+    setCompanyStatCardsList(getStoredCompanyStatCards());
+    fetchCompanyStatCards()
+      .then((cards) => {
+        if (cards && cards.length > 0) setCompanyStatCardsList(cards);
       })
       .catch(() => {});
 
@@ -171,8 +208,16 @@ export default function EmployeeFormFullPage({
             }
 
             if (emp.module_permissions && typeof emp.module_permissions === 'object') {
+              const compPerm = emp.module_permissions.companies || {};
               setPermissions({
-                companies: { ...DEFAULT_PERMISSIONS.companies, ...(emp.module_permissions.companies || {}) },
+                companies: {
+                  ...DEFAULT_PERMISSIONS.companies,
+                  ...compPerm,
+                  statistics: compPerm.statistics !== undefined ? Boolean(compPerm.statistics) : true,
+                  cards: Array.isArray(compPerm.cards)
+                    ? compPerm.cards
+                    : (Array.isArray(emp.assigned_company_cards) ? emp.assigned_company_cards : ['*']),
+                },
                 customers: { ...DEFAULT_PERMISSIONS.customers, ...(emp.module_permissions.customers || {}) },
                 services: { ...DEFAULT_PERMISSIONS.services, ...(emp.module_permissions.services || {}) },
                 passwords: { ...DEFAULT_PERMISSIONS.passwords, ...(emp.module_permissions.passwords || {}) },
@@ -190,8 +235,11 @@ export default function EmployeeFormFullPage({
       setEmployeeCode(`EMP-${Math.floor(1000 + Math.random() * 9000)}`);
       setPassword('password123');
       setAssignedServiceCards(['*']);
+      if (isMasterAdminActor && masterUser) {
+        setMasterAdminId(String(masterUser.id));
+      }
     }
-  }, [editId, apiBase]);
+  }, [editId, apiBase, isMasterAdminActor, masterUser]);
 
   // Generate random password
   const generatePassword = () => {
@@ -210,8 +258,35 @@ export default function EmployeeFormFullPage({
     );
   };
 
+  // Filter companies available to this actor (scoped if Master Admin)
+  const availableCompanies = useMemo(() => {
+    if (!isMasterAdminActor || !masterUser) return companiesList;
+    const assigned = Array.isArray(masterUser.assigned_companies) ? masterUser.assigned_companies : [];
+    if (assigned.includes('*') || assigned.length === 0) return companiesList;
+    return companiesList.filter((c) => {
+      const cleanCompId = (c.id || '').trim().toLowerCase();
+      const cleanCompName = (c.name || '').trim().toLowerCase();
+      const cleanCompRoc = (c.roc || '').trim().toLowerCase();
+      const cleanDbId = String(c.db_id || '');
+      const cleanCompNormalized = cleanCompName.replace(/[^a-z0-9]/g, '');
+
+      return assigned.some((raw) => {
+        const id = (raw || '').trim().toLowerCase();
+        if (!id) return false;
+        const idNormalized = id.replace(/[^a-z0-9]/g, '');
+        return (
+          id === cleanCompId ||
+          id === cleanCompName ||
+          (cleanCompRoc && id === cleanCompRoc) ||
+          (cleanDbId && id === cleanDbId) ||
+          (idNormalized && cleanCompNormalized && idNormalized === cleanCompNormalized)
+        );
+      });
+    });
+  }, [companiesList, isMasterAdminActor, masterUser]);
+
   const handleSelectAllCompanies = () => {
-    setAssignedCompanies(companiesList.map((c) => c.id));
+    setAssignedCompanies(availableCompanies.map((c) => c.id));
   };
 
   const handleClearAllCompanies = () => {
@@ -265,6 +340,100 @@ export default function EmployeeFormFullPage({
     return assignedServiceCards.includes('*') || assignedServiceCards.includes(cardId);
   };
 
+  // Company Stat Cards (Treasury Cards) selection for Companies Management
+  const assignedCompanyCards = permissions.companies.cards || ['*'];
+
+  const isAllCompanyCardsSelected =
+    assignedCompanyCards.includes('*') ||
+    (companyStatCardsList.length > 0 &&
+      companyStatCardsList.every((c) => assignedCompanyCards.includes(String(c.id))));
+
+  const handleToggleAllCompanyCards = () => {
+    setPermissions((prev) => ({
+      ...prev,
+      companies: {
+        ...prev.companies,
+        cards: isAllCompanyCardsSelected ? [] : ['*'],
+      },
+    }));
+  };
+
+  const handleToggleCompanyCard = (cardId: string | number, cardKey?: string) => {
+    const cardIdStr = String(cardId);
+    setPermissions((prev) => {
+      const currentCards = prev.companies.cards || ['*'];
+      if (currentCards.includes('*')) {
+        const allIds = companyStatCardsList.map((c) => String(c.id));
+        return {
+          ...prev,
+          companies: {
+            ...prev.companies,
+            cards: allIds.filter((id) => id !== cardIdStr && (!cardKey || id !== cardKey)),
+          },
+        };
+      }
+
+      const isChecked = currentCards.includes(cardIdStr) || (cardKey && currentCards.includes(cardKey));
+      let nextCards: string[];
+      if (isChecked) {
+        nextCards = currentCards.filter((id) => id !== cardIdStr && (!cardKey || id !== cardKey));
+      } else {
+        nextCards = [...currentCards, cardIdStr];
+        if (companyStatCardsList.length > 0 && nextCards.length >= companyStatCardsList.length) {
+          nextCards = ['*'];
+        }
+      }
+      return {
+        ...prev,
+        companies: {
+          ...prev.companies,
+          cards: nextCards,
+        },
+      };
+    });
+  };
+
+  const handleSelectAllCompanyCards = () => {
+    setPermissions((prev) => ({
+      ...prev,
+      companies: {
+        ...prev.companies,
+        cards: ['*'],
+      },
+    }));
+  };
+
+  const handleClearAllCompanyCards = () => {
+    setPermissions((prev) => ({
+      ...prev,
+      companies: {
+        ...prev.companies,
+        cards: [],
+      },
+    }));
+  };
+
+  const isCompanyCardChecked = (cardId: string | number, cardKey?: string) => {
+    const currentCards = permissions.companies.cards || ['*'];
+    if (currentCards.includes('*')) return true;
+    const cardIdStr = String(cardId);
+    return currentCards.includes(cardIdStr) || (Boolean(cardKey) && currentCards.includes(cardKey!));
+  };
+
+  const handleToggleCompanyStatistics = (checked?: boolean) => {
+    setPermissions((prev) => {
+      const currentVal = prev.companies.statistics !== false;
+      const nextVal = typeof checked === 'boolean' ? checked : !currentVal;
+      return {
+        ...prev,
+        companies: {
+          ...prev.companies,
+          statistics: nextVal,
+        },
+      };
+    });
+  };
+
   // Toggle module permission
   const handlePermissionChange = (
     moduleKey: keyof EmployeeModulePermissions,
@@ -290,27 +459,48 @@ export default function EmployeeFormFullPage({
   // Permission Presets
   const applyPreset = (preset: 'full' | 'readonly' | 'standard') => {
     if (preset === 'full') {
-      setPermissions({
-        companies: { view: true, create: true, edit: true, delete: true },
+      setPermissions((prev) => ({
+        companies: {
+          view: true,
+          create: true,
+          edit: true,
+          delete: true,
+          statistics: prev.companies.statistics !== undefined ? prev.companies.statistics : true,
+          cards: prev.companies.cards || ['*'],
+        },
         customers: { view: true, create: true, edit: true, delete: true },
         services: { view: true, create: true, edit: true, delete: true },
         passwords: { view: true, create: false, edit: true, delete: false },
-      });
+      }));
     } else if (preset === 'readonly') {
-      setPermissions({
-        companies: { view: true, create: false, edit: false, delete: false },
+      setPermissions((prev) => ({
+        companies: {
+          view: true,
+          create: false,
+          edit: false,
+          delete: false,
+          statistics: prev.companies.statistics !== undefined ? prev.companies.statistics : true,
+          cards: prev.companies.cards || ['*'],
+        },
         customers: { view: true, create: false, edit: false, delete: false },
         services: { view: true, create: false, edit: false, delete: false },
         passwords: { view: false, create: false, edit: false, delete: false },
-      });
+      }));
     } else {
       // Standard operator
-      setPermissions({
-        companies: { view: true, create: false, edit: true, delete: false },
+      setPermissions((prev) => ({
+        companies: {
+          view: true,
+          create: false,
+          edit: true,
+          delete: false,
+          statistics: prev.companies.statistics !== undefined ? prev.companies.statistics : true,
+          cards: prev.companies.cards || ['*'],
+        },
         customers: { view: true, create: true, edit: true, delete: false },
         services: { view: true, create: false, edit: false, delete: false },
         passwords: { view: false, create: false, edit: false, delete: false },
-      });
+      }));
     }
   };
 
@@ -406,20 +596,36 @@ export default function EmployeeFormFullPage({
 
     const selectedMaster = masterAdmins.find((m) => String(m.id) === masterAdminId || m.username === masterAdminId);
 
+    const supervisorId = isMasterAdminActor && masterUser
+      ? String(masterUser.id)
+      : (masterAdminId || null);
+
+    const supervisorName = isMasterAdminActor && masterUser
+      ? `${masterUser.name} (${masterUser.username})`
+      : (selectedMaster ? `${selectedMaster.name} (${selectedMaster.username})` : null);
+
     const payload = {
       name: name.trim(),
       employee_code: employeeCode.trim().toUpperCase(),
       email: email.trim().toLowerCase(),
       password: password || undefined,
       role: 'Employee', // strictly Employee
-      master_admin_id: masterAdminId || null,
-      master_admin_name: selectedMaster ? `${selectedMaster.name} (${selectedMaster.username})` : null,
+      master_admin_id: supervisorId,
+      master_admin_name: supervisorName,
       assigned_companies: assignedCompanies,
       assigned_service_cards: assignedServiceCards,
+      assigned_company_cards: permissions.companies.cards || ['*'],
       can_create: Boolean(permissions.customers.create),
       can_edit: Boolean(permissions.customers.edit),
       can_delete: Boolean(permissions.customers.delete),
-      module_permissions: permissions,
+      module_permissions: {
+        ...permissions,
+        companies: {
+          ...permissions.companies,
+          statistics: permissions.companies.statistics !== false,
+          cards: Array.isArray(permissions.companies.cards) ? permissions.companies.cards : ['*'],
+        },
+      },
       status,
       documents: documents.map((doc) => ({
         ...doc,
@@ -466,14 +672,14 @@ export default function EmployeeFormFullPage({
 
   const filteredCompanies = useMemo(() => {
     const q = companySearch.toLowerCase().trim();
-    if (!q) return companiesList;
-    return companiesList.filter(
+    if (!q) return availableCompanies;
+    return availableCompanies.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         (c.roc && c.roc.toLowerCase().includes(q)) ||
         (c.sector && c.sector.toLowerCase().includes(q))
     );
-  }, [companiesList, companySearch]);
+  }, [availableCompanies, companySearch]);
 
   if (isLoading) {
     return (
@@ -492,8 +698,11 @@ export default function EmployeeFormFullPage({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-            <Link href="/superadmin" className="hover:text-blue-600 transition-colors">
-              Super Admin
+            <Link
+              href={isMasterAdminActor ? '/masteradmin' : '/superadmin'}
+              className="hover:text-blue-600 transition-colors"
+            >
+              {isMasterAdminActor ? 'Master Admin' : 'Super Admin'}
             </Link>
             <span>•</span>
             <Link href={backUrl} className="hover:text-blue-600 transition-colors">
@@ -671,22 +880,36 @@ export default function EmployeeFormFullPage({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                  Assign Master Admin
+                  {isMasterAdminActor ? 'Supervising Master Admin' : 'Assign Master Admin'}
                 </label>
                 <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.2 rounded">Supervisor</span>
               </div>
-              <select
-                value={masterAdminId}
-                onChange={(e) => setMasterAdminId(e.target.value)}
-                className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none cursor-pointer transition-all"
-              >
-                <option value="">-- No Supervising Master Admin --</option>
-                {masterAdmins.map((ma) => (
-                  <option key={ma.id} value={String(ma.id)}>
-                    {ma.name} ({ma.username})
-                  </option>
-                ))}
-              </select>
+              {isMasterAdminActor ? (
+                <div className="w-full bg-slate-100/90 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 font-bold flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-2 truncate">
+                    <ShieldCheck size={16} className="text-purple-600 shrink-0" />
+                    <span className="truncate">
+                      {masterUser ? `${masterUser.name} (${masterUser.username})` : 'Current Master Admin'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-purple-700 bg-purple-100 font-bold px-2 py-0.5 rounded-full shrink-0 border border-purple-200">
+                    Self Supervisor
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={masterAdminId}
+                  onChange={(e) => setMasterAdminId(e.target.value)}
+                  className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none cursor-pointer transition-all"
+                >
+                  <option value="">-- No Supervising Master Admin --</option>
+                  {masterAdmins.map((ma) => (
+                    <option key={ma.id} value={String(ma.id)}>
+                      {ma.name} ({ma.username})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Account Status */}
@@ -789,7 +1012,7 @@ export default function EmployeeFormFullPage({
           </div>
 
           <div className="text-xs text-slate-500 pt-1">
-            <strong>{assignedCompanies.length}</strong> of {companiesList.length} companies selected for this employee.
+            <strong>{assignedCompanies.length}</strong> of {availableCompanies.length} companies selected for this employee.
           </div>
         </div>
 
@@ -1032,6 +1255,181 @@ export default function EmployeeFormFullPage({
                     </span>
                   </td>
                 </tr>
+
+                {/* Granular Settings for Companies Management (Statistics & Cards) */}
+                {permissions.companies.view && (
+                  <tr className="bg-slate-50/80 border-b border-blue-100">
+                    <td colSpan={6} className="p-3.5 sm:p-4">
+                      <div className="bg-white rounded-xl border border-blue-200 p-4 shadow-2xs space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 m-0">
+                              Granular Company Permissions (Card Access &amp; Statistics Access)
+                            </h4>
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Configure statistics graph access and specific treasury cards independently
+                          </span>
+                        </div>
+
+                        {/* 1. Statistics Graph Toggle */}
+                        <div
+                          onClick={() => handleToggleCompanyStatistics()}
+                          className="flex items-start sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200 hover:border-blue-200 transition-all cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                              <TrendingUp size={18} />
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                Company Order &amp; Metric Statistics Analytics Graph
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase transition-colors ${
+                                    permissions.companies.statistics !== false
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : 'bg-slate-200 text-slate-600 border border-slate-300'
+                                  }`}
+                                >
+                                  {permissions.companies.statistics !== false ? 'Enabled (ON)' : 'Hidden (OFF)'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-0.5">
+                                Allow this employee to view the interactive date-wise orders &amp; metrics graph inside Companies Management.
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={permissions.companies.statistics !== false}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleCompanyStatistics();
+                            }}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                              permissions.companies.statistics !== false ? 'bg-[#0b4da2]' : 'bg-slate-300'
+                            }`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                permissions.companies.statistics !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* 2. Treasury Cards Access */}
+                        <div className="space-y-2.5 pt-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                <CreditCard size={15} className="text-[#0b4da2]" />
+                                <span>Financial &amp; Treasury Stat Cards Clearances</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+                                Select which treasury metrics cards this employee is permitted to view.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={handleSelectAllCompanyCards}
+                                className="text-[10px] font-bold text-[#0b4da2] hover:bg-blue-50 px-2 py-1 rounded-md border border-blue-200 transition-colors cursor-pointer"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleClearAllCompanyCards}
+                                className="text-[10px] font-bold text-slate-500 hover:bg-slate-100 px-2 py-1 rounded-md border border-slate-200 transition-colors cursor-pointer"
+                              >
+                                Clear All
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick Toggle All Cards Banner */}
+                          <div
+                            onClick={handleToggleAllCompanyCards}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer select-none transition-all ${
+                              isAllCompanyCardsSelected
+                                ? 'bg-blue-50/80 border-blue-300 text-blue-950'
+                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+                                  isAllCompanyCardsSelected ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                                }`}
+                              >
+                                {isAllCompanyCardsSelected && <Check size={10} strokeWidth={3} />}
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold">Grant All Treasury Cards Access (Full Overview)</div>
+                                <div className="text-[10px] text-slate-500">Employee can see all financial &amp; operational metrics cards</div>
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                isAllCompanyCardsSelected ? 'bg-blue-200 text-blue-900 border border-blue-300' : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {isAllCompanyCardsSelected ? 'All Cards Allowed' : 'Custom Subset'}
+                            </span>
+                          </div>
+
+                          {/* Individual Cards Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-[220px] overflow-y-auto p-0.5">
+                            {companyStatCardsList.map((card) => {
+                              const checked = isCompanyCardChecked(card.id, card.card_key);
+                              return (
+                                <div
+                                  key={card.id}
+                                  onClick={() => handleToggleCompanyCard(card.id, card.card_key)}
+                                  className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                                    checked
+                                      ? 'border-[#0b4da2] bg-blue-50/70 shadow-2xs ring-1 ring-blue-200'
+                                      : 'border-slate-200 hover:border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors ${
+                                      checked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                                    }`}
+                                  >
+                                    {checked && <Check size={10} strokeWidth={3} />}
+                                  </div>
+
+                                  <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                                    <DynamicCardIcon icon={card.icon} size={12} />
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-xs font-bold text-slate-800 truncate">{card.name}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono truncate">{card.subtitle || 'Treasury Metric'}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="text-[11px] text-slate-500">
+                            <strong>
+                              {assignedCompanyCards.includes('*') ? companyStatCardsList.length : assignedCompanyCards.length}
+                            </strong>{' '}
+                            of {companyStatCardsList.length} treasury cards authorized for this employee.
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
 
                 {/* 2. Customer Management */}
                 <tr className="hover:bg-slate-50/70 transition-colors">
