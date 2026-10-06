@@ -32,7 +32,31 @@ export default function SiteSettingsProvider() {
       }
     });
 
-    return unsub;
+    const handleChunkError = (event: ErrorEvent | PromiseRejectionEvent) => {
+      const error = 'error' in event ? event.error : (event as PromiseRejectionEvent).reason;
+      if (
+        error &&
+        (error.name === 'ChunkLoadError' ||
+          (typeof error.message === 'string' &&
+            (error.message.includes('Loading chunk') ||
+              error.message.includes('Failed to fetch dynamically imported module'))))
+      ) {
+        const reloadKey = 'chunk_reload_' + (typeof window !== 'undefined' ? window.location.pathname : '');
+        if (!sessionStorage.getItem(reloadKey)) {
+          sessionStorage.setItem(reloadKey, '1');
+          window.location.reload();
+        }
+      }
+    };
+
+    window.addEventListener('error', handleChunkError);
+    window.addEventListener('unhandledrejection', handleChunkError);
+
+    return () => {
+      unsub();
+      window.removeEventListener('error', handleChunkError);
+      window.removeEventListener('unhandledrejection', handleChunkError);
+    };
   }, []);
 
   return null;
