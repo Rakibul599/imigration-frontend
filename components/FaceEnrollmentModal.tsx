@@ -521,7 +521,7 @@ export default function FaceEnrollmentModal({
       } finally {
         isBusyRef.current = false;
       }
-    }, 350);
+    }, 500);
 
     return () => {
       clearInterval(interval);
