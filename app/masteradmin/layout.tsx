@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Building2,
+  Camera,
+  ChevronDown,
   ChevronRight,
   ExternalLink,
   Globe2,
@@ -49,6 +51,7 @@ export default function MasterAdminLayout({
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
@@ -194,7 +197,29 @@ export default function MasterAdminLayout({
     router.push('/masteradmin/login');
   };
 
-  const navLinks = [
+  // Auto-expand employee menu when navigating to employee or attendance pages
+  useEffect(() => {
+    if (
+      pathname.startsWith('/masteradmin/employees') ||
+      pathname.startsWith('/masteradmin/attendance')
+    ) {
+      setEmployeeMenuOpen(true);
+    }
+  }, [pathname]);
+
+  const navLinks: Array<{
+    name: string;
+    href?: string;
+    icon: any;
+    badge?: string;
+    isGroup?: boolean;
+    children?: Array<{
+      name: string;
+      href: string;
+      icon: any;
+      badge?: string;
+    }>;
+  }> = [
     {
       name: 'Dashboard Overview',
       href: '/masteradmin',
@@ -208,10 +233,24 @@ export default function MasterAdminLayout({
       badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
     },
     {
-      name: 'Employees & Permissions',
-      href: '/masteradmin/employees',
+      name: 'Employee Management',
       icon: Users,
       badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+      isGroup: true,
+      children: [
+        {
+          name: 'Employees & Permissions',
+          href: '/masteradmin/employees',
+          icon: UserCheck,
+          badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+        },
+        {
+          name: 'Face & Attendance',
+          href: '/masteradmin/attendance',
+          icon: Camera,
+          badge: 'AI Bio',
+        },
+      ],
     },
     {
       name: 'Customer Management',
@@ -357,15 +396,143 @@ export default function MasterAdminLayout({
               <nav className="space-y-1">
                 {navLinks.map((link) => {
                   const Icon = link.icon;
+
+                  if (link.isGroup) {
+                    const isChildActive = link.children?.some(
+                      (child) => pathname === child.href || pathname.startsWith(child.href)
+                    );
+
+                    return (
+                      <div key={link.name} className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!sidebarOpen) {
+                              setSidebarOpen(true);
+                              setEmployeeMenuOpen(true);
+                            } else {
+                              setEmployeeMenuOpen(!employeeMenuOpen);
+                            }
+                          }}
+                          title={!sidebarOpen ? link.name : undefined}
+                          style={{
+                            backgroundColor: isChildActive
+                              ? isDarkSidebar
+                                ? 'rgba(255,255,255,0.08)'
+                                : 'rgba(0,0,0,0.05)'
+                              : 'transparent',
+                            color: isChildActive
+                              ? isDarkSidebar
+                                ? '#ffffff'
+                                : sidebarActiveText
+                              : sidebarText,
+                            borderLeftColor: isChildActive ? sidebarActiveText : 'transparent',
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border-l-4 shadow-2xs hover:opacity-90 border-0 text-left"
+                        >
+                          <Icon
+                            size={18}
+                            style={{ color: isChildActive ? sidebarActiveText : sidebarText }}
+                            className="shrink-0"
+                          />
+                          {sidebarOpen && (
+                            <div className="flex-1 flex items-center justify-between truncate">
+                              <span className="truncate">{link.name}</span>
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                {link.badge && (
+                                  <span
+                                    style={{
+                                      backgroundColor: isDarkSidebar
+                                        ? 'rgba(255,255,255,0.12)'
+                                        : 'rgba(0,0,0,0.06)',
+                                      color: isDarkSidebar ? '#ffffff' : sidebarText,
+                                    }}
+                                    className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                                  >
+                                    {link.badge}
+                                  </span>
+                                )}
+                                <ChevronDown
+                                  size={14}
+                                  style={{ color: sidebarText }}
+                                  className={`transition-transform duration-200 shrink-0 ${
+                                    employeeMenuOpen ? 'rotate-0' : '-rotate-90'
+                                  }`}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </button>
+
+                        {/* Collapsible Submenu */}
+                        {sidebarOpen && employeeMenuOpen && (
+                          <div className="pl-3.5 pr-1 py-1 space-y-1 ml-2 border-l border-slate-700/30">
+                            {link.children?.map((child) => {
+                              const ChildIcon = child.icon;
+                              const isChildItemActive =
+                                pathname === child.href || pathname.startsWith(child.href);
+
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={() => setMobileMenuOpen(false)}
+                                  style={{
+                                    backgroundColor: isChildItemActive
+                                      ? sidebarActiveBg
+                                      : 'transparent',
+                                    color: isChildItemActive ? sidebarActiveText : sidebarText,
+                                    borderLeftColor: isChildItemActive
+                                      ? sidebarActiveText
+                                      : 'transparent',
+                                  }}
+                                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline border-l-4 shadow-2xs hover:opacity-90"
+                                >
+                                  <ChildIcon
+                                    size={15}
+                                    style={{
+                                      color: isChildItemActive ? sidebarActiveText : sidebarText,
+                                    }}
+                                    className="shrink-0"
+                                  />
+                                  <div className="flex-1 flex items-center justify-between truncate">
+                                    <span className="truncate">{child.name}</span>
+                                    {child.badge && (
+                                      <span
+                                        style={{
+                                          backgroundColor: isChildItemActive
+                                            ? sidebarActiveText
+                                            : isDarkSidebar
+                                            ? 'rgba(255,255,255,0.12)'
+                                            : 'rgba(0,0,0,0.06)',
+                                          color: isChildItemActive ? '#ffffff' : sidebarText,
+                                        }}
+                                        className="text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5"
+                                      >
+                                        {child.badge}
+                                      </span>
+                                    )}
+                                  </div>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
                   const isActive =
                     pathname === link.href ||
-                    (link.href === '/masteradmin/companies' && pathname.startsWith('/masteradmin/companies')) ||
-                    (link.href !== '/masteradmin' && pathname.startsWith(link.href));
+                    (link.href === '/masteradmin/companies' &&
+                      pathname.startsWith('/masteradmin/companies')) ||
+                    (link.href !== '/masteradmin' &&
+                      Boolean(link.href && pathname.startsWith(link.href)));
 
                   return (
                     <Link
                       key={link.href}
-                      href={link.href}
+                      href={link.href!}
                       onClick={() => setMobileMenuOpen(false)}
                       title={!sidebarOpen ? link.name : undefined}
                       style={{
@@ -386,7 +553,11 @@ export default function MasterAdminLayout({
                           {link.badge && (
                             <span
                               style={{
-                                backgroundColor: isActive ? sidebarActiveText : isDarkSidebar ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+                                backgroundColor: isActive
+                                  ? sidebarActiveText
+                                  : isDarkSidebar
+                                  ? 'rgba(255,255,255,0.12)'
+                                  : 'rgba(0,0,0,0.06)',
                                 color: isActive ? '#ffffff' : sidebarText,
                               }}
                               className="text-[10px] px-2 py-0.5 rounded-full font-bold"

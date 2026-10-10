@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Building2,
+  Camera,
   ChevronRight,
   ExternalLink,
   Globe2,
@@ -160,6 +161,12 @@ export default function EmployeeLayout({
         href: '/employee',
         icon: LayoutDashboard,
         badge: 'Desk',
+      },
+      {
+        name: 'Face Attendance & Clock-In',
+        href: '/employee/attendance',
+        icon: Camera,
+        badge: 'Bio-Clock',
       },
     ];
 
