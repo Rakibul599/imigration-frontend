@@ -6,8 +6,12 @@ import Link from 'next/link';
 import {
   Building2,
   Camera,
+  ChevronDown,
   ChevronRight,
+  Clock,
+  DollarSign,
   ExternalLink,
+  FileSpreadsheet,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -19,6 +23,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Target,
   User,
   UserCheck,
   Users,
@@ -41,10 +46,18 @@ export default function EmployeeLayout({
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
+
+  // Auto-expand customer menu when navigating to customer sub-routes
+  useEffect(() => {
+    if (pathname.startsWith('/employee/customers')) {
+      setCustomerMenuOpen(true);
+    }
+  }, [pathname]);
 
   // Strictly verify employee authorization
   useEffect(() => {
@@ -147,65 +160,146 @@ export default function EmployeeLayout({
   }, [currentUser]);
 
   // Build dynamic sidebar navigation links based on granular module permissions!
-  const navLinks = useMemo(() => {
-    interface EmployeeNavItem {
+  const navSections = useMemo(() => {
+    interface EmployeeNavChild {
       name: string;
       href: string;
       icon: any;
       badge?: string;
     }
 
-    const items: EmployeeNavItem[] = [
+    interface EmployeeNavItem {
+      name: string;
+      href?: string;
+      icon: any;
+      badge?: string;
+      isGroup?: boolean;
+      children?: EmployeeNavChild[];
+    }
+
+    const sections: Array<{
+      title: string;
+      items: EmployeeNavItem[];
+    }> = [
       {
-        name: 'Dashboard Overview',
-        href: '/employee',
-        icon: LayoutDashboard,
-        badge: 'Desk',
+        title: 'Overview',
+        items: [
+          {
+            name: 'Dashboard Overview',
+            href: '/employee',
+            icon: LayoutDashboard,
+            badge: 'Desk',
+          },
+        ],
       },
       {
-        name: 'Face Attendance & Clock-In',
-        href: '/employee/attendance',
-        icon: Camera,
-        badge: 'Bio-Clock',
+        title: 'Employee',
+        items: [
+          {
+            name: 'Face Attendance & Clock-In',
+            href: '/employee/attendance',
+            icon: Camera,
+            badge: 'Bio-Clock',
+          },
+        ],
       },
     ];
 
     if (perms?.companies?.view !== false) {
-      items.push({
-        name: 'Companies Management',
-        href: '/employee/companies',
-        icon: Building2,
-        badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
+      sections.push({
+        title: 'Company',
+        items: [
+          {
+            name: 'Companies Management',
+            href: '/employee/companies',
+            icon: Building2,
+            badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
+          },
+        ],
       });
     }
 
     if (perms?.customers?.view !== false) {
-      items.push({
-        name: 'Customer Management',
-        href: '/employee/customers',
-        icon: UserCheck,
-        badge: customerCount > 0 ? `${customerCount}` : undefined,
+      const customerChildren: EmployeeNavChild[] = [
+        {
+          name: 'Create Customer',
+          href: '/employee/customers',
+          icon: Users,
+          badge: customerCount > 0 ? `${customerCount}` : undefined,
+        },
+      ];
+
+      if (perms?.customers?.target_amount !== false) {
+        customerChildren.push({
+          name: 'Target Amount',
+          href: '/employee/customers/target-amount',
+          icon: Target,
+        });
+      }
+
+      if (perms?.customers?.deposit_amount !== false) {
+        customerChildren.push({
+          name: 'Deposit Amount',
+          href: '/employee/customers/deposit-amount',
+          icon: DollarSign,
+        });
+      }
+
+      if (perms?.customers?.pending_amount !== false) {
+        customerChildren.push({
+          name: 'Pending Amount',
+          href: '/employee/customers/pending-amount',
+          icon: Clock,
+        });
+      }
+
+      if (perms?.customers?.company_cost !== false) {
+        customerChildren.push({
+          name: 'Company Cost Amount',
+          href: '/employee/customers/company-cost',
+          icon: FileSpreadsheet,
+        });
+      }
+
+      sections.push({
+        title: 'Customer',
+        items: [
+          {
+            name: 'Customer Management',
+            icon: UserCheck,
+            badge: customerCount > 0 ? `${customerCount}` : undefined,
+            isGroup: true,
+            children: customerChildren,
+          },
+        ],
       });
     }
 
+    const serviceItems: EmployeeNavItem[] = [];
     if (perms?.services?.view !== false) {
-      items.push({
+      serviceItems.push({
         name: 'Service Cards',
         href: '/employee/services',
         icon: Sparkles,
         badge: 'Clearance',
       });
     }
-
-    items.push({
+    serviceItems.push({
       name: 'Services Portal',
       href: '/companies',
       icon: ExternalLink,
       badge: 'Live',
     });
 
-    return items;
+    sections.push({
+      title: 'Services',
+      items: serviceItems,
+    });
+
+    return sections;
   }, [perms, permittedCompanyCount, customerCount]);
+
+  const navLinks = useMemo(() => navSections.flatMap((s) => s.items), [navSections]);
 
   if (isAuth === false) {
     return (
@@ -311,52 +405,143 @@ export default function EmployeeLayout({
           )}
 
           {/* Navigation Items */}
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            {sidebarOpen && (
-              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Permitted Modules
+          <div className="flex-1 p-3 space-y-5 overflow-y-auto">
+            {navSections.map((section) => (
+              <div key={section.title}>
+                {sidebarOpen && (
+                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {section.title}
+                  </div>
+                )}
+                <nav className="space-y-1 mt-1">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+
+                    if (item.isGroup) {
+                      const isChildActive = item.children?.some(
+                        (c) => pathname === c.href || pathname.startsWith(c.href + '/')
+                      );
+                      return (
+                        <div key={item.name} className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!sidebarOpen) setSidebarOpen(true);
+                              setCustomerMenuOpen(!customerMenuOpen);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 text-left ${
+                              isChildActive
+                                ? 'bg-blue-50 text-[#0b4da2]'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                            }`}
+                            title={!sidebarOpen ? item.name : undefined}
+                          >
+                            <Icon size={17} className="shrink-0" />
+                            {sidebarOpen && (
+                              <div className="flex-1 flex items-center justify-between truncate">
+                                <span className="truncate">{item.name}</span>
+                                <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+                                  {item.badge && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-100 text-[#0b4da2]">
+                                      {item.badge}
+                                    </span>
+                                  )}
+                                  <ChevronDown
+                                    size={14}
+                                    className={`transition-transform duration-200 ${
+                                      customerMenuOpen ? 'rotate-0' : '-rotate-90'
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </button>
+
+                          {/* Submenu links */}
+                          {sidebarOpen && customerMenuOpen && (
+                            <div className="pl-4 pr-1 py-0.5 space-y-1 ml-2 border-l border-slate-200">
+                              {item.children?.map((child) => {
+                                const ChildIcon = child.icon;
+                                const isChildItemActive =
+                                  child.href === '/employee/customers'
+                                    ? pathname === '/employee/customers' ||
+                                      pathname === '/employee/customers/create' ||
+                                      pathname.startsWith('/employee/customers/edit') ||
+                                      pathname.startsWith('/employee/customers/view')
+                                    : pathname === child.href || pathname.startsWith(child.href + '/');
+
+                                return (
+                                  <Link
+                                    key={child.href}
+                                    href={child.href}
+                                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline ${
+                                      isChildItemActive
+                                        ? 'bg-[#0b4da2] text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    <ChildIcon size={14} className="shrink-0" />
+                                    <span className="truncate flex-1">{child.name}</span>
+                                    {child.badge && (
+                                      <span
+                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                          isChildItemActive
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-blue-50 text-[#0b4da2]'
+                                        }`}
+                                      >
+                                        {child.badge}
+                                      </span>
+                                    )}
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    const isActive =
+                      item.href === '/employee'
+                        ? pathname === '/employee'
+                        : Boolean(item.href && pathname.startsWith(item.href));
+
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href || '#'}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all no-underline ${
+                          isActive
+                            ? 'bg-[#0b4da2] text-white shadow-sm shadow-blue-500/20'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                        }`}
+                        title={!sidebarOpen ? item.name : undefined}
+                      >
+                        <Icon size={17} className="shrink-0" />
+                        {sidebarOpen && (
+                          <div className="flex-1 flex items-center justify-between truncate">
+                            <span className="truncate">{item.name}</span>
+                            {item.badge && (
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                                  isActive
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-blue-50 text-[#0b4da2] border border-blue-100'
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </nav>
               </div>
-            )}
-
-            {navLinks.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === '/employee'
-                  ? pathname === '/employee'
-                  : pathname.startsWith(item.href);
-
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all no-underline ${
-                    isActive
-                      ? 'bg-[#0b4da2] text-white shadow-sm shadow-blue-500/20'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-                  title={!sidebarOpen ? item.name : undefined}
-                >
-                  <Icon size={17} className="shrink-0" />
-                  {sidebarOpen && (
-                    <div className="flex-1 flex items-center justify-between truncate">
-                      <span className="truncate">{item.name}</span>
-                      {item.badge && (
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                            isActive
-                              ? 'bg-white/20 text-white'
-                              : 'bg-blue-50 text-[#0b4da2] border border-blue-100'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+            ))}
+          </div>
 
           {/* Sidebar Footer */}
           <div className="p-3 border-t border-slate-100">
@@ -395,15 +580,60 @@ export default function EmployeeLayout({
             <div className="bg-white border-b border-slate-200 p-4 space-y-1 shadow-lg animate-in slide-in-from-top duration-150">
               {navLinks.map((item) => {
                 const Icon = item.icon;
+
+                if (item.isGroup) {
+                  return (
+                    <div key={item.name} className="space-y-1">
+                      <div className="flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <span>{item.name}</span>
+                        {item.badge && (
+                          <span className="text-[10px] bg-blue-100 text-[#0b4da2] px-1.5 py-0.5 rounded font-bold">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div className="pl-2 space-y-1">
+                        {item.children?.map((child) => {
+                          const ChildIcon = child.icon;
+                          const isChildItemActive =
+                            child.href === '/employee/customers'
+                              ? pathname === '/employee/customers' ||
+                                pathname === '/employee/customers/create' ||
+                                pathname.startsWith('/employee/customers/edit')
+                              : pathname === child.href || pathname.startsWith(child.href + '/');
+
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold no-underline ${
+                                isChildItemActive
+                                  ? 'bg-[#0b4da2] text-white'
+                                  : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <ChildIcon size={15} />
+                                <span>{child.name}</span>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+
                 const isActive =
                   item.href === '/employee'
                     ? pathname === '/employee'
-                    : pathname.startsWith(item.href);
+                    : Boolean(item.href && pathname.startsWith(item.href));
 
                 return (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    href={item.href || '#'}
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold no-underline ${
                       isActive

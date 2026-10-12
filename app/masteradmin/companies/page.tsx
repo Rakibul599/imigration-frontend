@@ -519,32 +519,6 @@ export default function MasterAdminCompaniesPage() {
         </div>
       )}
 
-      {/* Top Banner */}
-      <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white rounded-2xl p-6 sm:p-7 shadow-sm relative overflow-hidden">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase mb-2">
-              <ShieldAlert size={12} className="text-yellow-400" />
-              <span>Assigned Scope Only • Read-Only Treasury Cards</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white m-0">
-              Permitted Companies Management
-            </h1>
-            <p className="text-xs text-blue-100/90 mt-1 max-w-xl leading-relaxed m-0">
-              Welcome, {currentUser?.name || 'Master Admin'}. You have administrative clearance to view records, financial metrics, and workers for your {permittedCompanies.length} permitted {permittedCompanies.length === 1 ? 'company' : 'companies'}.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="bg-white/10 border border-white/20 px-3.5 py-2 rounded-xl text-right">
-              <div className="text-[10px] text-blue-200 uppercase font-bold">Authorized Scope</div>
-              <div className="text-base font-extrabold text-white">
-                {permittedCompanies.length} Companies
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Company Select Filter Bar (Matching Super Admin: Select2 Search or Single Scope indicator + Quick 1-click pills) */}
       {permittedCompanies.length > 1 ? (

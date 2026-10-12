@@ -9,7 +9,10 @@ import {
   Camera,
   ChevronDown,
   ChevronRight,
+  Clock,
+  DollarSign,
   ExternalLink,
+  FileSpreadsheet,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -24,6 +27,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Target,
   UserCheck,
   Users,
   X,
@@ -57,6 +61,7 @@ export default function SuperAdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
+  const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [companyCount, setCompanyCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
@@ -221,6 +226,19 @@ export default function SuperAdminLayout({
     return () => window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
   }, [pathname, isLoginPage]);
 
+  // Auto-expand menus when navigating
+  useEffect(() => {
+    if (
+      pathname.startsWith('/superadmin/employees') ||
+      pathname.startsWith('/superadmin/attendance')
+    ) {
+      setEmployeeMenuOpen(true);
+    }
+    if (pathname.startsWith('/superadmin/customers')) {
+      setCustomerMenuOpen(true);
+    }
+  }, [pathname]);
+
   // If this is the login page, render children directly without admin sidebar
   if (isLoginPage) {
     return <>{children}</>;
@@ -248,108 +266,159 @@ export default function SuperAdminLayout({
     router.push('/superadmin/login');
   };
 
-  // Auto-expand employee menu when navigating to employee or attendance pages
-  useEffect(() => {
-    if (
-      pathname.startsWith('/superadmin/employees') ||
-      pathname.startsWith('/superadmin/attendance')
-    ) {
-      setEmployeeMenuOpen(true);
-    }
-  }, [pathname]);
-
-  const navLinks: Array<{
-    name: string;
-    href?: string;
-    icon: any;
-    badge?: string;
-    isGroup?: boolean;
-    children?: Array<{
+  const navSections: Array<{
+    title: string;
+    items: Array<{
       name: string;
-      href: string;
+      href?: string;
       icon: any;
       badge?: string;
+      isGroup?: boolean;
+      children?: Array<{
+        name: string;
+        href: string;
+        icon: any;
+        badge?: string;
+      }>;
     }>;
   }> = [
     {
-      name: 'Dashboard Overview',
-      href: '/superadmin',
-      icon: LayoutDashboard,
-      badge: 'Live',
-    },
-    {
-      name: 'Companies Management',
-      href: '/superadmin/companies',
-      icon: Building2,
-      badge: companyCount > 0 ? `${companyCount}` : undefined,
-    },
-    {
-      name: 'Master Admin Permission',
-      href: '/superadmin/master-admins',
-      icon: ShieldAlert,
-      badge: masterAdminCount > 0 ? `${masterAdminCount}` : undefined,
-    },
-    {
-      name: 'Employee Management',
-      icon: Users,
-      badge: employeeCount > 0 ? `${employeeCount}` : undefined,
-      isGroup: true,
-      children: [
+      title: 'Overview',
+      items: [
         {
-          name: 'Employees & Permissions',
-          href: '/superadmin/employees',
-          icon: UserCheck,
-          badge: employeeCount > 0 ? `${employeeCount}` : undefined,
-        },
-        {
-          name: 'Face & Attendance',
-          href: '/superadmin/attendance',
-          icon: Camera,
-          badge: 'AI Bio',
+          name: 'Dashboard Overview',
+          href: '/superadmin',
+          icon: LayoutDashboard,
+          badge: 'Live',
         },
       ],
     },
     {
-      name: 'Customer Management',
-      href: '/superadmin/customers',
-      icon: UserCheck,
-      badge: customerCount > 0 ? `${customerCount}` : undefined,
+      title: 'Company',
+      items: [
+        {
+          name: 'Companies Management',
+          href: '/superadmin/companies',
+          icon: Building2,
+          badge: companyCount > 0 ? `${companyCount}` : undefined,
+        },
+        {
+          name: 'Master Admin Permission',
+          href: '/superadmin/master-admins',
+          icon: ShieldAlert,
+          badge: masterAdminCount > 0 ? `${masterAdminCount}` : undefined,
+        },
+        {
+          name: 'Agent Management',
+          href: '/superadmin/agents',
+          icon: Briefcase,
+          badge: agentCount > 0 ? `${agentCount}` : undefined,
+        },
+      ],
     },
     {
-      name: 'Agent Management',
-      href: '/superadmin/agents',
-      icon: Briefcase,
-      badge: agentCount > 0 ? `${agentCount}` : undefined,
+      title: 'Employee',
+      items: [
+        {
+          name: 'Employee Management',
+          icon: Users,
+          badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+          isGroup: true,
+          children: [
+            {
+              name: 'Employees & Permissions',
+              href: '/superadmin/employees',
+              icon: UserCheck,
+              badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+            },
+            {
+              name: 'Face & Attendance',
+              href: '/superadmin/attendance',
+              icon: Camera,
+              badge: 'AI Bio',
+            },
+          ],
+        },
+      ],
     },
     {
-      name: 'Service Cards',
-      href: '/superadmin/services',
-      icon: Sparkles,
-      badge: serviceCount > 0 ? `${serviceCount}` : undefined,
+      title: 'Customer',
+      items: [
+        {
+          name: 'Customer Management',
+          icon: UserCheck,
+          badge: customerCount > 0 ? `${customerCount}` : undefined,
+          isGroup: true,
+          children: [
+            {
+              name: 'Create Customer',
+              href: '/superadmin/customers',
+              icon: Users,
+              badge: customerCount > 0 ? `${customerCount}` : undefined,
+            },
+            {
+              name: 'Target Amount',
+              href: '/superadmin/customers/target-amount',
+              icon: Target,
+            },
+            {
+              name: 'Deposit Amount',
+              href: '/superadmin/customers/deposit-amount',
+              icon: DollarSign,
+            },
+            {
+              name: 'Pending Amount',
+              href: '/superadmin/customers/pending-amount',
+              icon: Clock,
+            },
+            {
+              name: 'Company Cost Amount',
+              href: '/superadmin/customers/company-cost',
+              icon: FileSpreadsheet,
+            },
+          ],
+        },
+      ],
     },
     {
-      name: 'Services Portal',
-      href: '/companies',
-      icon: ExternalLink,
-      badge: 'Preview',
+      title: 'Services',
+      items: [
+        {
+          name: 'Service Cards',
+          href: '/superadmin/services',
+          icon: Sparkles,
+          badge: serviceCount > 0 ? `${serviceCount}` : undefined,
+        },
+        {
+          name: 'Services Portal',
+          href: '/companies',
+          icon: ExternalLink,
+          badge: 'Preview',
+        },
+      ],
     },
     {
-      name: 'Password Management',
-      href: '/superadmin/passwords',
-      icon: KeyRound,
-      badge: passwordCount > 0 ? `${passwordCount}` : undefined,
-    },
-    {
-      name: 'Theme Settings',
-      href: '/superadmin/theme',
-      icon: Palette,
-      badge: 'Home',
-    },
-    {
-      name: 'General Settings',
-      href: '/superadmin/settings',
-      icon: Settings,
-      badge: 'Portal',
+      title: 'Settings',
+      items: [
+        {
+          name: 'Password Management',
+          href: '/superadmin/passwords',
+          icon: KeyRound,
+          badge: passwordCount > 0 ? `${passwordCount}` : undefined,
+        },
+        {
+          name: 'Theme Settings',
+          href: '/superadmin/theme',
+          icon: Palette,
+          badge: 'Home',
+        },
+        {
+          name: 'General Settings',
+          href: '/superadmin/settings',
+          icon: Settings,
+          badge: 'Portal',
+        },
+      ],
     },
   ];
 
@@ -459,39 +528,43 @@ export default function SuperAdminLayout({
             style={{ backgroundColor: sidebarBg }}
             className="flex-1 overflow-y-auto py-5 px-3 space-y-6"
           >
-            <div>
-              {sidebarOpen && (
-                <p
-                  style={{
-                    color: isDarkSidebar ? 'rgba(255,255,255,0.45)' : sidebarText,
-                    opacity: isDarkSidebar ? 1 : 0.7,
-                  }}
-                  className="text-[10px] font-bold uppercase tracking-wider px-3 mb-2"
-                >
-                  Management
-                </p>
-              )}
-              <nav className="space-y-1">
-                {navLinks.map((link) => {
+            {navSections.map((section) => (
+              <div key={section.title}>
+                {sidebarOpen && (
+                  <p
+                    style={{
+                      color: isDarkSidebar ? 'rgba(255,255,255,0.45)' : sidebarText,
+                      opacity: isDarkSidebar ? 1 : 0.7,
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider px-3 mb-2"
+                  >
+                    {section.title}
+                  </p>
+                )}
+                <nav className="space-y-1">
+                  {section.items.map((link) => {
                   const Icon = link.icon;
 
                   if (link.isGroup) {
                     const isChildActive = link.children?.some(
                       (child) => pathname === child.href || pathname.startsWith(child.href)
                     );
+                    const isGroupOpen =
+                      link.name === 'Customer Management' ? customerMenuOpen : employeeMenuOpen;
+                    const toggleGroup = () => {
+                      if (!sidebarOpen) setSidebarOpen(true);
+                      if (link.name === 'Customer Management') {
+                        setCustomerMenuOpen(!customerMenuOpen);
+                      } else {
+                        setEmployeeMenuOpen(!employeeMenuOpen);
+                      }
+                    };
 
                     return (
                       <div key={link.name} className="space-y-1">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (!sidebarOpen) {
-                              setSidebarOpen(true);
-                              setEmployeeMenuOpen(true);
-                            } else {
-                              setEmployeeMenuOpen(!employeeMenuOpen);
-                            }
-                          }}
+                          onClick={toggleGroup}
                           title={!sidebarOpen ? link.name : undefined}
                           style={{
                             backgroundColor: isChildActive
@@ -534,7 +607,7 @@ export default function SuperAdminLayout({
                                   size={14}
                                   style={{ color: sidebarText }}
                                   className={`transition-transform duration-200 shrink-0 ${
-                                    employeeMenuOpen ? 'rotate-0' : '-rotate-90'
+                                    isGroupOpen ? 'rotate-0' : '-rotate-90'
                                   }`}
                                 />
                               </div>
@@ -543,12 +616,16 @@ export default function SuperAdminLayout({
                         </button>
 
                         {/* Collapsible Submenu */}
-                        {sidebarOpen && employeeMenuOpen && (
+                        {sidebarOpen && isGroupOpen && (
                           <div className="pl-3.5 pr-1 py-1 space-y-1 ml-2 border-l border-slate-700/30">
                             {link.children?.map((child) => {
                               const ChildIcon = child.icon;
                               const isChildItemActive =
-                                pathname === child.href || pathname.startsWith(child.href);
+                                child.href === '/superadmin/customers'
+                                  ? pathname === '/superadmin/customers' || pathname === '/superadmin/customers/create' || pathname.startsWith('/superadmin/customers/edit') || pathname.startsWith('/superadmin/customers/view')
+                                  : child.href === '/superadmin/employees'
+                                  ? pathname === '/superadmin/employees' || pathname.startsWith('/superadmin/employees/')
+                                  : pathname === child.href || pathname.startsWith(child.href + '/');
 
                               return (
                                 <Link
@@ -560,11 +637,10 @@ export default function SuperAdminLayout({
                                       ? sidebarActiveBg
                                       : 'transparent',
                                     color: isChildItemActive ? sidebarActiveText : sidebarText,
-                                    borderLeftColor: isChildItemActive
-                                      ? sidebarActiveText
-                                      : 'transparent',
                                   }}
-                                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline border-l-4 shadow-2xs hover:opacity-90"
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
+                                    isChildItemActive ? 'font-bold' : ''
+                                  }`}
                                 >
                                   <ChildIcon
                                     size={15}
@@ -651,6 +727,7 @@ export default function SuperAdminLayout({
                 })}
               </nav>
             </div>
+          ))}
 
             {/* Public Links */}
             <div>

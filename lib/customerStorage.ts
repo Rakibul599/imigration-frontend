@@ -410,3 +410,17 @@ export async function createWorkingSector(name: string, description?: string): P
 
   return await res.json();
 }
+
+/**
+ * Synchronously get all customers from localStorage cache
+ */
+export function getStoredCustomers(): CustomerRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (cached) return JSON.parse(cached);
+  } catch {}
+  return [];
+}
+
+export { fetchCustomers as fetchCustomersFromBackend };

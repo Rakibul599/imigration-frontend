@@ -8,7 +8,10 @@ import {
   Camera,
   ChevronDown,
   ChevronRight,
+  Clock,
+  DollarSign,
   ExternalLink,
+  FileSpreadsheet,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -19,6 +22,7 @@ import {
   Shield,
   ShieldAlert,
   Sparkles,
+  Target,
   UserCheck,
   Users,
   X,
@@ -52,6 +56,7 @@ export default function MasterAdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
+  const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
@@ -174,6 +179,19 @@ export default function MasterAdminLayout({
       .catch(() => {});
   }, [pathname, isLoginPage]);
 
+  // Auto-expand employee and customer menus when navigating
+  useEffect(() => {
+    if (
+      pathname.startsWith('/masteradmin/employees') ||
+      pathname.startsWith('/masteradmin/attendance')
+    ) {
+      setEmployeeMenuOpen(true);
+    }
+    if (pathname.startsWith('/masteradmin/customers')) {
+      setCustomerMenuOpen(true);
+    }
+  }, [pathname]);
+
   if (isLoginPage) {
     return <>{children}</>;
   }
@@ -197,78 +215,129 @@ export default function MasterAdminLayout({
     router.push('/masteradmin/login');
   };
 
-  // Auto-expand employee menu when navigating to employee or attendance pages
-  useEffect(() => {
-    if (
-      pathname.startsWith('/masteradmin/employees') ||
-      pathname.startsWith('/masteradmin/attendance')
-    ) {
-      setEmployeeMenuOpen(true);
-    }
-  }, [pathname]);
-
-  const navLinks: Array<{
-    name: string;
-    href?: string;
-    icon: any;
-    badge?: string;
-    isGroup?: boolean;
-    children?: Array<{
+  const navSections: Array<{
+    title: string;
+    items: Array<{
       name: string;
-      href: string;
+      href?: string;
       icon: any;
       badge?: string;
+      isGroup?: boolean;
+      children?: Array<{
+        name: string;
+        href: string;
+        icon: any;
+        badge?: string;
+      }>;
     }>;
   }> = [
     {
-      name: 'Dashboard Overview',
-      href: '/masteradmin',
-      icon: LayoutDashboard,
-      badge: 'Live',
-    },
-    {
-      name: 'Companies Management',
-      href: '/masteradmin/companies',
-      icon: Building2,
-      badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
-    },
-    {
-      name: 'Employee Management',
-      icon: Users,
-      badge: employeeCount > 0 ? `${employeeCount}` : undefined,
-      isGroup: true,
-      children: [
+      title: 'Overview',
+      items: [
         {
-          name: 'Employees & Permissions',
-          href: '/masteradmin/employees',
-          icon: UserCheck,
-          badge: employeeCount > 0 ? `${employeeCount}` : undefined,
-        },
-        {
-          name: 'Face & Attendance',
-          href: '/masteradmin/attendance',
-          icon: Camera,
-          badge: 'AI Bio',
+          name: 'Dashboard Overview',
+          href: '/masteradmin',
+          icon: LayoutDashboard,
+          badge: 'Live',
         },
       ],
     },
     {
-      name: 'Customer Management',
-      href: '/masteradmin/customers',
-      icon: UserCheck,
-      badge: customerCount > 0 ? `${customerCount}` : undefined,
+      title: 'Company',
+      items: [
+        {
+          name: 'Companies Management',
+          href: '/masteradmin/companies',
+          icon: Building2,
+          badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
+        },
+      ],
     },
     {
-      name: 'Services Portal',
-      href: '/companies',
-      icon: Sparkles,
-      badge: 'Cards',
+      title: 'Employee',
+      items: [
+        {
+          name: 'Employee Management',
+          icon: Users,
+          badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+          isGroup: true,
+          children: [
+            {
+              name: 'Employees & Permissions',
+              href: '/masteradmin/employees',
+              icon: UserCheck,
+              badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+            },
+            {
+              name: 'Face & Attendance',
+              href: '/masteradmin/attendance',
+              icon: Camera,
+              badge: 'AI Bio',
+            },
+          ],
+        },
+      ],
     },
     {
-      name: 'Change Password',
-      href: '/masteradmin/change-password',
-      icon: KeyRound,
-      badge: 'Account',
+      title: 'Customer',
+      items: [
+        {
+          name: 'Customer Management',
+          icon: UserCheck,
+          badge: customerCount > 0 ? `${customerCount}` : undefined,
+          isGroup: true,
+          children: [
+            {
+              name: 'Create Customer',
+              href: '/masteradmin/customers',
+              icon: Users,
+              badge: customerCount > 0 ? `${customerCount}` : undefined,
+            },
+            {
+              name: 'Target Amount',
+              href: '/masteradmin/customers/target-amount',
+              icon: Target,
+            },
+            {
+              name: 'Deposit Amount',
+              href: '/masteradmin/customers/deposit-amount',
+              icon: DollarSign,
+            },
+            {
+              name: 'Pending Amount',
+              href: '/masteradmin/customers/pending-amount',
+              icon: Clock,
+            },
+            {
+              name: 'Company Cost Amount',
+              href: '/masteradmin/customers/company-cost',
+              icon: FileSpreadsheet,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Services',
+      items: [
+        {
+          name: 'Services Portal',
+          href: '/companies',
+          icon: Sparkles,
+          badge: 'Cards',
+        },
+      ],
+    },
+    {
+      title: 'Settings',
+      items: [
+        {
+          name: 'Change Password',
+          href: '/masteradmin/change-password',
+          icon: KeyRound,
+          badge: 'Account',
+        },
+      ],
     },
   ];
 
@@ -381,39 +450,43 @@ export default function MasterAdminLayout({
             style={{ backgroundColor: sidebarBg }}
             className="flex-1 overflow-y-auto py-5 px-3 space-y-6"
           >
-            <div>
-              {sidebarOpen && (
-                <p
-                  style={{
-                    color: isDarkSidebar ? 'rgba(255,255,255,0.45)' : sidebarText,
-                    opacity: isDarkSidebar ? 1 : 0.7,
-                  }}
-                  className="text-[10px] font-bold uppercase tracking-wider px-3 mb-2"
-                >
-                  Management
-                </p>
-              )}
-              <nav className="space-y-1">
-                {navLinks.map((link) => {
+            {navSections.map((section) => (
+              <div key={section.title}>
+                {sidebarOpen && (
+                  <p
+                    style={{
+                      color: isDarkSidebar ? 'rgba(255,255,255,0.45)' : sidebarText,
+                      opacity: isDarkSidebar ? 1 : 0.7,
+                    }}
+                    className="text-[10px] font-bold uppercase tracking-wider px-3 mb-2"
+                  >
+                    {section.title}
+                  </p>
+                )}
+                <nav className="space-y-1">
+                  {section.items.map((link) => {
                   const Icon = link.icon;
 
                   if (link.isGroup) {
                     const isChildActive = link.children?.some(
                       (child) => pathname === child.href || pathname.startsWith(child.href)
                     );
+                    const isGroupOpen =
+                      link.name === 'Customer Management' ? customerMenuOpen : employeeMenuOpen;
+                    const toggleGroup = () => {
+                      if (!sidebarOpen) setSidebarOpen(true);
+                      if (link.name === 'Customer Management') {
+                        setCustomerMenuOpen(!customerMenuOpen);
+                      } else {
+                        setEmployeeMenuOpen(!employeeMenuOpen);
+                      }
+                    };
 
                     return (
                       <div key={link.name} className="space-y-1">
                         <button
                           type="button"
-                          onClick={() => {
-                            if (!sidebarOpen) {
-                              setSidebarOpen(true);
-                              setEmployeeMenuOpen(true);
-                            } else {
-                              setEmployeeMenuOpen(!employeeMenuOpen);
-                            }
-                          }}
+                          onClick={toggleGroup}
                           title={!sidebarOpen ? link.name : undefined}
                           style={{
                             backgroundColor: isChildActive
@@ -456,7 +529,7 @@ export default function MasterAdminLayout({
                                   size={14}
                                   style={{ color: sidebarText }}
                                   className={`transition-transform duration-200 shrink-0 ${
-                                    employeeMenuOpen ? 'rotate-0' : '-rotate-90'
+                                    isGroupOpen ? 'rotate-0' : '-rotate-90'
                                   }`}
                                 />
                               </div>
@@ -465,12 +538,19 @@ export default function MasterAdminLayout({
                         </button>
 
                         {/* Collapsible Submenu */}
-                        {sidebarOpen && employeeMenuOpen && (
+                        {sidebarOpen && isGroupOpen && (
                           <div className="pl-3.5 pr-1 py-1 space-y-1 ml-2 border-l border-slate-700/30">
                             {link.children?.map((child) => {
                               const ChildIcon = child.icon;
                               const isChildItemActive =
-                                pathname === child.href || pathname.startsWith(child.href);
+                                child.href === '/masteradmin/customers'
+                                  ? pathname === '/masteradmin/customers' ||
+                                    pathname === '/masteradmin/customers/create' ||
+                                    pathname.startsWith('/masteradmin/customers/edit') || pathname.startsWith('/masteradmin/customers/view')
+                                  : child.href === '/masteradmin/employees'
+                                  ? pathname === '/masteradmin/employees' ||
+                                    pathname.startsWith('/masteradmin/employees/')
+                                  : pathname === child.href || pathname.startsWith(child.href + '/');
 
                               return (
                                 <Link
@@ -482,11 +562,10 @@ export default function MasterAdminLayout({
                                       ? sidebarActiveBg
                                       : 'transparent',
                                     color: isChildItemActive ? sidebarActiveText : sidebarText,
-                                    borderLeftColor: isChildItemActive
-                                      ? sidebarActiveText
-                                      : 'transparent',
                                   }}
-                                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline border-l-4 shadow-2xs hover:opacity-90"
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
+                                    isChildItemActive ? 'font-bold' : ''
+                                  }`}
                                 >
                                   <ChildIcon
                                     size={15}
@@ -572,6 +651,7 @@ export default function MasterAdminLayout({
                 })}
               </nav>
             </div>
+          ))}
 
             {/* Public Portals Link matching Super Admin */}
             <div>

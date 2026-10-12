@@ -77,7 +77,16 @@ export interface EmployeeModulePermissions {
 
 const DEFAULT_PERMISSIONS: EmployeeModulePermissions = {
   companies: { view: true, create: false, edit: true, delete: false, statistics: true, cards: ['*'] },
-  customers: { view: true, create: true, edit: true, delete: false },
+  customers: {
+    view: true,
+    create: true,
+    edit: true,
+    delete: false,
+    target_amount: true,
+    deposit_amount: true,
+    pending_amount: true,
+    company_cost: true,
+  },
   services: { view: true, create: false, edit: false, delete: false },
   passwords: { view: false, create: false, edit: false, delete: false },
 };
@@ -1501,6 +1510,119 @@ export default function EmployeeFormFullPage({
                     </span>
                   </td>
                 </tr>
+
+                {/* Granular Customer Finance Sub-Module Permissions */}
+                {permissions.customers.view && (
+                  <tr className="bg-emerald-50/30 border-y border-emerald-100/60">
+                    <td colSpan={6} className="py-3 px-4">
+                      <div className="pl-6 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                              Customer Finance &amp; Expense Sub-Modules
+                            </span>
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full">
+                              Granular Access
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            Authorized financial tools visible in employee portal
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                          {/* 1. Target Amount */}
+                          <label
+                            className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                              permissions.customers.target_amount !== false
+                                ? 'border-emerald-300 bg-white shadow-2xs'
+                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={permissions.customers.target_amount !== false}
+                              onChange={(e) =>
+                                handlePermissionChange('customers', 'target_amount', e.target.checked)
+                              }
+                              className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                            />
+                            <div>
+                              <div className="text-xs font-bold text-slate-800">Target Amount</div>
+                              <div className="text-[10px] text-slate-400">Target quotas &amp; pipelines</div>
+                            </div>
+                          </label>
+
+                          {/* 2. Deposit Amount */}
+                          <label
+                            className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                              permissions.customers.deposit_amount !== false
+                                ? 'border-emerald-300 bg-white shadow-2xs'
+                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={permissions.customers.deposit_amount !== false}
+                              onChange={(e) =>
+                                handlePermissionChange('customers', 'deposit_amount', e.target.checked)
+                              }
+                              className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                            />
+                            <div>
+                              <div className="text-xs font-bold text-slate-800">Deposit Amount</div>
+                              <div className="text-[10px] text-slate-400">Payments &amp; bank slips</div>
+                            </div>
+                          </label>
+
+                          {/* 3. Pending Amount */}
+                          <label
+                            className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                              permissions.customers.pending_amount !== false
+                                ? 'border-emerald-300 bg-white shadow-2xs'
+                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={permissions.customers.pending_amount !== false}
+                              onChange={(e) =>
+                                handlePermissionChange('customers', 'pending_amount', e.target.checked)
+                              }
+                              className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                            />
+                            <div>
+                              <div className="text-xs font-bold text-slate-800">Pending Amount</div>
+                              <div className="text-[10px] text-slate-400">Unpaid dues &amp; collections</div>
+                            </div>
+                          </label>
+
+                          {/* 4. Company Cost Amount */}
+                          <label
+                            className={`flex items-center gap-2.5 p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                              permissions.customers.company_cost !== false
+                                ? 'border-emerald-300 bg-white shadow-2xs'
+                                : 'border-slate-200 bg-slate-50 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={permissions.customers.company_cost !== false}
+                              onChange={(e) =>
+                                handlePermissionChange('customers', 'company_cost', e.target.checked)
+                              }
+                              className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                            />
+                            <div>
+                              <div className="text-xs font-bold text-slate-800">Company Cost</div>
+                              <div className="text-[10px] text-slate-400">Expenses &amp; value dossiers</div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
 
                 {/* 3. Service Cards */}
                 <tr className="hover:bg-slate-50/70 transition-colors">

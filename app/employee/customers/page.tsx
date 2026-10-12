@@ -40,8 +40,6 @@ import {
   fetchCustomers,
   fetchWorkingSectors,
   getFileUrl,
-  createCustomer,
-  updateCustomer,
 } from '@/lib/customerStorage';
 import { getCurrentUser, AuthUser } from '@/lib/auth';
 
@@ -61,29 +59,9 @@ export default function EmployeeCustomersPage() {
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'pending' | 'inactive' | 'absent'>('ALL');
 
-  // Modals & Inspection
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<CustomerRecord | null>(null);
-  const [viewingCustomer, setViewingCustomer] = useState<CustomerRecord | null>(null);
+  // Inspection & Deletion Modals
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
-
-  // Form states
-  const [formName, setFormName] = useState('');
-  const [formPassport, setFormPassport] = useState('');
-  const [formNid, setFormNid] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formPhone, setFormPhone] = useState('');
-  const [formDob, setFormDob] = useState('1995-05-15');
-  const [formCountry, setFormCountry] = useState('Bangladesh');
-  const [formCompanyId, setFormCompanyId] = useState('');
-  const [formSector, setFormSector] = useState('');
-  const [formSalary, setFormSalary] = useState('1500');
-  const [formOvertime, setFormOvertime] = useState('RM 15.00 / hr');
-  const [formOtherCompanyName, setFormOtherCompanyName] = useState('');
-  const [formOtherCompanyBossPhone, setFormOtherCompanyBossPhone] = useState('');
-  const [formOtherCompanyAddress, setFormOtherCompanyAddress] = useState('');
-  const [formStatus, setFormStatus] = useState<'active' | 'pending' | 'inactive' | 'absent'>('active');
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -180,95 +158,6 @@ export default function EmployeeCustomersPage() {
     });
   }, [inScopeCustomers, searchQuery, selectedCompanyId, selectedSector, statusFilter]);
 
-  const openCreateModal = () => {
-    if (!canCreate) {
-      alert('You do not have permission to add new customers.');
-      return;
-    }
-    setEditingCustomer(null);
-    setFormName('');
-    setFormPassport('');
-    setFormNid('');
-    setFormEmail('');
-    setFormPhone('');
-    setFormDob('1995-05-15');
-    setFormCountry('Bangladesh');
-    setFormCompanyId(permittedCompanies[0]?.id || '');
-    setFormSector(sectors[0]?.name || 'Construction');
-    setFormSalary('1500');
-    setFormStatus('active');
-    setIsCreateModalOpen(true);
-  };
-
-  const openEditModal = (cust: CustomerRecord) => {
-    if (!canEdit) {
-      alert('You do not have permission to edit customer records.');
-      return;
-    }
-    setEditingCustomer(cust);
-    setFormName(cust.full_name || '');
-    setFormPassport(cust.passport_no || '');
-    setFormNid(cust.nid_no || '');
-    setFormEmail(cust.email || '');
-    setFormPhone(cust.phone || cust.worker_phone || '');
-    setFormDob(cust.date_of_birth || '');
-    setFormCountry(cust.country || 'Bangladesh');
-    setFormCompanyId(cust.company_id || permittedCompanies[0]?.id || '');
-    setFormSector(cust.working_sector || sectors[0]?.name || '');
-    setFormSalary(cust.basic_salary || '1500');
-    setFormOvertime(cust.overtime || 'RM 15.00 / hr');
-    setFormOtherCompanyName(cust.other_company_name || '');
-    setFormOtherCompanyBossPhone(cust.other_company_boss_phone || '');
-    setFormOtherCompanyAddress(cust.other_company_address || '');
-    setFormStatus(cust.status || 'active');
-    setIsCreateModalOpen(true);
-  };
-
-  const handleSaveCustomer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formName.trim() || !formCompanyId) {
-      alert('Please fill in required fields (Name and Authorized Company).');
-      return;
-    }
-
-    setLoading(true);
-    const payload: Partial<CustomerRecord> = {
-      full_name: formName.trim(),
-      passport_no: formPassport.trim(),
-      nid_no: formNid.trim() || `NID-${Date.now().toString().slice(-6)}`,
-      email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, '')}@worker.agency`,
-      phone: formPhone.trim(),
-      date_of_birth: formDob,
-      country: formCountry,
-      company_id: formCompanyId,
-      working_sector: formSector,
-      basic_salary: formSalary,
-      overtime: formOvertime,
-      other_company_name: formOtherCompanyName.trim() || undefined,
-      other_company_boss_phone: formOtherCompanyBossPhone.trim() || undefined,
-      other_company_address: formOtherCompanyAddress.trim() || undefined,
-      status: formStatus,
-      role: 'Foreign Worker',
-    };
-
-    try {
-      if (editingCustomer) {
-        await updateCustomer(editingCustomer.id, payload);
-        showToast('success', `Worker "${payload.full_name}" updated successfully.`);
-      } else {
-        await createCustomer(payload);
-        showToast('success', `Worker "${payload.full_name}" registered successfully.`);
-      }
-      setIsCreateModalOpen(false);
-      setEditingCustomer(null);
-      await loadData();
-    } catch (err: any) {
-      showToast('error', err.message || 'Failed to save customer.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleDeleteCustomer = async (id: number) => {
     if (!canDelete) {
       alert('You do not have permission to delete customer records.');
@@ -332,14 +221,13 @@ export default function EmployeeCustomersPage() {
 
           <div className="flex items-center gap-3 shrink-0">
             {canCreate && (
-              <button
-                type="button"
-                onClick={openCreateModal}
+              <Link
+                href="/employee/customers/create"
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#22a34a] hover:bg-[#1b843c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer border-0"
               >
                 <Plus size={16} />
                 <span>Add New Worker</span>
-              </button>
+              </Link>
             )}
             <button
               type="button"
@@ -451,28 +339,22 @@ export default function EmployeeCustomersPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-[#22a34a] text-white text-xs font-bold">
-              <th className="py-3 px-4 border-r border-green-600/60 w-[20%]">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[24%]">
                 Worker Profile
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[18%]">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[22%]">
                 Assigned Employer
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[14%]">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[18%]">
                 Sector &amp; Nationality
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[12%]">
-                Basic Salary
-              </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[12%]">
-                OT(Over time)
-              </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[10%] text-center">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[12%] text-center">
                 Status
               </th>
-              <th className="py-3 px-4 border-r border-green-600/60 w-[10%] text-center">
+              <th className="py-3 px-4 border-r border-green-600/60 w-[12%] text-center">
                 Attached Documents
               </th>
-              <th className="py-3 px-4 text-right w-[14%]">
+              <th className="py-3 px-4 text-right w-[12%]">
                 Actions
               </th>
             </tr>
@@ -531,15 +413,7 @@ export default function EmployeeCustomersPage() {
                     <div className="text-[10px] text-slate-400 mt-0.5">{cust.country || 'Malaysia'}</div>
                   </td>
 
-                  {/* Basic Salary */}
-                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle font-mono font-semibold text-slate-800 whitespace-nowrap">
-                    {cust.basic_salary || '—'}
-                  </td>
 
-                  {/* OT(Over time) */}
-                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle font-mono text-slate-700 whitespace-nowrap">
-                    {cust.overtime || '—'}
-                  </td>
 
                   {/* Status */}
                   <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center">
@@ -560,37 +434,34 @@ export default function EmployeeCustomersPage() {
 
                   {/* Documents Count */}
                   <td className="py-3.5 px-4 border-r border-slate-200 text-center align-middle">
-                    <button
-                      type="button"
-                      onClick={() => setViewingCustomer(cust)}
+                    <Link
+                      href={`/employee/customers/view?id=${cust.id}`}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0b4da2] hover:bg-blue-100 transition-colors cursor-pointer border border-blue-200"
                     >
                       <FileText size={12} />
                       <span>{docCount} Files</span>
-                    </button>
+                    </Link>
                   </td>
 
                   {/* Actions */}
                   <td className="py-3 px-4 align-middle text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setViewingCustomer(cust)}
+                      <Link
+                        href={`/employee/customers/view?id=${cust.id}`}
                         title="View Worker Dossier"
                         className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
                       >
                         <Eye size={13} />
-                      </button>
+                      </Link>
 
                       {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(cust)}
+                        <Link
+                          href={`/employee/customers/create?id=${cust.id}`}
                           title="Edit Worker Profile"
                           className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
                         >
                           <Edit2 size={13} />
-                        </button>
+                        </Link>
                       )}
 
                       {canDelete && (
@@ -611,7 +482,7 @@ export default function EmployeeCustomersPage() {
 
             {filteredCustomers.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-slate-400 font-medium">
+                <td colSpan={6} className="py-10 text-center text-slate-400 font-medium">
                   No workers found matching the current search criteria.
                 </td>
               </tr>
@@ -619,406 +490,6 @@ export default function EmployeeCustomersPage() {
           </tbody>
         </table>
       </div>
-
-      {/* CREATE / EDIT CUSTOMER MODAL */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsCreateModalOpen(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-                <UserCheck size={20} />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900 m-0">
-                  {editingCustomer ? 'Edit Worker Profile' : 'Register New Worker'}
-                </h2>
-                <p className="text-xs text-slate-500 m-0">
-                  Assign to an authorized employer and set official credentials.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveCustomer} className="space-y-3.5 pt-2">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Full Legal Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="e.g. Md Tariqul Islam"
-                  className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-medium"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Passport Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formPassport}
-                    onChange={(e) => setFormPassport(e.target.value.toUpperCase())}
-                    placeholder="e.g. A01234567"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    NID / National ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formNid}
-                    onChange={(e) => setFormNid(e.target.value)}
-                    placeholder="National ID"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Authorized Employer Company *
-                </label>
-                <select
-                  required
-                  value={formCompanyId}
-                  onChange={(e) => {
-                    const cId = e.target.value;
-                    setFormCompanyId(cId);
-                    const comp = permittedCompanies.find((c) => c.id.toLowerCase() === cId.toLowerCase());
-                    if (comp?.sector) {
-                      setFormSector(comp.sector);
-                    }
-                  }}
-                  className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                >
-                  <option value="">-- Select Assigned Company --</option>
-                  {permittedCompanies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.roc})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Working Sector
-                  </label>
-                  <select
-                    value={formSector}
-                    onChange={(e) => setFormSector(e.target.value)}
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                  >
-                    {(() => {
-                      const selectedComp = permittedCompanies.find((c) => c.id.toLowerCase() === formCompanyId.toLowerCase());
-                      const compSectors: string[] = [];
-                      if (selectedComp?.sectors && Array.isArray(selectedComp.sectors)) {
-                        selectedComp.sectors.forEach((s) => {
-                          const trimmed = s.trim();
-                          if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
-                        });
-                      }
-                      if (selectedComp?.sector) {
-                        selectedComp.sector.split(',').forEach((s) => {
-                          const trimmed = s.trim();
-                          if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
-                        });
-                      }
-
-                      if (compSectors.length === 0) {
-                        return <option value="">-- No Sector Assigned to Company --</option>;
-                      }
-
-                      return compSectors.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ));
-                    })()}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Country of Origin
-                  </label>
-                  <input
-                    type="text"
-                    value={formCountry}
-                    onChange={(e) => setFormCountry(e.target.value)}
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Basic Salary
-                  </label>
-                  <input
-                    type="text"
-                    value={formSalary}
-                    onChange={(e) => setFormSalary(e.target.value)}
-                    placeholder="1500"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    OT(Over time)
-                  </label>
-                  <input
-                    type="text"
-                    value={formOvertime}
-                    onChange={(e) => setFormOvertime(e.target.value)}
-                    placeholder="RM 15.00 / hr"
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as any)}
-                    className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white font-medium capitalize"
-                  >
-                    <option value="active">Active</option>
-                    <option value="pending">Pending</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="absent">Absent</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Others Company Information */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                  <span>Others Company Information</span>
-                  <span className="text-[10px] text-slate-400 font-normal">(Optional)</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                      Company Name
-                    </label>
-                    <input
-                      type="text"
-                      value={formOtherCompanyName}
-                      onChange={(e) => setFormOtherCompanyName(e.target.value)}
-                      placeholder="e.g. Previous Employer"
-                      className="w-full h-8 px-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                      Boss Phone No
-                    </label>
-                    <input
-                      type="text"
-                      value={formOtherCompanyBossPhone}
-                      onChange={(e) => setFormOtherCompanyBossPhone(e.target.value)}
-                      placeholder="+60 12-345 6789"
-                      className="w-full h-8 px-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 font-mono bg-white"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                      Company Address
-                    </label>
-                    <input
-                      type="text"
-                      value={formOtherCompanyAddress}
-                      onChange={(e) => setFormOtherCompanyAddress(e.target.value)}
-                      placeholder="Full physical address"
-                      className="w-full h-8 px-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-5 py-2 bg-[#22a34a] hover:bg-[#1b843c] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border-0 shadow-xs"
-                >
-                  {loading ? 'Saving...' : editingCustomer ? 'Update Worker' : 'Register Worker'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW WORKER DOSSIER MODAL */}
-      {viewingCustomer && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setViewingCustomer(null)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4 border-b border-slate-100 pb-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-[#0b4da2] font-bold">
-                {viewingCustomer.full_name?.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 m-0">
-                  {viewingCustomer.full_name}
-                </h3>
-                <span className="text-xs text-slate-500 font-mono">
-                  Passport: {viewingCustomer.passport_no || 'N/A'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl">
-                <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">National ID</span>
-                  <span className="font-semibold text-slate-800">{viewingCustomer.nid_no || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Sector</span>
-                  <span className="font-semibold text-slate-800">{viewingCustomer.working_sector || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Nationality</span>
-                  <span className="font-semibold text-slate-800">{viewingCustomer.country || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Status</span>
-                  <span className="font-bold text-emerald-700 capitalize">{viewingCustomer.status}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">Basic Salary</span>
-                  <span className="font-semibold text-slate-800 font-mono">{viewingCustomer.basic_salary || '—'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">OT(Over time)</span>
-                  <span className="font-semibold text-slate-800 font-mono">{viewingCustomer.overtime || '—'}</span>
-                </div>
-              </div>
-
-              {/* Login Access Status */}
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Portal Login Access</span>
-                  <span className="font-semibold text-slate-800">
-                    {viewingCustomer.can_login ? (
-                      <span className="text-emerald-700 font-bold">Enabled (User ID: {viewingCustomer.username})</span>
-                    ) : (
-                      <span className="text-slate-500">Disabled (No Login Access)</span>
-                    )}
-                  </span>
-                </div>
-                {viewingCustomer.can_login && (
-                  <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                    {viewingCustomer.assigned_service_cards?.includes('*')
-                      ? 'Full Cards Access'
-                      : `${viewingCustomer.assigned_service_cards?.length || 0} Cards Assigned`}
-                  </span>
-                )}
-              </div>
-
-              {/* Others Company Information */}
-              {(viewingCustomer.other_company_name || viewingCustomer.other_company_boss_phone || viewingCustomer.other_company_address) && (
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
-                  <span className="text-[10px] text-slate-500 font-bold block">
-                    Others Company Information
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">Company Name</span>
-                      <span className="font-semibold text-slate-800">{viewingCustomer.other_company_name || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">Boss Phone No</span>
-                      <span className="font-mono text-slate-800">{viewingCustomer.other_company_boss_phone || '—'}</span>
-                    </div>
-                    <div className="col-span-2">
-                      <span className="text-slate-400 block text-[10px]">Company Address</span>
-                      <span className="text-slate-700">{viewingCustomer.other_company_address || '—'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h4 className="text-xs font-bold text-slate-800 mb-2">Attached Clearance Documents</h4>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {Array.isArray(viewingCustomer.documents) && viewingCustomer.documents.length > 0 ? (
-                    viewingCustomer.documents.map((doc, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-white"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <FileText size={14} className="text-blue-600 shrink-0" />
-                          <span className="truncate font-medium text-slate-700">{doc.name}</span>
-                        </div>
-                        {doc.url && (
-                          <a
-                            href={getFileUrl(doc.url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#0b4da2] hover:underline font-bold text-[11px] shrink-0"
-                          >
-                            Download
-                          </a>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-slate-400 italic py-2 text-center">
-                      No service documents currently uploaded for this worker.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 pt-3 border-t border-slate-100 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setViewingCustomer(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors cursor-pointer border-0"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* DELETE CONFIRMATION MODAL */}
       {deleteConfirmId && (

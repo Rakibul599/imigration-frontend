@@ -101,7 +101,6 @@ export default function SuperAdminCustomersPage() {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'pending' | 'inactive'>('ALL');
 
   // Inspection & Deletion Modals
-  const [viewingCustomer, setViewingCustomer] = useState<CustomerRecord | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
 
@@ -595,14 +594,13 @@ export default function SuperAdminCustomersPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1 justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setViewingCustomer(cust)}
-                            className="p-1.5 text-slate-500 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
+                          <Link
+                            href={`/superadmin/customers/view?id=${cust.id}`}
+                            className="p-1.5 text-slate-500 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border-0 bg-transparent inline-flex items-center justify-center"
                             title="View Full Profile Details"
                           >
                             <Eye size={14} />
-                          </button>
+                          </Link>
 
                           <Link
                             href={`/superadmin/customers/create?id=${cust.id}`}
@@ -630,251 +628,6 @@ export default function SuperAdminCustomersPage() {
           </table>
         </div>
       </div>
-
-      {/* View Dossier Modal */}
-      {viewingCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-6">
-            <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {viewingCustomer.profile_pic || viewingCustomer.profile_image ? (
-                  <img
-                    src={getFileUrl(viewingCustomer.profile_pic || viewingCustomer.profile_image)}
-                    alt={viewingCustomer.full_name}
-                    className="w-11 h-11 rounded-xl object-cover border-2 border-white/40 shadow-sm shrink-0"
-                  />
-                ) : (
-                  <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center border border-white/20 shrink-0">
-                    <UserCheck size={20} className="text-yellow-400" />
-                  </div>
-                )}
-                <div>
-                  <h3 className="text-sm font-bold m-0 leading-tight">
-                    {viewingCustomer.full_name}
-                  </h3>
-                  <p className="text-[11px] text-blue-100 m-0">
-                    NID: {viewingCustomer.nid_no} • Passport: {viewingCustomer.passport_no || 'N/A'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewingCustomer(null)}
-                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer bg-transparent border-0"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs text-slate-700">
-              {/* Employer & Origin */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Origin Country</span>
-                  <span className="font-bold text-slate-800">{viewingCustomer.country || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Date of Birth</span>
-                  <span className="font-bold text-slate-800">{viewingCustomer.date_of_birth || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Passport Issue</span>
-                  <span className="font-mono text-slate-800">{viewingCustomer.passport_issue_date || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Passport Expire</span>
-                  <span className="font-mono text-slate-800">{viewingCustomer.passport_expire_date || 'N/A'}</span>
-                </div>
-              </div>
-
-              {/* Passport & NID Files */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                    Passport Document
-                  </span>
-                  <div className="font-mono text-xs font-semibold text-slate-800">
-                    No: {viewingCustomer.passport_no || 'Not Issued'}
-                  </div>
-                  {viewingCustomer.passport_file ? (
-                    <a
-                      href={getFileUrl(viewingCustomer.passport_file)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-bold"
-                    >
-                      <Download size={13} />
-                      <span>Download / View Passport Document</span>
-                    </a>
-                  ) : (
-                    <span className="text-slate-400 text-xs italic">No document file attached</span>
-                  )}
-                </div>
-
-                <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                    National ID (NID)
-                  </span>
-                  <div className="font-mono text-xs font-semibold text-slate-800">
-                    No: {viewingCustomer.nid_no}
-                  </div>
-                  {viewingCustomer.nid_file ? (
-                    <a
-                      href={getFileUrl(viewingCustomer.nid_file)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:underline font-bold"
-                    >
-                      <Download size={13} />
-                      <span>Download / View NID Document</span>
-                    </a>
-                  ) : (
-                    <span className="text-slate-400 text-xs italic">No document file attached</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Contact & Address */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-semibold">Phone Number</span>
-                    <span className="font-mono font-semibold text-slate-800">{viewingCustomer.phone || viewingCustomer.worker_phone || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-semibold">Email Address</span>
-                    <span className="font-mono text-slate-800">{viewingCustomer.email || 'N/A'}</span>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Leaving / Living Address</span>
-                  <span className="text-slate-700">{viewingCustomer.leaving_address || 'N/A'}</span>
-                </div>
-              </div>
-
-              {/* Working Sector, Basic Salary & OT */}
-              <div className="bg-blue-50/40 p-3.5 rounded-xl border border-blue-200 space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <span className="text-[10px] text-blue-900 block font-bold">Working Sector</span>
-                    <span className="font-semibold text-slate-800">{viewingCustomer.working_sector || 'General'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-blue-900 block font-bold">Basic Salary</span>
-                    <span className="font-mono font-bold text-slate-800">{viewingCustomer.basic_salary || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-blue-900 block font-bold">OT(Over time)</span>
-                    <span className="font-mono font-bold text-slate-800">{viewingCustomer.overtime || 'N/A'}</span>
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-blue-900 block font-bold">Working Address / Worksite</span>
-                  <span className="text-slate-700">{viewingCustomer.working_address || 'N/A'}</span>
-                </div>
-              </div>
-
-              {/* Login Access Status */}
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex items-center justify-between gap-3 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-semibold">Portal Login Access</span>
-                  <span className="font-semibold text-slate-800">
-                    {viewingCustomer.can_login ? (
-                      <span className="text-emerald-700 font-bold">Enabled (User ID: {viewingCustomer.username})</span>
-                    ) : (
-                      <span className="text-slate-500">Disabled (No Login Access)</span>
-                    )}
-                  </span>
-                </div>
-                {viewingCustomer.can_login && (
-                  <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                    {viewingCustomer.assigned_service_cards?.includes('*')
-                      ? 'Full Cards Access'
-                      : `${viewingCustomer.assigned_service_cards?.length || 0} Cards Assigned`}
-                  </span>
-                )}
-              </div>
-
-              {/* Others Company Information */}
-              {(viewingCustomer.other_company_name || viewingCustomer.other_company_boss_phone || viewingCustomer.other_company_address) && (
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
-                    Others Company Information
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Company Name</span>
-                      <span className="font-semibold text-slate-800">{viewingCustomer.other_company_name || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-semibold">Boss Phone No</span>
-                      <span className="font-mono text-slate-800">{viewingCustomer.other_company_boss_phone || '—'}</span>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className="text-[10px] text-slate-400 block font-semibold">Company Address</span>
-                      <span className="text-slate-700">{viewingCustomer.other_company_address || '—'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Multiple Uploaded Documents */}
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-2">
-                  Uploaded Document Attachments ({viewingCustomer.documents?.length || 0})
-                </span>
-                {!viewingCustomer.documents || viewingCustomer.documents.length === 0 ? (
-                  <div className="text-slate-400 text-xs italic p-3 bg-slate-50 rounded-lg border border-slate-200 text-center">
-                    No additional document attachments uploaded.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {viewingCustomer.documents.map((doc, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-lg border border-slate-200 bg-white flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <FileText size={15} className="text-[#0b4da2] shrink-0" />
-                          <div className="truncate">
-                            <div className="font-semibold text-slate-800 truncate">{doc.name}</div>
-                            <div className="text-[10px] text-slate-400 flex flex-wrap items-center gap-x-2">
-                              {doc.issue_date && <span>Issue: <strong className="text-slate-600 font-mono">{doc.issue_date}</strong></span>}
-                              {doc.expire_date && <span>Expire: <strong className="text-slate-600 font-mono">{doc.expire_date}</strong></span>}
-                              {doc.size && <span>({doc.size})</span>}
-                            </div>
-                          </div>
-                        </div>
-                        {doc.url && (
-                          <a
-                            href={getFileUrl(doc.url)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1 text-[#0b4da2] hover:bg-blue-50 rounded transition-colors"
-                            title="Open / Download"
-                          >
-                            <ExternalLink size={14} />
-                          </a>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setViewingCustomer(null)}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer border-0"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmId !== null && (

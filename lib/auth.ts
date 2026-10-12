@@ -51,6 +51,18 @@ export function canEmployeeViewCompanyStatistics(user: AuthUser | null): boolean
   return true;
 }
 
+export function canEmployeeViewCustomerSubmodule(
+  user: AuthUser | null,
+  submodule: 'target_amount' | 'deposit_amount' | 'pending_amount' | 'company_cost'
+): boolean {
+  if (!user) return false;
+  if (user.role === 'SUPER_ADMIN' || user.role === 'Admin' || user.role === 'MasterAdmin') return true;
+  if (!user.module_permissions?.customers) return true;
+  if (user.module_permissions.customers.view === false) return false;
+  if (user.module_permissions.customers[submodule] === false) return false;
+  return true;
+}
+
 export interface AuthUser {
   id: number | string;
   employee_code: string;

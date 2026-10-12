@@ -32,6 +32,7 @@ import {
   Trash2,
   Upload,
   Briefcase,
+  Edit2,
   User,
   X,
 } from 'lucide-react';
@@ -55,35 +56,54 @@ import {
   getStoredServices,
   fetchServiceCards,
 } from '@/lib/serviceStorage';
-import { getMasterAdminUser } from '@/lib/auth';
+import { getMasterAdminUser, getCurrentUser, getSuperAdminUser, AuthUser } from '@/lib/auth';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 
 interface CustomerFormFullPageProps {
-  portalType: 'superadmin' | 'masteradmin';
+  portalType: 'superadmin' | 'masteradmin' | 'employee';
   backUrl: string;
+  initialMode?: 'create' | 'edit' | 'view';
 }
 
-function filterPermittedCompanies(allComps: Company[], portalType: 'superadmin' | 'masteradmin'): Company[] {
-  if (portalType !== 'masteradmin') return allComps;
-  const user = getMasterAdminUser();
-  const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
-  if (allowed.length === 0) return [];
-  if (allowed.includes('*')) return allComps;
-  return allComps.filter((c) =>
-    allowed.some(
-      (id) =>
-        id.toLowerCase() === c.id.toLowerCase() ||
-        id.toLowerCase() === c.name.toLowerCase() ||
-        (c.roc && id.toLowerCase() === c.roc.toLowerCase())
-    )
-  );
+function filterPermittedCompanies(allComps: Company[], portalType: 'superadmin' | 'masteradmin' | 'employee'): Company[] {
+  if (portalType === 'superadmin') return allComps;
+  if (portalType === 'masteradmin') {
+    const user = getMasterAdminUser();
+    const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+    if (allowed.length === 0) return [];
+    if (allowed.includes('*')) return allComps;
+    return allComps.filter((c) =>
+      allowed.some(
+        (id) =>
+          id.toLowerCase() === c.id.toLowerCase() ||
+          id.toLowerCase() === c.name.toLowerCase() ||
+          (c.roc && id.toLowerCase() === c.roc.toLowerCase())
+      )
+    );
+  }
+  if (portalType === 'employee') {
+    const user = getCurrentUser();
+    const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+    if (allowed.length === 0) return [];
+    if (allowed.includes('*')) return allComps;
+    return allComps.filter((c) =>
+      allowed.some(
+        (id) =>
+          id.toLowerCase() === c.id.toLowerCase() ||
+          id.toLowerCase() === c.name.toLowerCase() ||
+          (c.roc && id.toLowerCase() === c.roc.toLowerCase())
+      )
+    );
+  }
+  return allComps;
 }
 
-function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps) {
+function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormFullPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('id');
   const isEditing = Boolean(editId);
+  const isViewMode = initialMode === 'view' || searchParams.get('mode') === 'view';
 
   // Synchronous cache-first state initialization for 0ms instant page opening
   const [companies, setCompanies] = useState<Company[]>(() => {
@@ -216,6 +236,51 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [loadedCustomer, setLoadedCustomer] = useState<CustomerRecord | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (portalType === 'employee') {
+        setCurrentUser(getCurrentUser());
+      } else if (portalType === 'masteradmin') {
+        setCurrentUser(getMasterAdminUser());
+      } else {
+        setCurrentUser(getSuperAdminUser());
+      }
+    }
+  }, [portalType]);
+
+  const canView = useMemo(() => {
+    if (portalType !== 'employee') return true;
+    if (!currentUser) return true;
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
+    return currentUser.module_permissions?.customers?.view !== false;
+  }, [portalType, currentUser]);
+
+  const canEdit = useMemo(() => {
+    if (portalType !== 'employee') return true;
+    if (!currentUser) return true;
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
+    return Boolean(currentUser.module_permissions?.customers?.edit);
+  }, [portalType, currentUser]);
+
+  const canCreate = useMemo(() => {
+    if (portalType !== 'employee') return true;
+    if (!currentUser) return true;
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
+    return Boolean(currentUser.module_permissions?.customers?.create);
+  }, [portalType, currentUser]);
+
+  const effectiveIsViewMode = isViewMode || (portalType === 'employee' && isEditing && !canEdit);
+
+  const editBaseUrl =
+    portalType === 'superadmin'
+      ? '/superadmin/customers/create'
+      : portalType === 'masteradmin'
+      ? '/masteradmin/customers/create'
+      : '/employee/customers/create';
+
   const profilePicInputRef = useRef<HTMLInputElement | null>(null);
 
   // Background refresh of companies & sectors (non-blocking)
@@ -262,6 +327,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
   }, [portalType]);
 
   const populateCustomerFields = (cust: CustomerRecord) => {
+    setLoadedCustomer(cust);
     setFullName(cust.full_name || '');
     if (cust.company_id) {
       setCompanyId(cust.company_id);
@@ -515,8 +581,14 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
       email: email.trim(),
       working_sector: workingSector.trim(),
       working_address: workingAddress.trim(),
-      basic_salary: basicSalary.trim(),
-      overtime: overtime.trim(),
+      basic_salary:
+        portalType === 'employee'
+          ? (isEditing && loadedCustomer?.basic_salary ? loadedCustomer.basic_salary : '')
+          : basicSalary.trim(),
+      overtime:
+        portalType === 'employee'
+          ? (isEditing && loadedCustomer?.overtime ? loadedCustomer.overtime : '')
+          : overtime.trim(),
       other_company_name: otherCompanyName.trim() || undefined,
       other_company_boss_phone: otherCompanyBossPhone.trim() || undefined,
       other_company_address: otherCompanyAddress.trim() || undefined,
@@ -564,6 +636,52 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
     );
   }
 
+  if (portalType === 'employee' && currentUser && !canView) {
+    return (
+      <div className="max-w-md mx-auto my-16 bg-white border border-red-200 rounded-2xl p-6 text-center space-y-4 shadow-sm">
+        <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+          <ShieldAlert size={24} />
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-slate-900 m-0">Access Denied</h2>
+          <p className="text-xs text-slate-500 mt-1 m-0">
+            You do not have clearance to view customer records.
+          </p>
+        </div>
+        <Link
+          href={backUrl}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors no-underline"
+        >
+          <ArrowLeft size={14} />
+          <span>Return to Staff Portal</span>
+        </Link>
+      </div>
+    );
+  }
+
+  if (portalType === 'employee' && currentUser && !isEditing && !effectiveIsViewMode && !canCreate) {
+    return (
+      <div className="max-w-md mx-auto my-16 bg-white border border-amber-200 rounded-2xl p-6 text-center space-y-4 shadow-sm">
+        <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+          <ShieldAlert size={24} />
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-slate-900 m-0">Registration Clearance Required</h2>
+          <p className="text-xs text-slate-500 mt-1 m-0">
+            You do not have permission to register new customer profiles.
+          </p>
+        </div>
+        <Link
+          href={backUrl}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors no-underline"
+        >
+          <ArrowLeft size={14} />
+          <span>Back to Customer Directory</span>
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
       {/* Top Breadcrumb & Return Action */}
@@ -577,7 +695,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
         </Link>
 
         <span className="text-xs text-slate-400 font-mono">
-          {portalType === 'superadmin' ? 'Super Admin Module' : 'Master Admin Scope'}
+          {portalType === 'superadmin'
+            ? 'Super Admin Module'
+            : portalType === 'masteradmin'
+            ? 'Master Admin Scope'
+            : 'Staff Desk Scope'}
         </span>
       </div>
 
@@ -586,16 +708,40 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase mb-2">
-              <ShieldCheck size={12} className="text-yellow-400" />
-              <span>Full Page Registry Form</span>
+              {effectiveIsViewMode ? (
+                <>
+                  <Eye size={12} className="text-yellow-400" />
+                  <span>Customer Profile Dossier (View Mode)</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck size={12} className="text-yellow-400" />
+                  <span>Full Page Registry Form</span>
+                </>
+              )}
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-white m-0">
-              {isEditing ? `Edit Customer Profile: ${fullName}` : 'Register New Customer Profile'}
+              {effectiveIsViewMode
+                ? `Customer Dossier: ${fullName || 'Worker Profile'}`
+                : isEditing
+                ? `Edit Customer Profile: ${fullName}`
+                : 'Register New Customer Profile'}
             </h1>
             <p className="text-xs text-blue-100/90 mt-1 max-w-xl leading-relaxed m-0">
-              Complete foreign worker biometrics, passport documentation, NID records, living address, working sectors, and multi-file document dossiers.
+              {effectiveIsViewMode
+                ? 'Read-only detailed overview of foreign worker credentials, passport and NID records, sponsor details, working sector, and uploaded document dossiers.'
+                : 'Complete foreign worker biometrics, passport documentation, NID records, living address, working sectors, and multi-file document dossiers.'}
             </p>
           </div>
+          {effectiveIsViewMode && canEdit && editId && (
+            <Link
+              href={`${editBaseUrl}?id=${editId}`}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#0b4da2] hover:bg-blue-50 text-xs font-bold transition-all shadow-sm no-underline shrink-0 self-start sm:self-auto"
+            >
+              <Edit2 size={15} />
+              <span>Edit Profile</span>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -651,7 +797,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                   </div>
                 )}
               </div>
-              {profilePic && (
+              {profilePic && !effectiveIsViewMode && (
                 <button
                   type="button"
                   onClick={() => {
@@ -669,35 +815,51 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
 
             <div className="flex-1 space-y-2 text-center sm:text-left">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <input
-                  type="file"
-                  ref={profilePicInputRef}
-                  accept="image/*"
-                  onChange={handleProfilePicUpload}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => profilePicInputRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer border-0"
-                >
-                  <Upload size={14} />
-                  <span>{profilePic ? 'Change Profile Image' : 'Upload Profile Image'}</span>
-                </button>
+                {!effectiveIsViewMode && (
+                  <>
+                    <input
+                      type="file"
+                      ref={profilePicInputRef}
+                      accept="image/*"
+                      onChange={handleProfilePicUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => profilePicInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer border-0"
+                    >
+                      <Upload size={14} />
+                      <span>{profilePic ? 'Change Profile Image' : 'Upload Profile Image'}</span>
+                    </button>
 
-                {profilePic && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfilePic('');
-                      setProfilePicName('');
-                      if (profilePicInputRef.current) profilePicInputRef.current.value = '';
-                    }}
-                    className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer border border-rose-200 bg-white"
+                    {profilePic && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfilePic('');
+                          setProfilePicName('');
+                          if (profilePicInputRef.current) profilePicInputRef.current.value = '';
+                        }}
+                        className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer border border-rose-200 bg-white"
+                      >
+                        <Trash2 size={13} />
+                        <span>Remove Photo</span>
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {effectiveIsViewMode && profilePic && (
+                  <a
+                    href={getFileUrl(profilePic)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-[#0b4da2] hover:underline font-bold px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 no-underline"
                   >
-                    <Trash2 size={13} />
-                    <span>Remove Photo</span>
-                  </button>
+                    <Eye size={13} />
+                    <span>View Full Photograph</span>
+                  </a>
                 )}
               </div>
 
@@ -729,10 +891,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <input
                 type="text"
                 required
+                disabled={effectiveIsViewMode}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="e.g. Mohammad Rafiqul Islam"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white focus:ring-2 focus:ring-blue-100"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
 
@@ -743,6 +906,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <Select2Search
                 options={companyOptions}
                 value={companyId}
+                disabled={effectiveIsViewMode}
                 onChange={(val) => {
                   setCompanyId(val);
                   const matched = companies.find((c) => c.id.toLowerCase() === val.toLowerCase());
@@ -791,6 +955,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <Select2Search
                 options={agentOptions}
                 value={agentId}
+                disabled={effectiveIsViewMode}
                 onChange={(val) => setAgentId(val)}
                 placeholder="Search & select recruitment agent..."
                 searchPlaceholder="Type agent name, phone or note..."
@@ -830,10 +995,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               </label>
               <input
                 type="text"
+                disabled={effectiveIsViewMode}
                 value={passportNo}
                 onChange={(e) => setPassportNo(e.target.value)}
                 placeholder="e.g. A01234567"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
 
@@ -844,10 +1010,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <input
                 type="text"
                 required
+                disabled={effectiveIsViewMode}
                 value={nidNo}
                 onChange={(e) => setNidNo(e.target.value)}
                 placeholder="e.g. 1988269123456"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
           </div>
@@ -860,9 +1027,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               </label>
               <input
                 type="date"
+                disabled={effectiveIsViewMode}
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
 
@@ -872,10 +1040,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               </label>
               <input
                 type="text"
+                disabled={effectiveIsViewMode}
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 placeholder="e.g. Bangladesh, Indonesia"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
           </div>
@@ -897,10 +1066,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="tel"
+                  disabled={effectiveIsViewMode}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+60 12-345 6789"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
             </div>
@@ -913,10 +1083,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="email"
+                  disabled={effectiveIsViewMode}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="worker@agency.com"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
             </div>
@@ -928,20 +1099,25 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
             </label>
             <textarea
               rows={2}
+              disabled={effectiveIsViewMode}
               value={leavingAddress}
               onChange={(e) => setLeavingAddress(e.target.value)}
               placeholder="Enter worker's residential living address in home country or current location..."
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
             />
           </div>
         </div>
 
-        {/* Card 4: Working Sector, Basic Salary & OT(Over time) */}
+        {/* Card 4: Working Sector & (Optional for Employee) Salary & OT */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Building2 size={15} className="text-[#0b4da2]" />
-              <span>Working Sector, Basic Salary &amp; OT(Over time)</span>
+              <span>
+                {portalType === 'employee'
+                  ? 'Working Sector & Official Worksite'
+                  : 'Working Sector, Basic Salary & OT(Over time)'}
+              </span>
             </div>
             <span className="text-[11px] text-blue-600 font-semibold">Admin Panel Manageable Sectors</span>
           </div>
@@ -952,18 +1128,20 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <label className="text-xs font-bold text-slate-800">
                 Working Sector <span className="text-red-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setIsAddingNewSector(!isAddingNewSector)}
-                className="text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] hover:underline inline-flex items-center gap-1 bg-transparent border-0 cursor-pointer"
-              >
-                <Plus size={13} />
-                <span>{isAddingNewSector ? 'Cancel' : '+ Add New Sector'}</span>
-              </button>
+              {!effectiveIsViewMode && portalType !== 'employee' && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewSector(!isAddingNewSector)}
+                  className="text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] hover:underline inline-flex items-center gap-1 bg-transparent border-0 cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>{isAddingNewSector ? 'Cancel' : '+ Add New Sector'}</span>
+                </button>
+              )}
             </div>
 
             {/* Inline Add New Sector Form */}
-            {isAddingNewSector && (
+            {isAddingNewSector && !effectiveIsViewMode && (
               <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-blue-300 animate-in fade-in duration-150">
                 <input
                   type="text"
@@ -985,8 +1163,9 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
 
             <select
               value={workingSector}
+              disabled={effectiveIsViewMode}
               onChange={(e) => setWorkingSector(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
             >
               {(() => {
                 const selectedComp = companies.find((c) => c.id.toLowerCase() === (companyId || '').toLowerCase());
@@ -1032,48 +1211,53 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <MapPin size={15} className="absolute left-3.5 top-3 text-slate-400" />
               <textarea
                 rows={2}
+                disabled={effectiveIsViewMode}
                 value={workingAddress}
                 onChange={(e) => setWorkingAddress(e.target.value)}
                 placeholder="Enter work site / manufacturing plant / project location address..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
           </div>
 
-          {/* Basic Salary & Our Time (Overtime) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Basic Salary
-              </label>
-              <div className="relative">
-                <Coins size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={basicSalary}
-                  onChange={(e) => setBasicSalary(e.target.value)}
-                  placeholder="e.g. RM 2,500"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
-                />
+          {/* Basic Salary & OT(Over time) - Hidden completely for Employees */}
+          {portalType !== 'employee' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Basic Salary
+                </label>
+                <div className="relative">
+                  <Coins size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    disabled={effectiveIsViewMode}
+                    value={basicSalary}
+                    onChange={(e) => setBasicSalary(e.target.value)}
+                    placeholder="e.g. RM 2,500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                OT(Over time)
-              </label>
-              <div className="relative">
-                <Clock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={overtime}
-                  onChange={(e) => setOvertime(e.target.value)}
-                  placeholder="e.g. 1.5x / RM 15.00/hr / 8 hrs"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
-                />
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  OT(Over time)
+                </label>
+                <div className="relative">
+                  <Clock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    disabled={effectiveIsViewMode}
+                    value={overtime}
+                    onChange={(e) => setOvertime(e.target.value)}
+                    placeholder="e.g. 1.5x / RM 15.00/hr / 8 hrs"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Card: Others Company Information */}
@@ -1102,10 +1286,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 <Building2 size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
+                  disabled={effectiveIsViewMode}
                   value={otherCompanyName}
                   onChange={(e) => setOtherCompanyName(e.target.value)}
                   placeholder="e.g. Subcontractor or Partner Enterprise"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
             </div>
@@ -1119,10 +1304,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="tel"
+                  disabled={effectiveIsViewMode}
                   value={otherCompanyBossPhone}
                   onChange={(e) => setOtherCompanyBossPhone(e.target.value)}
                   placeholder="e.g. +60 12-345 6789"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
             </div>
@@ -1136,10 +1322,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 <MapPin size={14} className="absolute left-3.5 top-3 text-slate-400" />
                 <textarea
                   rows={2}
+                  disabled={effectiveIsViewMode}
                   value={otherCompanyAddress}
                   onChange={(e) => setOtherCompanyAddress(e.target.value)}
                   placeholder="Enter other company premises or office address..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
             </div>
@@ -1164,9 +1351,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
             </div>
 
             {/* Main Checkbox / Toggle */}
-            <label className="relative inline-flex items-center cursor-pointer select-none">
+            <label className={`relative inline-flex items-center ${effectiveIsViewMode ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'} select-none`}>
               <input
                 type="checkbox"
+                disabled={effectiveIsViewMode}
                 checked={canLogin}
                 onChange={(e) => {
                   const checked = e.target.checked;
@@ -1204,7 +1392,7 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                     <label className="text-xs font-bold text-slate-800">
                       User ID / Login ID <span className="text-red-500">*</span>
                     </label>
-                    {passportNo && (
+                    {passportNo && !effectiveIsViewMode && (
                       <button
                         type="button"
                         onClick={() => setLoginUsername(passportNo.trim())}
@@ -1218,11 +1406,12 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                     <User size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
+                      disabled={effectiveIsViewMode}
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
                       placeholder="e.g. Passport number or custom User ID"
                       required={canLogin}
-                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 font-mono font-semibold focus:outline-hidden focus:border-[#0b4da2]"
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 font-mono font-semibold focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                     />
                   </div>
                 </div>
@@ -1233,23 +1422,26 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                     <label className="text-xs font-bold text-slate-800">
                       Portal Password <span className="text-red-500">*</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setLoginPassword('password123')}
-                      className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-transparent border-0 cursor-pointer p-0"
-                    >
-                      Default: password123
-                    </button>
+                    {!effectiveIsViewMode && (
+                      <button
+                        type="button"
+                        onClick={() => setLoginPassword('password123')}
+                        className="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-transparent border-0 cursor-pointer p-0"
+                      >
+                        Default: password123
+                      </button>
+                    )}
                   </div>
                   <div className="relative">
                     <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type={showLoginPassword ? 'text' : 'password'}
+                      disabled={effectiveIsViewMode}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="Enter password"
                       required={canLogin}
-                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 font-mono focus:outline-hidden focus:border-[#0b4da2]"
+                      className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 font-mono focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                     />
                     <button
                       type="button"
@@ -1274,23 +1466,25 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setCustomerAssignedCards(['*'])}
-                      className="text-[11px] font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer p-0"
-                    >
-                      Select All
-                    </button>
-                    <span className="text-slate-300">|</span>
-                    <button
-                      type="button"
-                      onClick={() => setCustomerAssignedCards([])}
-                      className="text-[11px] font-bold text-slate-500 hover:underline bg-transparent border-0 cursor-pointer p-0"
-                    >
-                      Clear All
-                    </button>
-                  </div>
+                  {!effectiveIsViewMode && (
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setCustomerAssignedCards(['*'])}
+                        className="text-[11px] font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer p-0"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomerAssignedCards([])}
+                        className="text-[11px] font-bold text-slate-500 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Service Cards Checkbox Grid */}
@@ -1300,8 +1494,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                     return (
                       <div
                         key={card.id}
-                        onClick={() => handleToggleCustomerServiceCard(card.id)}
-                        className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                        onClick={!effectiveIsViewMode ? () => handleToggleCustomerServiceCard(card.id) : undefined}
+                        className={`flex items-start gap-3 p-3 rounded-xl border transition-all select-none ${
+                          effectiveIsViewMode ? 'cursor-default' : 'cursor-pointer'
+                        } ${
                           checked
                             ? 'border-[#0b4da2] bg-blue-50/70 shadow-2xs ring-1 ring-blue-200'
                             : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -1350,34 +1546,42 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                 <span>Upload Documents (Passports, NID, Visa, Medical &amp; Certs)</span>
               </div>
               <p className="text-[11px] text-slate-500 m-0 mt-0.5">
-                Attach customer records with document name, date of issue, date of expire, and file attachment.
+                {effectiveIsViewMode
+                  ? `Uploaded document dossiers for this worker (${documents.length} files attached).`
+                  : 'Attach customer records with document name, date of issue, date of expire, and file attachment.'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleAddDocumentRow}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl border border-blue-200 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
-            >
-              <Plus size={14} />
-              <span>Add Document Attachment</span>
-            </button>
+            {!effectiveIsViewMode && (
+              <button
+                type="button"
+                onClick={handleAddDocumentRow}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl border border-blue-200 transition-colors cursor-pointer self-start sm:self-auto shrink-0"
+              >
+                <Plus size={14} />
+                <span>Add Document Attachment</span>
+              </button>
+            )}
           </div>
 
           {documents.length === 0 ? (
             <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 bg-slate-50/50">
               <FileText size={32} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-xs font-semibold text-slate-600 m-0">No document attachments added yet.</p>
-              <p className="text-[11px] text-slate-400 mt-1 mb-3">
-                Upload passport copy, national ID, visa, work permit, medical reports, or certificates.
-              </p>
-              <button
-                type="button"
-                onClick={handleAddDocumentRow}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] px-3.5 py-1.5 rounded-lg border-0 transition-colors cursor-pointer shadow-xs"
-              >
-                <Plus size={13} />
-                <span>Add First Document</span>
-              </button>
+              <p className="text-xs font-semibold text-slate-600 m-0">No document attachments uploaded for this worker.</p>
+              {!effectiveIsViewMode && (
+                <>
+                  <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                    Upload passport copy, national ID, visa, work permit, medical reports, or certificates.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleAddDocumentRow}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] px-3.5 py-1.5 rounded-lg border-0 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Plus size={13} />
+                    <span>Add First Document</span>
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1394,10 +1598,11 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                       </label>
                       <input
                         type="text"
+                        disabled={effectiveIsViewMode}
                         value={doc.name}
                         onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
                         placeholder="e.g. Passport, NID, Medical"
-                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                       />
                     </div>
 
@@ -1409,8 +1614,9 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                       </label>
                       <select
                         value={doc.service_id || ''}
+                        disabled={effectiveIsViewMode}
                         onChange={(e) => handleDocumentServiceChange(idx, e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                       >
                         <option value="">-- General Document (None) --</option>
                         {selectableServices.map((svc) => (
@@ -1428,9 +1634,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                       </label>
                       <input
                         type="date"
+                        disabled={effectiveIsViewMode}
                         value={doc.issue_date || ''}
                         onChange={(e) => handleDocumentFieldChange(idx, 'issue_date', e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                       />
                     </div>
 
@@ -1441,9 +1648,10 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                       </label>
                       <input
                         type="date"
+                        disabled={effectiveIsViewMode}
                         value={doc.expire_date || ''}
                         onChange={(e) => handleDocumentFieldChange(idx, 'expire_date', e.target.value)}
-                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                       />
                     </div>
 
@@ -1453,37 +1661,55 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
                         Attachment
                       </label>
                       <div className="flex items-center gap-1.5">
-                        <label className="inline-flex items-center gap-1 px-2.5 py-2 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0">
-                          <Upload size={12} />
-                          <span>{doc.url || doc.dataUrl ? 'Replace' : 'Upload'}</span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/*,.pdf,.doc,.docx"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleDocumentFileChange(idx, f);
-                            }}
-                          />
-                        </label>
-                        {doc.url || doc.dataUrl ? (
-                          <div className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-1.5 rounded border border-emerald-200 truncate flex-1 font-mono">
-                            <Check size={11} className="shrink-0 text-emerald-600" />
-                            <span className="truncate" title={doc.size || 'Attached'}>
-                              {doc.size || 'Attached'}
-                            </span>
-                          </div>
+                        {!effectiveIsViewMode ? (
+                          <>
+                            <label className="inline-flex items-center gap-1 px-2.5 py-2 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0">
+                              <Upload size={12} />
+                              <span>{doc.url || doc.dataUrl ? 'Replace' : 'Upload'}</span>
+                              <input
+                                type="file"
+                                className="hidden"
+                                accept="image/*,.pdf,.doc,.docx"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleDocumentFileChange(idx, f);
+                                }}
+                              />
+                            </label>
+                            {doc.url || doc.dataUrl ? (
+                              <div className="flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-1.5 rounded border border-emerald-200 truncate flex-1 font-mono">
+                                <Check size={11} className="shrink-0 text-emerald-600" />
+                                <span className="truncate" title={doc.size || 'Attached'}>
+                                  {doc.size || 'Attached'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic flex-1 truncate">No file</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDocumentRow(idx)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent shrink-0"
+                              title="Remove document row"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </>
                         ) : (
-                          <span className="text-[10px] text-slate-400 italic flex-1 truncate">No file</span>
+                          doc.url || doc.dataUrl ? (
+                            <a
+                              href={getFileUrl(doc.url || doc.dataUrl)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-[#0b4da2] text-xs font-bold rounded-lg transition-colors no-underline flex-1 truncate"
+                            >
+                              <Eye size={13} className="shrink-0" />
+                              <span className="truncate">View File</span>
+                            </a>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic flex-1 truncate">No file attached</span>
+                          )
                         )}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDocumentRow(idx)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent shrink-0"
-                          title="Remove document row"
-                        >
-                          <Trash2 size={15} />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1503,71 +1729,97 @@ function CustomerFormContent({ portalType, backUrl }: CustomerFormFullPageProps)
               <label className="inline-flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="radio"
+                  disabled={effectiveIsViewMode}
                   name="status"
                   value="active"
                   checked={status === 'active'}
                   onChange={() => setStatus('active')}
-                  className="text-[#0b4da2] focus:ring-[#0b4da2]"
+                  className="text-[#0b4da2] focus:ring-[#0b4da2] disabled:opacity-75"
                 />
                 <span className="text-emerald-700 font-semibold">Active</span>
               </label>
               <label className="inline-flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="radio"
+                  disabled={effectiveIsViewMode}
                   name="status"
                   value="pending"
                   checked={status === 'pending'}
                   onChange={() => setStatus('pending')}
-                  className="text-amber-600 focus:ring-amber-500"
+                  className="text-amber-600 focus:ring-amber-500 disabled:opacity-75"
                 />
                 <span className="text-amber-700 font-semibold">Pending</span>
               </label>
               <label className="inline-flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="radio"
+                  disabled={effectiveIsViewMode}
                   name="status"
                   value="inactive"
                   checked={status === 'inactive'}
                   onChange={() => setStatus('inactive')}
-                  className="text-rose-600 focus:ring-rose-500"
+                  className="text-rose-600 focus:ring-rose-500 disabled:opacity-75"
                 />
                 <span className="text-rose-700 font-semibold">Inactive</span>
               </label>
               <label className="inline-flex items-center gap-1.5 cursor-pointer">
                 <input
                   type="radio"
+                  disabled={effectiveIsViewMode}
                   name="status"
                   value="absent"
                   checked={status === 'absent'}
                   onChange={() => setStatus('absent')}
-                  className="text-purple-600 focus:ring-purple-500"
+                  className="text-purple-600 focus:ring-purple-500 disabled:opacity-75"
                 />
                 <span className="text-purple-700 font-semibold">Absent</span>
               </label>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 justify-end">
-            <Link
-              href={backUrl}
-              className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors no-underline"
-            >
-              Cancel
-            </Link>
+          {effectiveIsViewMode ? (
+            <div className="flex items-center gap-3 justify-end">
+              <Link
+                href={backUrl}
+                className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors no-underline inline-flex items-center gap-1.5"
+              >
+                <ArrowLeft size={14} />
+                <span>Back to Customer Directory</span>
+              </Link>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer border-0 disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSubmitting ? (
-                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Save size={15} />
+              {canEdit && editId && (
+                <Link
+                  href={`${editBaseUrl}?id=${editId}`}
+                  className="px-6 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold transition-all shadow-sm no-underline inline-flex items-center gap-2"
+                >
+                  <Edit2 size={15} />
+                  <span>Edit Customer Profile</span>
+                </Link>
               )}
-              <span>{isEditing ? 'Save Changes' : 'Create Customer'}</span>
-            </button>
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 justify-end">
+              <Link
+                href={backUrl}
+                className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors no-underline"
+              >
+                Cancel
+              </Link>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-6 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold transition-all shadow-sm cursor-pointer border-0 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSubmitting ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Save size={15} />
+                )}
+                <span>{isEditing ? 'Save Changes' : 'Create Customer'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </form>
     </div>
