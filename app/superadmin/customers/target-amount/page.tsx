@@ -33,6 +33,7 @@ import {
 import {
   CustomerTargetAmountRecord,
   getStoredCustomerTargets,
+  fetchCustomerTargets,
   saveCustomerTarget,
   deleteCustomerTarget,
   getCustomerFinanceBalance,
@@ -88,6 +89,10 @@ export default function CustomerTargetAmountPage() {
     }).catch(() => {});
 
     setRecords(getStoredCustomerTargets());
+    fetchCustomerTargets().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCustomerTargets());
     window.addEventListener('customerTargetsUpdated', handler);
     window.addEventListener('customerDepositsUpdated', handler);
@@ -126,7 +131,7 @@ export default function CustomerTargetAmountPage() {
     }));
   }, [customers]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomerId || !selectedCustomer) {
       showToast('info', 'Please select a customer first.');
@@ -157,12 +162,12 @@ export default function CustomerTargetAmountPage() {
         : new Date().toISOString(),
     };
 
-    saveCustomerTarget(newRecord);
+    await saveCustomerTarget(newRecord);
     showToast(
       'success',
       editingId
-        ? `Target amount for "${selectedCustomer.full_name}" updated!`
-        : `New target quota allocated for "${selectedCustomer.full_name}"!`
+        ? `Target amount for "${selectedCustomer.full_name}" updated in database!`
+        : `New target quota allocated for "${selectedCustomer.full_name}" in database!`
     );
 
     // Reset form
@@ -172,7 +177,7 @@ export default function CustomerTargetAmountPage() {
   };
 
   const handleEdit = (r: CustomerTargetAmountRecord) => {
-    setEditingId(r.id);
+    setEditingId(String(r.id));
     setSelectedCustomerId(String(r.customer_id));
     setFormAmount(r.target_amount);
     setFormCategory(r.target_category || TARGET_CATEGORIES[0]);
@@ -185,10 +190,10 @@ export default function CustomerTargetAmountPage() {
     window.scrollTo({ top: 300, behavior: 'smooth' });
   };
 
-  const handleDelete = (id: string) => {
-    deleteCustomerTarget(id);
+  const handleDelete = async (id: string | number) => {
+    await deleteCustomerTarget(id);
     setDeleteConfirmId(null);
-    showToast('info', 'Target amount record deleted.');
+    showToast('info', 'Target amount record removed from database.');
   };
 
   // Filtered records
@@ -702,7 +707,7 @@ export default function CustomerTargetAmountPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeleteConfirmId(r.id)}
+                          onClick={() => setDeleteConfirmId(String(r.id))}
                           className="p-1.5 rounded-lg border border-slate-200 hover:border-red-300 hover:bg-red-50 text-slate-600 hover:text-red-600 cursor-pointer"
                           title="Delete target"
                         >

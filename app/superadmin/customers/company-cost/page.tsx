@@ -37,8 +37,10 @@ import {
   CustomerCompanyCostRecord,
   CompanyCostDocument,
   getStoredCompanyCosts,
+  fetchCustomerCompanyCosts,
   saveCompanyCost,
   deleteCompanyCost,
+  getFileUrl,
 } from '@/lib/customerFinanceStorage';
 import {
   ServiceCard,
@@ -114,6 +116,10 @@ export default function CustomerCompanyCostPage() {
     }).catch(() => {});
 
     setRecords(getStoredCompanyCosts());
+    fetchCustomerCompanyCosts().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCompanyCosts());
     window.addEventListener('companyCostsUpdated', handler);
     return () => window.removeEventListener('companyCostsUpdated', handler);
@@ -248,7 +254,7 @@ export default function CustomerCompanyCostPage() {
     return documents.reduce((acc, doc) => acc + (Number(doc.value) || 0), 0);
   }, [documents]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomerId || !selectedCustomer) {
       showToast('info', 'Please select a customer first.');
@@ -280,12 +286,12 @@ export default function CustomerCompanyCostPage() {
         : new Date().toISOString(),
     };
 
-    saveCompanyCost(newRecord);
+    await saveCompanyCost(newRecord);
     showToast(
       'success',
       editingId
-        ? `Company cost record for "${selectedCustomer.full_name}" updated!`
-        : `Company cost of RM ${calculatedTotalCost.toLocaleString()} recorded with ${documents.length} document attachments!`
+        ? `Company cost record for "${selectedCustomer.full_name}" updated in database!`
+        : `Company cost of RM ${calculatedTotalCost.toLocaleString()} saved to database with files in storage!`
     );
 
     // Reset
@@ -307,7 +313,7 @@ export default function CustomerCompanyCostPage() {
   };
 
   const handleEdit = (r: CustomerCompanyCostRecord) => {
-    setEditingId(r.id);
+    setEditingId(String(r.id));
     setSelectedCustomerId(String(r.customer_id));
     setFormCategory(r.expense_category);
     setFormDate(r.expense_date);
@@ -319,10 +325,10 @@ export default function CustomerCompanyCostPage() {
     window.scrollTo({ top: 300, behavior: 'smooth' });
   };
 
-  const handleDelete = (id: string) => {
-    deleteCompanyCost(id);
+  const handleDelete = async (id: string | number) => {
+    await deleteCompanyCost(id);
     setDeleteConfirmId(null);
-    showToast('info', 'Company cost record removed.');
+    showToast('info', 'Company cost record removed from database.');
   };
 
   const filteredRecords = useMemo(() => {
@@ -793,7 +799,7 @@ export default function CustomerCompanyCostPage() {
                       <div className="flex items-center gap-2">
                         {(doc.url || doc.dataUrl || doc.fileUrl) && (
                           <a
-                            href={doc.fileUrl || doc.dataUrl || doc.url}
+                            href={getFileUrl(doc.fileUrl || doc.dataUrl || doc.url)}
                             download={doc.fileName || `${doc.name}.pdf`}
                             target="_blank"
                             rel="noreferrer"
@@ -991,7 +997,7 @@ export default function CustomerCompanyCostPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeleteConfirmId(r.id)}
+                          onClick={() => setDeleteConfirmId(String(r.id))}
                           className="p-1.5 rounded-lg border border-slate-200 hover:border-red-300 hover:bg-red-50 text-slate-600 hover:text-red-600 cursor-pointer"
                           title="Delete record"
                         >
@@ -1066,8 +1072,10 @@ export default function CustomerCompanyCostPage() {
                       <td className="py-2.5 px-3 text-center">
                         {d.fileUrl || d.dataUrl || d.url ? (
                           <a
-                            href={d.fileUrl || d.dataUrl || d.url}
+                            href={getFileUrl(d.fileUrl || d.dataUrl || d.url)}
                             download={d.fileName || `${d.name}.pdf`}
+                            target="_blank"
+                            rel="noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200 no-underline"
                           >
                             <Download size={11} />

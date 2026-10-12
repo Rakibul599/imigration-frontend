@@ -1,7 +1,11 @@
 'use client';
 
+import { getFileUrl } from './customerStorage';
+
+export { getFileUrl };
+
 export interface CustomerTargetAmountRecord {
-  id: string;
+  id: string | number;
   customer_id: number | string;
   customer_name: string;
   passport_no?: string;
@@ -20,7 +24,7 @@ export interface CustomerTargetAmountRecord {
 }
 
 export interface CustomerDepositAmountRecord {
-  id: string;
+  id: string | number;
   customer_id: number | string;
   customer_name: string;
   passport_no?: string;
@@ -37,7 +41,7 @@ export interface CustomerDepositAmountRecord {
   deposited_by?: string; // Person who deposited
   depositor_phone?: string;
   purpose: string; // Levi Deposit, Visa Fee, Medical, Advance
-  receipt_url?: string; // Receipt file
+  receipt_url?: string; // Stored file URL or dataUrl
   receipt_filename?: string;
   verification_status: 'Verified' | 'Pending Verification' | 'Reconciled';
   remarks?: string;
@@ -46,7 +50,7 @@ export interface CustomerDepositAmountRecord {
 }
 
 export interface CustomerPendingAmountRecord {
-  id: string;
+  id: string | number;
   customer_id: number | string;
   customer_name: string;
   passport_no?: string;
@@ -71,16 +75,16 @@ export interface CustomerPendingAmountRecord {
 export interface CompanyCostDocument {
   id: string;
   name: string; // Document Name
-  service_id?: string; // Service Card ID (kon card kon document jabe)
+  service_id?: string; // Service Card ID
   service_name?: string; // Service Card Title
   service_category?: string; // Service / Category tag
-  value: number; // Amount (RM) - EXTRA COLUMN AS REQUESTED
+  value: number; // Amount (RM)
   issue_date?: string; // Date of Issue
   expire_date?: string; // Date of Expire
   fileName?: string;
   fileSize?: string;
   fileType?: string;
-  fileUrl?: string; // Base64 dataUrl or storage URL
+  fileUrl?: string; // /storage/... URL or dataUrl
   url?: string;
   size?: string;
   type?: string;
@@ -88,7 +92,7 @@ export interface CompanyCostDocument {
 }
 
 export interface CustomerCompanyCostRecord {
-  id: string;
+  id: string | number;
   customer_id: number | string;
   customer_name: string;
   passport_no?: string;
@@ -108,6 +112,17 @@ export interface CustomerCompanyCostRecord {
   updated_at?: string;
 }
 
+export interface CustomerFinanceBalance {
+  customer_id: number | string;
+  total_target: number;
+  total_deposited: number;
+  net_pending: number;
+  deposit_percentage: number;
+  status: 'Pending' | 'Partially Paid' | 'Settled';
+  targets_count: number;
+  deposits_count: number;
+}
+
 const STORAGE_KEYS = {
   TARGETS: 'agency_customer_targets',
   DEPOSITS: 'agency_customer_deposits',
@@ -115,8 +130,194 @@ const STORAGE_KEYS = {
   COMPANY_COSTS: 'agency_customer_company_costs',
 };
 
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+
 // ==========================================
-// TARGET AMOUNT HELPERS
+// 1. BACKEND API FETCHERS & AUTO-MIGRATION
+// ==========================================
+
+export async function fetchCustomerTargets(companyId?: string, search?: string): Promise<CustomerTargetAmountRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (companyId && companyId !== 'ALL') params.append('company_id', companyId);
+    if (search) params.append('search', search);
+
+    const res = await fetch(`${API_BASE}/customer-targets?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const dbList: CustomerTargetAmountRecord[] = await res.json();
+      if (Array.isArray(dbList)) {
+        // If DB has records, save to local cache
+        if (dbList.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(dbList));
+          window.dispatchEvent(new Event('customerTargetsUpdated'));
+          return dbList;
+        }
+
+        // If DB is empty, check if we have unmigrated records in localStorage to upload
+        const localList = getStoredCustomerTargets();
+        if (localList.length > 0) {
+          for (const item of localList) {
+            try {
+              await fetch(`${API_BASE}/customer-targets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(item),
+              });
+            } catch {}
+          }
+          // Re-fetch after migration
+          const reRes = await fetch(`${API_BASE}/customer-targets`, { cache: 'no-store' });
+          if (reRes.ok) {
+            const reList = await reRes.json();
+            localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(reList));
+            window.dispatchEvent(new Event('customerTargetsUpdated'));
+            return reList;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('API error fetching customer targets, using local cache:', err);
+  }
+  return getStoredCustomerTargets();
+}
+
+export async function fetchCustomerDeposits(companyId?: string, search?: string): Promise<CustomerDepositAmountRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (companyId && companyId !== 'ALL') params.append('company_id', companyId);
+    if (search) params.append('search', search);
+
+    const res = await fetch(`${API_BASE}/customer-deposits?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const dbList: CustomerDepositAmountRecord[] = await res.json();
+      if (Array.isArray(dbList)) {
+        if (dbList.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(dbList));
+          window.dispatchEvent(new Event('customerDepositsUpdated'));
+          return dbList;
+        }
+
+        // Check if unmigrated local deposits exist
+        const localList = getStoredCustomerDeposits();
+        if (localList.length > 0) {
+          for (const item of localList) {
+            try {
+              await fetch(`${API_BASE}/customer-deposits`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(item),
+              });
+            } catch {}
+          }
+          const reRes = await fetch(`${API_BASE}/customer-deposits`, { cache: 'no-store' });
+          if (reRes.ok) {
+            const reList = await reRes.json();
+            localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(reList));
+            window.dispatchEvent(new Event('customerDepositsUpdated'));
+            return reList;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('API error fetching customer deposits, using local cache:', err);
+  }
+  return getStoredCustomerDeposits();
+}
+
+export async function fetchCustomerPendings(companyId?: string, search?: string): Promise<CustomerPendingAmountRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (companyId && companyId !== 'ALL') params.append('company_id', companyId);
+    if (search) params.append('search', search);
+
+    const res = await fetch(`${API_BASE}/customer-pendings?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const dbList: CustomerPendingAmountRecord[] = await res.json();
+      if (Array.isArray(dbList)) {
+        localStorage.setItem(STORAGE_KEYS.PENDINGS, JSON.stringify(dbList));
+        window.dispatchEvent(new Event('customerPendingsUpdated'));
+        return dbList;
+      }
+    }
+  } catch (err) {
+    console.warn('API error fetching customer pendings, using local cache:', err);
+  }
+  return getStoredCustomerPendings();
+}
+
+export async function fetchCustomerCompanyCosts(companyId?: string, search?: string): Promise<CustomerCompanyCostRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (companyId && companyId !== 'ALL') params.append('company_id', companyId);
+    if (search) params.append('search', search);
+
+    const res = await fetch(`${API_BASE}/customer-company-costs?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const dbList: CustomerCompanyCostRecord[] = await res.json();
+      if (Array.isArray(dbList)) {
+        if (dbList.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(dbList));
+          window.dispatchEvent(new Event('companyCostsUpdated'));
+          return dbList;
+        }
+
+        // Check if unmigrated local company costs exist
+        const localList = getStoredCompanyCosts();
+        if (localList.length > 0) {
+          for (const item of localList) {
+            try {
+              await fetch(`${API_BASE}/customer-company-costs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(item),
+              });
+            } catch {}
+          }
+          const reRes = await fetch(`${API_BASE}/customer-company-costs`, { cache: 'no-store' });
+          if (reRes.ok) {
+            const reList = await reRes.json();
+            localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(reList));
+            window.dispatchEvent(new Event('companyCostsUpdated'));
+            return reList;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('API error fetching company costs, using local cache:', err);
+  }
+  return getStoredCompanyCosts();
+}
+
+export async function fetchAllCustomerFinances(): Promise<void> {
+  await Promise.allSettled([
+    fetchCustomerTargets(),
+    fetchCustomerDeposits(),
+    fetchCustomerPendings(),
+    fetchCustomerCompanyCosts(),
+  ]);
+}
+
+// ==========================================
+// 2. TARGET AMOUNT HELPERS
 // ==========================================
 export function getStoredCustomerTargets(): CustomerTargetAmountRecord[] {
   if (typeof window === 'undefined') return [];
@@ -127,20 +328,22 @@ export function getStoredCustomerTargets(): CustomerTargetAmountRecord[] {
   return [];
 }
 
-export function saveCustomerTarget(record: CustomerTargetAmountRecord): CustomerTargetAmountRecord[] {
+export async function saveCustomerTarget(record: CustomerTargetAmountRecord): Promise<CustomerTargetAmountRecord[]> {
   const current = getStoredCustomerTargets();
-  const index = current.findIndex((r) => r.id === record.id);
+  const index = current.findIndex((r) => String(r.id) === String(record.id));
   let updated: CustomerTargetAmountRecord[];
+
   if (index >= 0) {
     updated = [...current];
     updated[index] = { ...record, updated_at: new Date().toISOString() };
   } else {
     updated = [{ ...record, created_at: record.created_at || new Date().toISOString() }, ...current];
   }
+
+  // Optimistic local update
   try {
     localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(updated));
     window.dispatchEvent(new Event('customerTargetsUpdated'));
-    // Reactive calculation: sync pending amount (Pending = Target - Total Deposits)
     syncCustomerPending(record.customer_id, {
       customer_name: record.customer_name,
       passport_no: record.passport_no,
@@ -149,13 +352,50 @@ export function saveCustomerTarget(record: CustomerTargetAmountRecord): Customer
       company_name: record.company_name,
     });
   } catch {}
+
+  // Asynchronous Database Save via Laravel API
+  try {
+    const isNumericId = typeof record.id === 'number' || (!isNaN(Number(record.id)) && !String(record.id).includes('_'));
+    const url = isNumericId && index >= 0
+      ? `${API_BASE}/customer-targets/${record.id}`
+      : `${API_BASE}/customer-targets`;
+    const method = isNumericId && index >= 0 ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(record),
+    });
+
+    if (res.ok) {
+      const savedRecord: CustomerTargetAmountRecord = await res.json();
+      const currentList = getStoredCustomerTargets();
+      const replaceIdx = currentList.findIndex(
+        (r) => String(r.id) === String(record.id) || String(r.id) === String(savedRecord.id)
+      );
+      if (replaceIdx >= 0) {
+        currentList[replaceIdx] = savedRecord;
+      } else {
+        currentList.unshift(savedRecord);
+      }
+      localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(currentList));
+      window.dispatchEvent(new Event('customerTargetsUpdated'));
+      // Sync pendings from DB calculation
+      fetchCustomerPendings().catch(() => {});
+      return currentList;
+    }
+  } catch (err) {
+    console.error('Failed to save customer target to database:', err);
+  }
+
   return updated;
 }
 
-export function deleteCustomerTarget(id: string): CustomerTargetAmountRecord[] {
+export async function deleteCustomerTarget(id: string | number): Promise<CustomerTargetAmountRecord[]> {
   const current = getStoredCustomerTargets();
-  const targetRecord = current.find((r) => r.id === id);
-  const updated = current.filter((r) => r.id !== id);
+  const targetRecord = current.find((r) => String(r.id) === String(id));
+  const updated = current.filter((r) => String(r.id) !== String(id));
+
   try {
     localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(updated));
     window.dispatchEvent(new Event('customerTargetsUpdated'));
@@ -163,11 +403,23 @@ export function deleteCustomerTarget(id: string): CustomerTargetAmountRecord[] {
       syncCustomerPending(targetRecord.customer_id);
     }
   } catch {}
+
+  // Backend API Call
+  try {
+    await fetch(`${API_BASE}/customer-targets/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    fetchCustomerPendings().catch(() => {});
+  } catch (err) {
+    console.error('Failed to delete customer target from database:', err);
+  }
+
   return updated;
 }
 
 // ==========================================
-// DEPOSIT AMOUNT HELPERS
+// 3. DEPOSIT AMOUNT HELPERS
 // ==========================================
 export function getStoredCustomerDeposits(): CustomerDepositAmountRecord[] {
   if (typeof window === 'undefined') return [];
@@ -178,12 +430,11 @@ export function getStoredCustomerDeposits(): CustomerDepositAmountRecord[] {
   return [];
 }
 
-export function saveCustomerDeposit(record: CustomerDepositAmountRecord): CustomerDepositAmountRecord[] {
+export async function saveCustomerDeposit(record: CustomerDepositAmountRecord): Promise<CustomerDepositAmountRecord[]> {
   const current = getStoredCustomerDeposits();
-  const index = current.findIndex((r) => r.id === record.id);
+  const index = current.findIndex((r) => String(r.id) === String(record.id));
   let updated: CustomerDepositAmountRecord[];
 
-  // Attach customer target and remaining pending snapshot
   const balanceBefore = getCustomerFinanceBalance(record.customer_id);
   const isEditing = index >= 0;
   const oldDepositAmount = isEditing ? Number(current[index].deposit_amount) || 0 : 0;
@@ -202,10 +453,10 @@ export function saveCustomerDeposit(record: CustomerDepositAmountRecord): Custom
   } else {
     updated = [{ ...recordWithCalculations, created_at: record.created_at || new Date().toISOString() }, ...current];
   }
+
   try {
     localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(updated));
     window.dispatchEvent(new Event('customerDepositsUpdated'));
-    // Reactive calculation: auto-subtract deposit from pending amount
     syncCustomerPending(record.customer_id, {
       customer_name: record.customer_name,
       passport_no: record.passport_no,
@@ -214,13 +465,49 @@ export function saveCustomerDeposit(record: CustomerDepositAmountRecord): Custom
       company_name: record.company_name,
     });
   } catch {}
+
+  // Asynchronous Database Save & File Storage via Laravel API
+  try {
+    const isNumericId = typeof record.id === 'number' || (!isNaN(Number(record.id)) && !String(record.id).includes('_'));
+    const url = isNumericId && index >= 0
+      ? `${API_BASE}/customer-deposits/${record.id}`
+      : `${API_BASE}/customer-deposits`;
+    const method = isNumericId && index >= 0 ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(recordWithCalculations),
+    });
+
+    if (res.ok) {
+      const savedRecord: CustomerDepositAmountRecord = await res.json();
+      const currentList = getStoredCustomerDeposits();
+      const replaceIdx = currentList.findIndex(
+        (r) => String(r.id) === String(record.id) || String(r.id) === String(savedRecord.id)
+      );
+      if (replaceIdx >= 0) {
+        currentList[replaceIdx] = savedRecord;
+      } else {
+        currentList.unshift(savedRecord);
+      }
+      localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(currentList));
+      window.dispatchEvent(new Event('customerDepositsUpdated'));
+      fetchCustomerPendings().catch(() => {});
+      return currentList;
+    }
+  } catch (err) {
+    console.error('Failed to save deposit record to database:', err);
+  }
+
   return updated;
 }
 
-export function deleteCustomerDeposit(id: string): CustomerDepositAmountRecord[] {
+export async function deleteCustomerDeposit(id: string | number): Promise<CustomerDepositAmountRecord[]> {
   const current = getStoredCustomerDeposits();
-  const depositRecord = current.find((r) => r.id === id);
-  const updated = current.filter((r) => r.id !== id);
+  const depositRecord = current.find((r) => String(r.id) === String(id));
+  const updated = current.filter((r) => String(r.id) !== String(id));
+
   try {
     localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(updated));
     window.dispatchEvent(new Event('customerDepositsUpdated'));
@@ -228,24 +515,23 @@ export function deleteCustomerDeposit(id: string): CustomerDepositAmountRecord[]
       syncCustomerPending(depositRecord.customer_id);
     }
   } catch {}
+
+  try {
+    await fetch(`${API_BASE}/customer-deposits/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    fetchCustomerPendings().catch(() => {});
+  } catch (err) {
+    console.error('Failed to delete deposit record from database:', err);
+  }
+
   return updated;
 }
 
 // ==========================================
-// FINANCIAL CALCULATION & AUTO-SYNC ENGINE
-// Pending = Target Amount - Total Deposits
+// 4. FINANCIAL CALCULATION & AUTO-SYNC ENGINE
 // ==========================================
-export interface CustomerFinanceBalance {
-  customer_id: number | string;
-  total_target: number;
-  total_deposited: number;
-  net_pending: number;
-  deposit_percentage: number;
-  status: 'Pending' | 'Partially Paid' | 'Settled';
-  targets_count: number;
-  deposits_count: number;
-}
-
 export function getCustomerFinanceBalance(customerId: number | string): CustomerFinanceBalance {
   const cIdStr = String(customerId);
   const targets = getStoredCustomerTargets().filter((t) => String(t.customer_id) === cIdStr);
@@ -292,7 +578,6 @@ export function syncCustomerPending(
   const currentPendings = getStoredCustomerPendings();
   const existingIndex = currentPendings.findIndex((p) => String(p.customer_id) === cIdStr);
 
-  // If customer has no target and no deposit and no existing pending, skip
   if (balance.total_target === 0 && balance.total_deposited === 0 && existingIndex < 0) {
     return null;
   }
@@ -398,7 +683,7 @@ export function syncAllCustomerPendings(
 }
 
 // ==========================================
-// PENDING AMOUNT HELPERS
+// 5. PENDING AMOUNT HELPERS
 // ==========================================
 export function getStoredCustomerPendings(): CustomerPendingAmountRecord[] {
   if (typeof window === 'undefined') return [];
@@ -409,35 +694,82 @@ export function getStoredCustomerPendings(): CustomerPendingAmountRecord[] {
   return [];
 }
 
-export function saveCustomerPending(record: CustomerPendingAmountRecord): CustomerPendingAmountRecord[] {
+export async function saveCustomerPending(record: CustomerPendingAmountRecord): Promise<CustomerPendingAmountRecord[]> {
   const current = getStoredCustomerPendings();
-  const index = current.findIndex((r) => r.id === record.id);
+  const index = current.findIndex((r) => String(r.id) === String(record.id));
   let updated: CustomerPendingAmountRecord[];
+
   if (index >= 0) {
     updated = [...current];
     updated[index] = { ...record, updated_at: new Date().toISOString() };
   } else {
     updated = [{ ...record, created_at: record.created_at || new Date().toISOString() }, ...current];
   }
+
   try {
     localStorage.setItem(STORAGE_KEYS.PENDINGS, JSON.stringify(updated));
     window.dispatchEvent(new Event('customerPendingsUpdated'));
   } catch {}
+
+  // Backend API Call
+  try {
+    const isNumericId = typeof record.id === 'number' || (!isNaN(Number(record.id)) && !String(record.id).includes('_'));
+    const url = isNumericId && index >= 0
+      ? `${API_BASE}/customer-pendings/${record.id}`
+      : `${API_BASE}/customer-pendings`;
+    const method = isNumericId && index >= 0 ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(record),
+    });
+
+    if (res.ok) {
+      const saved: CustomerPendingAmountRecord = await res.json();
+      const currentList = getStoredCustomerPendings();
+      const replaceIdx = currentList.findIndex(
+        (r) => String(r.id) === String(record.id) || String(r.id) === String(saved.id)
+      );
+      if (replaceIdx >= 0) {
+        currentList[replaceIdx] = saved;
+      } else {
+        currentList.unshift(saved);
+      }
+      localStorage.setItem(STORAGE_KEYS.PENDINGS, JSON.stringify(currentList));
+      window.dispatchEvent(new Event('customerPendingsUpdated'));
+      return currentList;
+    }
+  } catch (err) {
+    console.error('Failed to save pending record to database:', err);
+  }
+
   return updated;
 }
 
-export function deleteCustomerPending(id: string): CustomerPendingAmountRecord[] {
+export async function deleteCustomerPending(id: string | number): Promise<CustomerPendingAmountRecord[]> {
   const current = getStoredCustomerPendings();
-  const updated = current.filter((r) => r.id !== id);
+  const updated = current.filter((r) => String(r.id) !== String(id));
+
   try {
     localStorage.setItem(STORAGE_KEYS.PENDINGS, JSON.stringify(updated));
     window.dispatchEvent(new Event('customerPendingsUpdated'));
   } catch {}
+
+  try {
+    await fetch(`${API_BASE}/customer-pendings/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    console.error('Failed to delete pending record from database:', err);
+  }
+
   return updated;
 }
 
 // ==========================================
-// COMPANY COST AMOUNT HELPERS
+// 6. COMPANY COST AMOUNT HELPERS & FILE STORAGE
 // ==========================================
 export function getStoredCompanyCosts(): CustomerCompanyCostRecord[] {
   if (typeof window === 'undefined') return [];
@@ -448,29 +780,76 @@ export function getStoredCompanyCosts(): CustomerCompanyCostRecord[] {
   return [];
 }
 
-export function saveCompanyCost(record: CustomerCompanyCostRecord): CustomerCompanyCostRecord[] {
+export async function saveCompanyCost(record: CustomerCompanyCostRecord): Promise<CustomerCompanyCostRecord[]> {
   const current = getStoredCompanyCosts();
-  const index = current.findIndex((r) => r.id === record.id);
+  const index = current.findIndex((r) => String(r.id) === String(record.id));
   let updated: CustomerCompanyCostRecord[];
+
   if (index >= 0) {
     updated = [...current];
     updated[index] = { ...record, updated_at: new Date().toISOString() };
   } else {
     updated = [{ ...record, created_at: record.created_at || new Date().toISOString() }, ...current];
   }
+
   try {
     localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(updated));
     window.dispatchEvent(new Event('companyCostsUpdated'));
   } catch {}
+
+  // Asynchronous Database Save & File Storage via Laravel API
+  try {
+    const isNumericId = typeof record.id === 'number' || (!isNaN(Number(record.id)) && !String(record.id).includes('_'));
+    const url = isNumericId && index >= 0
+      ? `${API_BASE}/customer-company-costs/${record.id}`
+      : `${API_BASE}/customer-company-costs`;
+    const method = isNumericId && index >= 0 ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(record),
+    });
+
+    if (res.ok) {
+      const savedRecord: CustomerCompanyCostRecord = await res.json();
+      const currentList = getStoredCompanyCosts();
+      const replaceIdx = currentList.findIndex(
+        (r) => String(r.id) === String(record.id) || String(r.id) === String(savedRecord.id)
+      );
+      if (replaceIdx >= 0) {
+        currentList[replaceIdx] = savedRecord;
+      } else {
+        currentList.unshift(savedRecord);
+      }
+      localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(currentList));
+      window.dispatchEvent(new Event('companyCostsUpdated'));
+      return currentList;
+    }
+  } catch (err) {
+    console.error('Failed to save company cost record to database:', err);
+  }
+
   return updated;
 }
 
-export function deleteCompanyCost(id: string): CustomerCompanyCostRecord[] {
+export async function deleteCompanyCost(id: string | number): Promise<CustomerCompanyCostRecord[]> {
   const current = getStoredCompanyCosts();
-  const updated = current.filter((r) => r.id !== id);
+  const updated = current.filter((r) => String(r.id) !== String(id));
+
   try {
     localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(updated));
     window.dispatchEvent(new Event('companyCostsUpdated'));
   } catch {}
+
+  try {
+    await fetch(`${API_BASE}/customer-company-costs/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    console.error('Failed to delete company cost record from database:', err);
+  }
+
   return updated;
 }

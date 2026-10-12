@@ -34,6 +34,7 @@ import {
 import {
   CustomerTargetAmountRecord,
   getStoredCustomerTargets,
+  fetchCustomerTargets,
   saveCustomerTarget,
   deleteCustomerTarget,
   getCustomerFinanceBalance,
@@ -94,6 +95,10 @@ export default function EmployeeCustomerTargetAmountPage() {
     }).catch(() => {});
 
     setRecords(getStoredCustomerTargets());
+    fetchCustomerTargets().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCustomerTargets());
     window.addEventListener('customerTargetsUpdated', handler);
     window.addEventListener('customerDepositsUpdated', handler);
@@ -266,7 +271,7 @@ export default function EmployeeCustomerTargetAmountPage() {
       showToast('error', 'Edit permission is restricted for your employee profile.');
       return;
     }
-    setEditingId(rec.id);
+    setEditingId(String(rec.id));
     setSelectedCustomerId(String(rec.customer_id));
     setFormAmount(rec.target_amount);
     setFormCategory(rec.target_category || TARGET_CATEGORIES[0]);
@@ -805,7 +810,7 @@ export default function EmployeeCustomerTargetAmountPage() {
                             <div className="inline-flex items-center gap-1 bg-red-50 p-1 rounded-lg border border-red-200">
                               <button
                                 type="button"
-                                onClick={() => handleDelete(rec.id)}
+                                onClick={() => handleDelete(String(rec.id))}
                                 className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.5 rounded cursor-pointer border-0"
                               >
                                 Delete
@@ -821,7 +826,7 @@ export default function EmployeeCustomerTargetAmountPage() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setDeleteConfirmId(rec.id)}
+                              onClick={() => setDeleteConfirmId(String(rec.id))}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer border-0"
                               title="Delete record"
                             >

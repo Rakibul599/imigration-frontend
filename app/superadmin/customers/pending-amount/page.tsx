@@ -32,6 +32,7 @@ import {
 import {
   CustomerPendingAmountRecord,
   getStoredCustomerPendings,
+  fetchCustomerPendings,
   saveCustomerPending,
   deleteCustomerPending,
   getCustomerFinanceBalance,
@@ -62,6 +63,10 @@ export default function CustomerPendingAmountPage() {
 
     syncAllCustomerPendings();
     setRecords(getStoredCustomerPendings());
+    fetchCustomerPendings().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCustomerPendings());
     window.addEventListener('customerPendingsUpdated', handler);
     window.addEventListener('customerTargetsUpdated', handler);
@@ -174,10 +179,10 @@ export default function CustomerPendingAmountPage() {
     return records.filter((r) => r.collection_status === 'Settled' || Number(r.pending_amount) === 0).length;
   }, [records]);
 
-  const handleDelete = (id: string) => {
-    deleteCustomerPending(id);
+  const handleDelete = async (id: string | number) => {
+    await deleteCustomerPending(id);
     setDeleteConfirmId(null);
-    showToast('info', 'Customer pending dues record removed.');
+    showToast('info', 'Customer pending dues record removed from database.');
   };
 
   return (
@@ -657,7 +662,7 @@ export default function CustomerPendingAmountPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setDeleteConfirmId(rec.id)}
+                            onClick={() => setDeleteConfirmId(String(rec.id))}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer border-0"
                             title="Delete record"
                           >

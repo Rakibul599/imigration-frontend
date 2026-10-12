@@ -33,10 +33,12 @@ import {
 import {
   CustomerDepositAmountRecord,
   getStoredCustomerDeposits,
+  fetchCustomerDeposits,
   saveCustomerDeposit,
   deleteCustomerDeposit,
   getCustomerFinanceBalance,
   CustomerFinanceBalance,
+  getFileUrl,
 } from '@/lib/customerFinanceStorage';
 
 const PAYMENT_METHODS = [
@@ -101,6 +103,10 @@ export default function CustomerDepositAmountPage() {
     }).catch(() => {});
 
     setRecords(getStoredCustomerDeposits());
+    fetchCustomerDeposits().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCustomerDeposits());
     window.addEventListener('customerDepositsUpdated', handler);
     window.addEventListener('customerTargetsUpdated', handler);
@@ -184,7 +190,7 @@ export default function CustomerDepositAmountPage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomerId || !selectedCustomer) {
       showToast('info', 'Please select a customer.');
@@ -227,12 +233,12 @@ export default function CustomerDepositAmountPage() {
         : new Date().toISOString(),
     };
 
-    saveCustomerDeposit(newRecord);
+    await saveCustomerDeposit(newRecord);
     showToast(
       'success',
       editingId
-        ? `Deposit record for "${selectedCustomer.full_name}" updated!`
-        : `Deposit of RM ${Number(formAmount).toLocaleString()} recorded successfully!`
+        ? `Deposit record for "${selectedCustomer.full_name}" updated in database!`
+        : `Deposit of RM ${Number(formAmount).toLocaleString()} saved to database & receipt stored successfully!`
     );
 
     // Reset
@@ -245,7 +251,7 @@ export default function CustomerDepositAmountPage() {
   };
 
   const handleEdit = (r: CustomerDepositAmountRecord) => {
-    setEditingId(r.id);
+    setEditingId(String(r.id));
     setSelectedCustomerId(String(r.customer_id));
     setFormAmount(r.deposit_amount);
     setFormDate(r.deposit_date);
@@ -262,10 +268,10 @@ export default function CustomerDepositAmountPage() {
     window.scrollTo({ top: 300, behavior: 'smooth' });
   };
 
-  const handleDelete = (id: string) => {
-    deleteCustomerDeposit(id);
+  const handleDelete = async (id: string | number) => {
+    await deleteCustomerDeposit(id);
     setDeleteConfirmId(null);
-    showToast('info', 'Deposit entry deleted.');
+    showToast('info', 'Deposit entry removed from database.');
   };
 
   const filteredRecords = useMemo(() => {
@@ -857,8 +863,10 @@ export default function CustomerDepositAmountPage() {
                     <td className="py-3 px-4 text-center">
                       {r.receipt_url ? (
                         <a
-                          href={r.receipt_url}
+                          href={getFileUrl(r.receipt_url)}
                           download={r.receipt_filename || 'deposit-receipt.png'}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 no-underline"
                         >
                           <Download size={12} />
@@ -893,7 +901,7 @@ export default function CustomerDepositAmountPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setDeleteConfirmId(r.id)}
+                          onClick={() => setDeleteConfirmId(String(r.id))}
                           className="p-1.5 rounded-lg border border-slate-200 hover:border-red-300 hover:bg-red-50 text-slate-600 hover:text-red-600 cursor-pointer"
                           title="Delete deposit"
                         >

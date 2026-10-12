@@ -36,10 +36,12 @@ import {
 import {
   CustomerDepositAmountRecord,
   getStoredCustomerDeposits,
+  fetchCustomerDeposits,
   saveCustomerDeposit,
   deleteCustomerDeposit,
   getCustomerFinanceBalance,
   CustomerFinanceBalance,
+  getFileUrl,
 } from '@/lib/customerFinanceStorage';
 import { getMasterAdminUser, AuthUser } from '@/lib/auth';
 
@@ -110,6 +112,10 @@ export default function MasterAdminCustomerDepositAmountPage() {
     }).catch(() => {});
 
     setRecords(getStoredCustomerDeposits());
+    fetchCustomerDeposits().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCustomerDeposits());
     window.addEventListener('customerDepositsUpdated', handler);
     window.addEventListener('customerTargetsUpdated', handler);
@@ -316,7 +322,7 @@ export default function MasterAdminCustomerDepositAmountPage() {
   };
 
   const handleEdit = (rec: CustomerDepositAmountRecord) => {
-    setEditingId(rec.id);
+    setEditingId(String(rec.id));
     setSelectedCustomerId(String(rec.customer_id));
     setFormAmount(rec.deposit_amount);
     setFormDate(rec.deposit_date);
@@ -902,7 +908,7 @@ export default function MasterAdminCustomerDepositAmountPage() {
                     <td className="py-3.5 px-4 text-center">
                       {rec.receipt_url ? (
                         <a
-                          href={rec.receipt_url}
+                          href={getFileUrl(rec.receipt_url)}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline bg-blue-50 px-2 py-1 rounded-md"
@@ -944,7 +950,7 @@ export default function MasterAdminCustomerDepositAmountPage() {
                           <div className="inline-flex items-center gap-1 bg-red-50 p-1 rounded-lg border border-red-200">
                             <button
                               type="button"
-                              onClick={() => handleDelete(rec.id)}
+                              onClick={() => handleDelete(String(rec.id))}
                               className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.5 rounded cursor-pointer border-0"
                             >
                               Delete
@@ -960,7 +966,7 @@ export default function MasterAdminCustomerDepositAmountPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setDeleteConfirmId(rec.id)}
+                            onClick={() => setDeleteConfirmId(String(rec.id))}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer border-0"
                             title="Delete record"
                           >

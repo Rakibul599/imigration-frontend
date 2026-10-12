@@ -34,6 +34,7 @@ import {
 import {
   CustomerPendingAmountRecord,
   getStoredCustomerPendings,
+  fetchCustomerPendings,
   saveCustomerPending,
   deleteCustomerPending,
   getCustomerFinanceBalance,
@@ -69,6 +70,10 @@ export default function EmployeeCustomerPendingAmountPage() {
 
     syncAllCustomerPendings();
     setRecords(getStoredCustomerPendings());
+    fetchCustomerPendings().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCustomerPendings());
     window.addEventListener('customerPendingsUpdated', handler);
     window.addEventListener('customerTargetsUpdated', handler);
@@ -691,7 +696,7 @@ export default function EmployeeCustomerPendingAmountPage() {
                             <div className="inline-flex items-center gap-1 bg-red-50 p-1 rounded-lg border border-red-200">
                               <button
                                 type="button"
-                                onClick={() => handleDelete(rec.id)}
+                                onClick={() => handleDelete(String(rec.id))}
                                 className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.5 rounded cursor-pointer border-0"
                               >
                                 Del
@@ -707,7 +712,7 @@ export default function EmployeeCustomerPendingAmountPage() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setDeleteConfirmId(rec.id)}
+                              onClick={() => setDeleteConfirmId(String(rec.id))}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors cursor-pointer border-0"
                               title="Delete record"
                             >

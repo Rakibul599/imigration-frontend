@@ -41,8 +41,10 @@ import {
   CustomerCompanyCostRecord,
   CompanyCostDocument,
   getStoredCompanyCosts,
+  fetchCustomerCompanyCosts,
   saveCompanyCost,
   deleteCompanyCost,
+  getFileUrl,
 } from '@/lib/customerFinanceStorage';
 import {
   ServiceCard,
@@ -124,6 +126,10 @@ export default function EmployeeCustomerCompanyCostPage() {
     }).catch(() => {});
 
     setRecords(getStoredCompanyCosts());
+    fetchCustomerCompanyCosts().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setRecords(list);
+    }).catch(() => {});
+
     const handler = () => setRecords(getStoredCompanyCosts());
     window.addEventListener('companyCostsUpdated', handler);
     return () => window.removeEventListener('companyCostsUpdated', handler);
@@ -406,7 +412,7 @@ export default function EmployeeCustomerCompanyCostPage() {
       showToast('error', 'Edit permission is restricted for your employee profile.');
       return;
     }
-    setEditingId(rec.id);
+    setEditingId(String(rec.id));
     setSelectedCustomerId(String(rec.customer_id));
     setFormCategory(rec.expense_category);
     setFormDate(rec.expense_date);
@@ -910,7 +916,7 @@ export default function EmployeeCustomerCompanyCostPage() {
                         <div className="flex items-center gap-2">
                           {(doc.url || doc.dataUrl || doc.fileUrl) && (
                             <a
-                              href={doc.fileUrl || doc.dataUrl || doc.url}
+                              href={getFileUrl(doc.fileUrl || doc.dataUrl || doc.url)}
                               download={doc.fileName || `${doc.name}.pdf`}
                               target="_blank"
                               rel="noreferrer"
@@ -1114,7 +1120,7 @@ export default function EmployeeCustomerCompanyCostPage() {
                             <div className="inline-flex items-center gap-1 bg-red-50 p-1 rounded-lg border border-red-200">
                               <button
                                 type="button"
-                                onClick={() => handleDelete(rec.id)}
+                                onClick={() => handleDelete(String(rec.id))}
                                 className="text-[10px] bg-red-600 text-white font-bold px-1.5 py-0.5 rounded cursor-pointer border-0"
                               >
                                 Delete
@@ -1130,7 +1136,7 @@ export default function EmployeeCustomerCompanyCostPage() {
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setDeleteConfirmId(rec.id)}
+                              onClick={() => setDeleteConfirmId(String(rec.id))}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer border-0"
                               title="Delete record"
                             >
@@ -1208,9 +1214,9 @@ export default function EmployeeCustomerCompanyCostPage() {
                       </div>
                     </div>
 
-                    {doc.fileUrl && (
+                    {(doc.fileUrl || doc.url || doc.dataUrl) && (
                       <a
-                        href={doc.fileUrl}
+                        href={getFileUrl(doc.fileUrl || doc.url || doc.dataUrl)}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg no-underline"
