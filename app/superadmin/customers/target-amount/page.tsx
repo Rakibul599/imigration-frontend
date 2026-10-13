@@ -74,7 +74,6 @@ export default function CustomerTargetAmountPage() {
   const [formDate, setFormDate] = useState<string>(
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
-  const [formQuota, setFormQuota] = useState<number>(1);
   const [formTerms, setFormTerms] = useState(PAYMENT_TERMS[0]);
   const [formStatus, setFormStatus] = useState<'In Progress' | 'Achieved' | 'On Hold' | 'Cancelled'>('In Progress');
   const [formRemarks, setFormRemarks] = useState('');
@@ -153,7 +152,7 @@ export default function CustomerTargetAmountPage() {
       target_amount: Number(formAmount),
       target_category: formCategory,
       target_date: formDate,
-      quota_workers_count: Number(formQuota) || 1,
+      quota_workers_count: 1,
       payment_terms: formTerms,
       status: formStatus,
       remarks: formRemarks.trim(),
@@ -182,7 +181,6 @@ export default function CustomerTargetAmountPage() {
     setFormAmount(r.target_amount);
     setFormCategory(r.target_category || TARGET_CATEGORIES[0]);
     setFormDate(r.target_date || '');
-    setFormQuota(r.quota_workers_count || 1);
     setFormTerms(r.payment_terms || PAYMENT_TERMS[0]);
     setFormStatus(r.status);
     setFormRemarks(r.remarks || '');
@@ -515,20 +513,7 @@ export default function CustomerTargetAmountPage() {
           </div>
 
           {/* 3. Status & Remarks */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Quota Count (Workers)
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={formQuota}
-                onChange={(e) => setFormQuota(Number(e.target.value) || 1)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-mono"
-              />
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Target Milestone Status
@@ -629,7 +614,6 @@ export default function CustomerTargetAmountPage() {
                 <th className="py-3 px-4">Customer</th>
                 <th className="py-3 px-4">Category &amp; Terms</th>
                 <th className="py-3 px-4 font-right text-right">Target Amount</th>
-                <th className="py-3 px-4 text-center">Quota</th>
                 <th className="py-3 px-4">Target Date</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -638,7 +622,7 @@ export default function CustomerTargetAmountPage() {
             <tbody className="divide-y divide-slate-100">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                  <td colSpan={6} className="py-8 text-center text-slate-400 italic">
                     No target amount records found. Allocate one above!
                   </td>
                 </tr>
@@ -673,9 +657,6 @@ export default function CustomerTargetAmountPage() {
                           </div>
                         );
                       })()}
-                    </td>
-                    <td className="py-3 px-4 text-center font-mono font-semibold text-slate-600">
-                      {r.quota_workers_count || 1}
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-mono text-[11px]">
                       {r.target_date || 'N/A'}

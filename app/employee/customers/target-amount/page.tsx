@@ -77,7 +77,6 @@ export default function EmployeeCustomerTargetAmountPage() {
   const [formDate, setFormDate] = useState<string>(
     new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
-  const [formQuota, setFormQuota] = useState<number>(1);
   const [formTerms, setFormTerms] = useState(PAYMENT_TERMS[0]);
   const [formStatus, setFormStatus] = useState<'In Progress' | 'Achieved' | 'On Hold' | 'Cancelled'>('In Progress');
   const [formRemarks, setFormRemarks] = useState('');
@@ -244,7 +243,7 @@ export default function EmployeeCustomerTargetAmountPage() {
       target_amount: Number(formAmount),
       target_category: formCategory,
       target_date: formDate,
-      quota_workers_count: Number(formQuota) || 1,
+      quota_workers_count: 1,
       payment_terms: formTerms,
       status: formStatus,
       remarks: formRemarks.trim(),
@@ -276,7 +275,6 @@ export default function EmployeeCustomerTargetAmountPage() {
     setFormAmount(rec.target_amount);
     setFormCategory(rec.target_category || TARGET_CATEGORIES[0]);
     if (rec.target_date) setFormDate(rec.target_date);
-    setFormQuota(rec.quota_workers_count || 1);
     if (rec.payment_terms) setFormTerms(rec.payment_terms);
     setFormStatus(rec.status);
     setFormRemarks(rec.remarks || '');
@@ -613,20 +611,7 @@ export default function EmployeeCustomerTargetAmountPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Worker Quota Count
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formQuota}
-                  onChange={(e) => setFormQuota(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden"
-                />
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Payment Terms
@@ -642,7 +627,7 @@ export default function EmployeeCustomerTargetAmountPage() {
                 </select>
               </div>
 
-              <div className="lg:col-span-2">
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Remarks / Case Notes
                 </label>
