@@ -263,7 +263,7 @@ export default function SuperAdminServicesPage() {
       }
 
       setIsCreateModalOpen(false);
-      setServices(getStoredServices());
+      await loadData();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to save service card.' });
     } finally {
@@ -278,7 +278,7 @@ export default function SuperAdminServicesPage() {
       await deleteServiceCard(cardToDelete.id);
       setFeedback({ type: 'success', message: `Service Card "${cardToDelete.title}" removed successfully.` });
       setCardToDelete(null);
-      setServices(getStoredServices());
+      await loadData();
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Cannot delete this card.' });
     } finally {

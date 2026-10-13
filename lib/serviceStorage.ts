@@ -141,54 +141,46 @@ export async function createServiceCard(
 ): Promise<ServiceCard> {
   const current = getStoredServices();
 
-  try {
-    const res = await fetch(`${API_BASE}/service-cards`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        title: cardData.title,
-        slug: cardData.id,
-        description: cardData.description,
-        image: cardData.image,
-        tag: cardData.tag,
-        order_num: cardData.order_num ?? (current.length + 1),
-      }),
-    });
+  const res = await fetch(`${API_BASE}/service-cards`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      title: cardData.title,
+      slug: cardData.id,
+      description: cardData.description,
+      image: cardData.image,
+      tag: cardData.tag,
+      order_num: cardData.order_num ?? (current.length + 1),
+    }),
+  });
 
-    if (res.ok) {
-      const created = await res.json();
-      const newCard: ServiceCard = {
-        id: created.slug || cardData.id,
-        title: created.title,
-        description: created.description || '',
-        image: created.image || cardData.image,
-        tag: created.tag || cardData.tag,
-        is_core: false,
-        order_num: created.order_num ?? (cardData.order_num ?? (current.length + 1)),
-        db_id: created.id,
-        status: created.status || 'active',
-      };
-
-      const updated = sortCards([...current, newCard]);
-      saveServicesToCache(updated);
-      return newCard;
-    }
-  } catch (err) {
-    console.warn('Backend create service card error, saving locally:', err);
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => null);
+    const msg =
+      errorJson?.message ||
+      (errorJson?.errors
+        ? Object.values(errorJson.errors).flat().join(', ')
+        : `Failed to create service card on server (HTTP ${res.status})`);
+    throw new Error(msg);
   }
 
-  // Local fallback
+  const created = await res.json();
   const newCard: ServiceCard = {
-    ...cardData,
+    id: created.slug || cardData.id,
+    title: created.title,
+    description: created.description || '',
+    image: created.image || cardData.image,
+    tag: created.tag || cardData.tag,
     is_core: false,
-    order_num: cardData.order_num ?? (current.length + 1),
-    status: 'active',
+    order_num: created.order_num ?? (cardData.order_num ?? (current.length + 1)),
+    db_id: created.id,
+    status: created.status || 'active',
   };
 
-  const updated = sortCards([...current, newCard]);
+  const updated = sortCards([...current.filter((c) => c.id !== newCard.id && (!newCard.db_id || c.db_id !== newCard.db_id)), newCard]);
   saveServicesToCache(updated);
   return newCard;
 }
@@ -207,47 +199,41 @@ export async function updateServiceCard(
   const target = current[index];
   const targetId = target.db_id || target.id;
 
-  try {
-    const res = await fetch(`${API_BASE}/service-cards/${targetId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({
-        title: updates.title,
-        description: updates.description,
-        image: updates.image,
-        tag: updates.tag,
-        order_num: updates.order_num,
-      }),
-    });
+  const res = await fetch(`${API_BASE}/service-cards/${targetId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      title: updates.title,
+      description: updates.description,
+      image: updates.image,
+      tag: updates.tag,
+      order_num: updates.order_num,
+    }),
+  });
 
-    if (res.ok) {
-      const updatedBackend = await res.json();
-      const merged: ServiceCard = {
-        ...target,
-        title: updatedBackend.title ?? updates.title ?? target.title,
-        description: updatedBackend.description ?? updates.description ?? target.description,
-        image: updatedBackend.image ?? updates.image ?? target.image,
-        tag: updatedBackend.tag ?? updates.tag ?? target.tag,
-        order_num: updatedBackend.order_num ?? updates.order_num ?? target.order_num,
-      };
-
-      current[index] = merged;
-      const sorted = sortCards(current);
-      saveServicesToCache(sorted);
-      return merged;
-    }
-  } catch (err) {
-    console.warn('Backend update service card error, updating locally:', err);
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => null);
+    const msg =
+      errorJson?.message ||
+      (errorJson?.errors
+        ? Object.values(errorJson.errors).flat().join(', ')
+        : `Failed to update service card on server (HTTP ${res.status})`);
+    throw new Error(msg);
   }
 
-  // Local update fallback
+  const updatedBackend = await res.json();
   const merged: ServiceCard = {
     ...target,
-    ...updates,
-    is_core: target.is_core, // cannot override core status
+    title: updatedBackend.title ?? updates.title ?? target.title,
+    description: updatedBackend.description ?? updates.description ?? target.description,
+    image: updatedBackend.image ?? updates.image ?? target.image,
+    tag: updatedBackend.tag ?? updates.tag ?? target.tag,
+    order_num: typeof updatedBackend.order_num === 'number' ? updatedBackend.order_num : (updates.order_num ?? target.order_num),
+    db_id: updatedBackend.id ?? target.db_id,
+    id: updatedBackend.slug || target.id,
   };
 
   current[index] = merged;
@@ -325,16 +311,18 @@ export async function deleteServiceCard(idOrSlug: string): Promise<boolean> {
 
   const targetId = target.db_id || target.id;
 
-  try {
-    await fetch(`${API_BASE}/service-cards/${targetId}`, {
-      method: 'DELETE',
-      headers: { Accept: 'application/json' },
-    });
-  } catch (err) {
-    console.warn('Backend delete service card error, deleting locally:', err);
+  const res = await fetch(`${API_BASE}/service-cards/${targetId}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => null);
+    const msg = errorJson?.message || `Failed to delete service card on server (HTTP ${res.status})`;
+    throw new Error(msg);
   }
 
-  const filtered = current.filter((c) => c.id !== target.id);
+  const filtered = current.filter((c) => c.id !== target.id && (!target.db_id || c.db_id !== target.db_id));
   saveServicesToCache(filtered);
   return true;
 }
