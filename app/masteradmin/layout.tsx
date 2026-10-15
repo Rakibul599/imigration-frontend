@@ -16,9 +16,11 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings,
   Shield,
   ShieldAlert,
   Sparkles,
@@ -57,6 +59,7 @@ export default function MasterAdminLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
+  const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
@@ -177,15 +180,15 @@ export default function MasterAdminLayout({
         }
       })
       .catch(() => {});
-  }, [pathname, isLoginPage]);
+  }, [isLoginPage]);
 
   // Auto-expand employee and customer menus when navigating
   useEffect(() => {
-    if (
-      pathname.startsWith('/masteradmin/employees') ||
-      pathname.startsWith('/masteradmin/attendance')
-    ) {
+    if (pathname.startsWith('/masteradmin/employees')) {
       setEmployeeMenuOpen(true);
+    }
+    if (pathname.startsWith('/masteradmin/attendance')) {
+      setAttendanceMenuOpen(true);
     }
     if (pathname.startsWith('/masteradmin/customers')) {
       setCustomerMenuOpen(true);
@@ -268,11 +271,28 @@ export default function MasterAdminLayout({
               icon: UserCheck,
               badge: employeeCount > 0 ? `${employeeCount}` : undefined,
             },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Attendance',
+      items: [
+        {
+          name: 'Attendance Management',
+          icon: Clock,
+          isGroup: true,
+          children: [
             {
               name: 'Face & Attendance',
               href: '/masteradmin/attendance',
               icon: Camera,
               badge: 'AI Bio',
+            },
+            {
+              name: 'Settings',
+              href: '/masteradmin/attendance/settings',
+              icon: Settings,
             },
           ],
         },
@@ -472,11 +492,17 @@ export default function MasterAdminLayout({
                       (child) => pathname === child.href || pathname.startsWith(child.href)
                     );
                     const isGroupOpen =
-                      link.name === 'Customer Management' ? customerMenuOpen : employeeMenuOpen;
+                      link.name === 'Customer Management'
+                        ? customerMenuOpen
+                        : link.name === 'Attendance Management'
+                        ? attendanceMenuOpen
+                        : employeeMenuOpen;
                     const toggleGroup = () => {
                       if (!sidebarOpen) setSidebarOpen(true);
                       if (link.name === 'Customer Management') {
                         setCustomerMenuOpen(!customerMenuOpen);
+                      } else if (link.name === 'Attendance Management') {
+                        setAttendanceMenuOpen(!attendanceMenuOpen);
                       } else {
                         setEmployeeMenuOpen(!employeeMenuOpen);
                       }
@@ -550,6 +576,10 @@ export default function MasterAdminLayout({
                                   : child.href === '/masteradmin/employees'
                                   ? pathname === '/masteradmin/employees' ||
                                     pathname.startsWith('/masteradmin/employees/')
+                                  : child.href === '/masteradmin/attendance'
+                                  ? pathname === '/masteradmin/attendance'
+                                  : child.href === '/masteradmin/attendance/settings'
+                                  ? pathname === '/masteradmin/attendance/settings' || pathname.startsWith('/masteradmin/attendance/settings/')
                                   : pathname === child.href || pathname.startsWith(child.href + '/');
 
                               return (
@@ -559,9 +589,11 @@ export default function MasterAdminLayout({
                                   onClick={() => setMobileMenuOpen(false)}
                                   style={{
                                     backgroundColor: isChildItemActive
-                                      ? sidebarActiveBg
+                                      ? (isDarkSidebar ? 'rgba(255,255,255,0.1)' : sidebarActiveBg)
                                       : 'transparent',
-                                    color: isChildItemActive ? sidebarActiveText : sidebarText,
+                                    color: isChildItemActive
+                                      ? (isDarkSidebar ? '#ffffff' : sidebarActiveText)
+                                      : (isDarkSidebar ? 'rgba(255,255,255,0.7)' : sidebarText),
                                   }}
                                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
                                     isChildItemActive ? 'font-bold' : ''

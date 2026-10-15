@@ -15,6 +15,11 @@ import {
   User,
   ArrowRight,
   Check,
+  Coffee,
+  Play,
+  Pause,
+  Hourglass,
+  LogOut,
 } from 'lucide-react';
 import FaceEnrollmentModal from '@/components/FaceEnrollmentModal';
 import FaceAttendanceModal from '@/components/FaceAttendanceModal';
@@ -22,6 +27,11 @@ import BackgroundTrainingBadge from '@/components/BackgroundTrainingBadge';
 import {
   getAttendanceRecords,
   getFaceProfiles,
+  startEmployeeRest,
+  endEmployeeRest,
+  getTodayAttendanceStatus,
+  formatDuration,
+  formatTimeAMPM,
   AttendanceRecord,
   FaceProfileItem,
   backgroundTrainingManager,
@@ -36,10 +46,15 @@ export default function EmployeeAttendancePage() {
 
   // Today's record
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
+  const [isRestActionLoading, setIsRestActionLoading] = useState(false);
+  const [restSeconds, setRestSeconds] = useState(0);
 
   // Modals
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [attendanceModalMode, setAttendanceModalMode] = useState<
+    'auto' | 'clock_in' | 'clock_out' | 'start_rest' | 'end_rest'
+  >('auto');
 
   const [notification, setNotification] = useState<{
     type: 'success' | 'error' | 'info';
@@ -88,6 +103,66 @@ export default function EmployeeAttendancePage() {
       loadData();
     }
   }, [currentUser, loadData]);
+
+  // Live timer for ongoing rest session
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (todayRecord?.is_on_rest && todayRecord.rest_start) {
+      const calculateSeconds = () => {
+        try {
+          const parts = todayRecord.rest_start!.split(':').map((v) => parseInt(v, 10));
+          const now = new Date();
+          const startDate = new Date();
+          startDate.setHours(parts[0] || 0, parts[1] || 0, parts[2] || 0, 0);
+          const diffSec = Math.max(0, Math.floor((now.getTime() - startDate.getTime()) / 1000));
+          setRestSeconds(diffSec);
+        } catch {
+          setRestSeconds(0);
+        }
+      };
+      calculateSeconds();
+      interval = setInterval(calculateSeconds, 1000);
+    } else {
+      setRestSeconds(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [todayRecord?.is_on_rest, todayRecord?.rest_start]);
+
+  const openStartRestScan = () => {
+    setAttendanceModalMode('start_rest');
+    setIsAttendanceModalOpen(true);
+  };
+
+  const openEndRestScan = () => {
+    setAttendanceModalMode('end_rest');
+    setIsAttendanceModalOpen(true);
+  };
+
+  const openClockOutScan = () => {
+    setAttendanceModalMode('clock_out');
+    setIsAttendanceModalOpen(true);
+  };
+
+  const openGeneralAttendanceScan = () => {
+    if (todayRecord?.clock_in && !todayRecord?.clock_out) {
+      if (todayRecord.is_on_rest) {
+        setAttendanceModalMode('end_rest');
+      } else {
+        setAttendanceModalMode('clock_out');
+      }
+    } else {
+      setAttendanceModalMode('clock_in');
+    }
+    setIsAttendanceModalOpen(true);
+  };
+
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Auto-reload data when background face training completes
   useEffect(() => {
@@ -145,21 +220,69 @@ export default function EmployeeAttendancePage() {
             </p>
           </div>
 
-          {/* Quick Clock-In Action Button */}
+          {/* Quick Clock-In / Rest Action Buttons */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsAttendanceModalOpen(true)}
-              disabled={!isEnrolled}
-              className={`inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-bold shadow-lg transition-all cursor-pointer border-0 ${
-                isEnrolled
-                  ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-600/30 hover:scale-[1.02]'
-                  : 'bg-white/20 text-white/60 cursor-not-allowed'
-              }`}
-            >
-              <Camera size={20} />
-              <span>Scan Face to Clock In / Out</span>
-            </button>
+            {!todayRecord?.clock_in ? (
+              <button
+                type="button"
+                onClick={openGeneralAttendanceScan}
+                disabled={!isEnrolled}
+                className={`inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-bold shadow-lg transition-all cursor-pointer border-0 ${
+                  isEnrolled
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-600/30 hover:scale-[1.02]'
+                    : 'bg-white/20 text-white/60 cursor-not-allowed'
+                }`}
+              >
+                <Camera size={20} />
+                <span>Scan Face to Clock In</span>
+              </button>
+            ) : todayRecord?.clock_out ? (
+              <div className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-white/10 text-white/80 text-xs font-bold border border-white/10">
+                <CheckCircle2 size={16} className="text-emerald-400" />
+                <span>Shift Completed Today</span>
+              </div>
+            ) : todayRecord?.is_on_rest ? (
+              <>
+                <button
+                  type="button"
+                  onClick={openEndRestScan}
+                  disabled={!isEnrolled}
+                  className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-bold shadow-lg bg-emerald-500 hover:bg-emerald-400 text-white shadow-emerald-600/30 hover:scale-[1.02] transition-all cursor-pointer border-0"
+                >
+                  <Camera size={18} />
+                  <span>Scan Face to Resume Work</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openClockOutScan}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer"
+                >
+                  <LogOut size={16} />
+                  <span>Clock Out</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={openStartRestScan}
+                  disabled={!isEnrolled}
+                  className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl text-sm font-bold shadow-lg bg-amber-500 hover:bg-amber-400 text-white shadow-amber-600/30 hover:scale-[1.02] transition-all cursor-pointer border-0"
+                >
+                  <Camera size={18} />
+                  <span>Scan Face to Take Rest</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openClockOutScan}
+                  disabled={!isEnrolled}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3.5 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer"
+                >
+                  <LogOut size={16} />
+                  <span>Scan Face to Clock Out</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -219,14 +342,104 @@ export default function EmployeeAttendancePage() {
         </div>
       </div>
 
+      {/* Active Shift & Rest Controller (When Clocked In) */}
+      {todayRecord?.clock_in && !todayRecord?.clock_out && (
+        <div
+          className={`p-6 rounded-2xl border transition-all shadow-sm ${
+            todayRecord.is_on_rest
+              ? 'bg-amber-50/70 border-amber-200'
+              : 'bg-emerald-50/70 border-emerald-200'
+          }`}
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                  todayRecord.is_on_rest
+                    ? 'bg-amber-100 text-amber-700 animate-pulse'
+                    : 'bg-emerald-100 text-emerald-700'
+                }`}
+              >
+                {todayRecord.is_on_rest ? <Coffee size={28} /> : <Zap size={28} />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                      todayRecord.is_on_rest
+                        ? 'bg-amber-200 text-amber-900 border border-amber-300'
+                        : 'bg-emerald-200 text-emerald-900 border border-emerald-300'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        todayRecord.is_on_rest ? 'bg-amber-600 animate-ping' : 'bg-emerald-600'
+                      }`}
+                    />
+                    {todayRecord.is_on_rest ? 'Currently on Rest / Break' : 'Work in Progress / Active Shift'}
+                  </span>
+                  {todayRecord.is_on_rest && (
+                    <span className="font-mono text-xs font-bold text-amber-800 bg-white px-2 py-0.5 rounded border border-amber-300">
+                      Elapsed: {formatTimer(restSeconds)}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mt-1">
+                  {todayRecord.is_on_rest
+                    ? 'Take your time to refresh!'
+                    : `Working since ${formatTimeAMPM(todayRecord.clock_in)}`}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {todayRecord.is_on_rest
+                    ? 'Click Resume Work when you are ready to continue your shift. Extra rest over allowed limit counts as Absent Time.'
+                    : 'You can take rest / break at any time during your work shift.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Rest & Clock-Out Action Buttons */}
+            <div className="flex items-center gap-3 shrink-0">
+              {todayRecord.is_on_rest ? (
+                <button
+                  type="button"
+                  onClick={openEndRestScan}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer border-0 hover:scale-[1.02]"
+                >
+                  <Camera size={16} />
+                  <span>Scan Face to Resume Work</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openStartRestScan}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 transition cursor-pointer border-0 hover:scale-[1.02]"
+                >
+                  <Camera size={16} />
+                  <span>Scan Face to Take Rest</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={openClockOutScan}
+                className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition cursor-pointer"
+              >
+                <Camera size={15} />
+                <span>Clock Out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Today's Punch Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Today's Clock In */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Working Start */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clock In Time</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Working Start</p>
             <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord?.clock_in ? todayRecord.clock_in : 'Not punched yet'}
+              {todayRecord?.clock_in ? formatTimeAMPM(todayRecord.clock_in) : 'Not started'}
             </p>
             <p className="text-[11px] text-slate-400 mt-1">
               {todayRecord?.clock_in ? `Status: ${todayRecord.status}` : 'Punch in at start of shift'}
@@ -237,34 +450,74 @@ export default function EmployeeAttendancePage() {
           </div>
         </div>
 
-        {/* Today's Clock Out */}
+        {/* Rest Time */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clock Out Time</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rest Time</p>
             <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord?.clock_out ? todayRecord.clock_out : todayRecord?.clock_in ? 'In Shift' : '—'}
+              {todayRecord?.is_on_rest ? (
+                <span className="text-amber-600 flex items-center gap-1.5">
+                  <Coffee size={18} /> Resting...
+                </span>
+              ) : todayRecord?.rest_time_minutes ? (
+                formatDuration(todayRecord.rest_time_minutes)
+              ) : (
+                '0 min'
+              )}
             </p>
             <p className="text-[11px] text-slate-400 mt-1">
-              {todayRecord?.clock_out ? 'Shift completed' : 'Punch out when leaving'}
+              {todayRecord?.is_on_rest
+                ? `Elapsed: ${formatTimer(restSeconds)}`
+                : 'Breaks taken during shift'}
             </p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <Zap size={24} />
+            <Coffee size={24} />
           </div>
         </div>
 
-        {/* Match Verification Method */}
+        {/* Absent Time (Rest Over) */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Biometric Method</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Absent Time (Rest Over)</p>
             <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord ? `${todayRecord.verification_method}` : 'CPU HOG AI'}
+              {todayRecord?.absent_minutes && todayRecord.absent_minutes > 0 ? (
+                <span className="text-red-600">{formatDuration(todayRecord.absent_minutes)}</span>
+              ) : (
+                '0 min'
+              )}
             </p>
-            <p className="text-[11px] text-emerald-600 font-semibold mt-1">
-              {todayRecord?.confidence_score ? `Confidence: ${todayRecord.confidence_score}%` : 'Euclidean 128-d'}
+            <p className="text-[11px] text-slate-400 mt-1">
+              {todayRecord?.absent_minutes && todayRecord.absent_minutes > 0
+                ? 'Excess rest taken beyond allowed limit'
+                : 'Within allowed rest quota'}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+            <AlertCircle size={24} />
+          </div>
+        </div>
+
+        {/* Working End / Actual Working */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Working End</p>
+            <p className="text-xl font-black text-slate-900 mt-1">
+              {todayRecord?.clock_out ? (
+                formatTimeAMPM(todayRecord.clock_out)
+              ) : todayRecord?.clock_in ? (
+                <span className="text-emerald-600 font-bold text-sm">Working...</span>
+              ) : (
+                '—'
+              )}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              {todayRecord?.actual_working_minutes
+                ? `Actual: ${formatDuration(todayRecord.actual_working_minutes)}`
+                : 'In Progress'}
+            </p>
+          </div>
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
             <ShieldCheck size={24} />
           </div>
         </div>
@@ -275,7 +528,7 @@ export default function EmployeeAttendancePage() {
         <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-bold text-slate-900">My Attendance History</h2>
-            <p className="text-xs text-slate-400">Past logs recorded via biometric facial scan</p>
+            <p className="text-xs text-slate-400">Past working time, rest duration, and overtime logs</p>
           </div>
           <button
             type="button"
@@ -292,17 +545,19 @@ export default function EmployeeAttendancePage() {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
                 <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Clock In</th>
-                <th className="py-3 px-4">Clock Out</th>
+                <th className="py-3 px-4">Working Start</th>
+                <th className="py-3 px-4">Rest Time</th>
+                <th className="py-3 px-4">Absent Time (Rest Over)</th>
+                <th className="py-3 px-4">Working End</th>
+                <th className="py-3 px-4">Total Actual Work</th>
+                <th className="py-3 px-4">Over Time</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Verification Method</th>
-                <th className="py-3 px-4">Confidence</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {attendances.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-slate-400">
+                  <td colSpan={8} className="text-center py-10 text-slate-400">
                     <Clock className="mx-auto mb-2 opacity-40" size={28} />
                     <p>No past attendance logs found for your account.</p>
                   </td>
@@ -314,47 +569,73 @@ export default function EmployeeAttendancePage() {
                     <td className="py-3 px-4">
                       {att.clock_in ? (
                         <span className="font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                          {att.clock_in}
+                          {formatTimeAMPM(att.clock_in)}
                         </span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      {att.clock_out ? (
-                        <span className="font-mono font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                          {att.clock_out}
+                      {att.is_on_rest ? (
+                        <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          <Coffee size={12} /> Resting
+                        </span>
+                      ) : att.rest_time_minutes ? (
+                        <span className="font-mono text-slate-700">
+                          {formatDuration(att.rest_time_minutes)}
                         </span>
                       ) : (
-                        <span className="text-slate-400 italic">In Shift</span>
+                        <span className="text-slate-400">0 min</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {att.absent_minutes && att.absent_minutes > 0 ? (
+                        <span className="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                          {formatDuration(att.absent_minutes)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">0 min</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {att.clock_out ? (
+                        <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                          {formatTimeAMPM(att.clock_out)}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600 font-bold italic">Working...</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {att.actual_working_minutes ? (
+                        <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                          {formatDuration(att.actual_working_minutes)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {att.overtime_minutes && att.overtime_minutes > 0 ? (
+                        <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                          +{formatDuration(att.overtime_minutes)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
                       <span
                         className={`inline-block text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                          att.status === 'present'
+                          att.status?.toLowerCase() === 'present'
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : att.status === 'late'
+                            : att.status?.toLowerCase() === 'late'
                             ? 'bg-amber-100 text-amber-800 border border-amber-200'
                             : 'bg-slate-100 text-slate-700'
                         }`}
                       >
                         {att.status}
                       </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                        {att.verification_method}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {att.confidence_score ? (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                          {att.confidence_score}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
                     </td>
                   </tr>
                 ))
@@ -371,6 +652,7 @@ export default function EmployeeAttendancePage() {
           setIsAttendanceModalOpen(false);
           loadData();
         }}
+        preferredMode={attendanceModalMode}
         expectedEmployeeCode={currentUser?.employee_code}
         onAttendanceSuccess={() => {
           setNotification({

@@ -17,6 +17,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  MapPin,
   Menu,
   Palette,
   PanelLeftClose,
@@ -62,6 +63,7 @@ export default function SuperAdminLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
+  const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [companyCount, setCompanyCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
@@ -70,6 +72,7 @@ export default function SuperAdminLayout({
   const [passwordCount, setPasswordCount] = useState<number>(0);
   const [serviceCount, setServiceCount] = useState<number>(0);
   const [agentCount, setAgentCount] = useState<number>(0);
+  const [officeCount, setOfficeCount] = useState<number>(0);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SIDEBAR_STYLING as any);
 
   // Subscribe to site and sidebar styling settings
@@ -217,22 +220,42 @@ export default function SuperAdminLayout({
       })
       .catch(() => {});
 
+    // Fetch office locations count
+    fetch(`${apiBase}/office-locations`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setOfficeCount(data.length);
+        }
+      })
+      .catch(() => {});
+
     const handleAgentsUpdate = (e: any) => {
       if (Array.isArray(e.detail)) {
         setAgentCount(e.detail.length);
       }
     };
+    const handleOfficeUpdate = (e: any) => {
+      if (Array.isArray(e.detail)) {
+        setOfficeCount(e.detail.length);
+      }
+    };
+
     window.addEventListener('superadmin_agents_updated', handleAgentsUpdate);
-    return () => window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
-  }, [pathname, isLoginPage]);
+    window.addEventListener('agency_office_locations_updated', handleOfficeUpdate);
+    return () => {
+      window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
+      window.removeEventListener('agency_office_locations_updated', handleOfficeUpdate);
+    };
+  }, [isLoginPage]);
 
   // Auto-expand menus when navigating
   useEffect(() => {
-    if (
-      pathname.startsWith('/superadmin/employees') ||
-      pathname.startsWith('/superadmin/attendance')
-    ) {
+    if (pathname.startsWith('/superadmin/employees')) {
       setEmployeeMenuOpen(true);
+    }
+    if (pathname.startsWith('/superadmin/attendance')) {
+      setAttendanceMenuOpen(true);
     }
     if (pathname.startsWith('/superadmin/customers')) {
       setCustomerMenuOpen(true);
@@ -331,11 +354,28 @@ export default function SuperAdminLayout({
               icon: UserCheck,
               badge: employeeCount > 0 ? `${employeeCount}` : undefined,
             },
+          ],
+        },
+      ],
+    },
+    {
+      title: 'Attendance',
+      items: [
+        {
+          name: 'Attendance Management',
+          icon: Clock,
+          isGroup: true,
+          children: [
             {
               name: 'Face & Attendance',
               href: '/superadmin/attendance',
               icon: Camera,
               badge: 'AI Bio',
+            },
+            {
+              name: 'Settings',
+              href: '/superadmin/attendance/settings',
+              icon: Settings,
             },
           ],
         },
@@ -550,11 +590,17 @@ export default function SuperAdminLayout({
                       (child) => pathname === child.href || pathname.startsWith(child.href)
                     );
                     const isGroupOpen =
-                      link.name === 'Customer Management' ? customerMenuOpen : employeeMenuOpen;
+                      link.name === 'Customer Management'
+                        ? customerMenuOpen
+                        : link.name === 'Attendance Management'
+                        ? attendanceMenuOpen
+                        : employeeMenuOpen;
                     const toggleGroup = () => {
                       if (!sidebarOpen) setSidebarOpen(true);
                       if (link.name === 'Customer Management') {
                         setCustomerMenuOpen(!customerMenuOpen);
+                      } else if (link.name === 'Attendance Management') {
+                        setAttendanceMenuOpen(!attendanceMenuOpen);
                       } else {
                         setEmployeeMenuOpen(!employeeMenuOpen);
                       }
@@ -625,6 +671,10 @@ export default function SuperAdminLayout({
                                   ? pathname === '/superadmin/customers' || pathname === '/superadmin/customers/create' || pathname.startsWith('/superadmin/customers/edit') || pathname.startsWith('/superadmin/customers/view')
                                   : child.href === '/superadmin/employees'
                                   ? pathname === '/superadmin/employees' || pathname.startsWith('/superadmin/employees/')
+                                  : child.href === '/superadmin/attendance'
+                                  ? pathname === '/superadmin/attendance'
+                                  : child.href === '/superadmin/attendance/settings'
+                                  ? pathname === '/superadmin/attendance/settings' || pathname.startsWith('/superadmin/attendance/settings/')
                                   : pathname === child.href || pathname.startsWith(child.href + '/');
 
                               return (
@@ -634,9 +684,11 @@ export default function SuperAdminLayout({
                                   onClick={() => setMobileMenuOpen(false)}
                                   style={{
                                     backgroundColor: isChildItemActive
-                                      ? sidebarActiveBg
+                                      ? (isDarkSidebar ? 'rgba(255,255,255,0.1)' : sidebarActiveBg)
                                       : 'transparent',
-                                    color: isChildItemActive ? sidebarActiveText : sidebarText,
+                                    color: isChildItemActive
+                                      ? (isDarkSidebar ? '#ffffff' : sidebarActiveText)
+                                      : (isDarkSidebar ? 'rgba(255,255,255,0.7)' : sidebarText),
                                   }}
                                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
                                     isChildItemActive ? 'font-bold' : ''

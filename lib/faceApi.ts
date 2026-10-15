@@ -48,6 +48,9 @@ export interface FaceProfileItem {
   pose_labels?: string[];
 }
 
+export const LARAVEL_API_BASE =
+  process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+
 export interface AttendanceRecord {
   id: number;
   employee_id?: number;
@@ -59,6 +62,17 @@ export interface AttendanceRecord {
   date: string;
   clock_in?: string;
   clock_out?: string;
+  is_working?: boolean;
+  rest_start?: string;
+  rest_end?: string;
+  rest_time_minutes?: number;
+  is_on_rest?: boolean;
+  current_rest_session_minutes?: number;
+  allowed_rest_minutes?: number;
+  absent_minutes?: number;
+  actual_working_minutes?: number;
+  general_working_hours?: number;
+  overtime_minutes?: number;
   status: string; // 'Present' | 'Late' | 'Half Day'
   verification_method: string;
   confidence_score: number;
@@ -66,6 +80,7 @@ export interface AttendanceRecord {
   device_info?: string;
   notes?: string;
 }
+
 
 export interface AttendanceStats {
   date: string;
@@ -162,7 +177,7 @@ export async function trainEmployeeFace(payload: {
 export async function verifyAndMarkAttendance(payload: {
   image: string;
   employee_code?: string;
-  action?: 'auto' | 'clock_in' | 'clock_out';
+  action?: 'auto' | 'clock_in' | 'clock_out' | 'start_rest' | 'end_rest';
   device_info?: string;
 }): Promise<{
   success: boolean;
@@ -242,13 +257,29 @@ export async function getAttendanceRecords(params?: {
   date?: string;
   employee_code?: string;
   company_id?: string;
+  search?: string;
 }): Promise<AttendanceRecord[]> {
-  try {
-    const query = new URLSearchParams();
-    if (params?.date) query.set('date', params.date);
-    if (params?.employee_code) query.set('employee_code', params.employee_code);
-    if (params?.company_id) query.set('company_id', params.company_id);
+  const query = new URLSearchParams();
+  if (params?.date) query.set('date', params.date);
+  if (params?.employee_code) query.set('employee_code', params.employee_code);
+  if (params?.company_id) query.set('company_id', params.company_id);
+  if (params?.search) query.set('search', params.search);
 
+  // Try Laravel REST API first (which includes schedule calculations and live rest timers)
+  try {
+    const res = await fetch(`${LARAVEL_API_BASE}/attendances?${query.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.records)) {
+        return data.records;
+      }
+    }
+  } catch (err) {
+    // fallback to Python backend below
+  }
+
+  // Fallback to Python Face-Matching service
+  try {
     const res = await fetch(`${FACE_API_BASE}/api/attendances?${query.toString()}`);
     const data = await res.json();
     return data.records || [];
@@ -256,6 +287,159 @@ export async function getAttendanceRecords(params?: {
     return [];
   }
 }
+
+/** Get today's attendance & rest status for an employee */
+export async function getTodayAttendanceStatus(employeeCode: string): Promise<{
+  success: boolean;
+  clocked_in: boolean;
+  clocked_out: boolean;
+  is_on_rest: boolean;
+  current_rest_session_minutes?: number;
+  effective_rest_minutes?: number;
+  absent_minutes?: number;
+  attendance?: AttendanceRecord | null;
+  schedule_rules?: {
+    general_working_hours: number;
+    rest_time_minutes: number;
+  };
+}> {
+  try {
+    const res = await fetch(
+      `${LARAVEL_API_BASE}/attendances/today-status?employee_code=${encodeURIComponent(employeeCode)}`
+    );
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {}
+
+  return {
+    success: false,
+    clocked_in: false,
+    clocked_out: false,
+    is_on_rest: false,
+    attendance: null,
+  };
+}
+
+/** Start Rest / Break for employee */
+export async function startEmployeeRest(employeeCode: string): Promise<{
+  success: boolean;
+  message: string;
+  attendance?: AttendanceRecord;
+}> {
+  // Try Laravel first
+  try {
+    const res = await fetch(`${LARAVEL_API_BASE}/attendances/start-rest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_code: employeeCode }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) return data;
+    if (data.message) return data;
+  } catch {}
+
+  // Fallback to Python service
+  try {
+    const res = await fetch(`${FACE_API_BASE}/api/attendances/start-rest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_code: employeeCode }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to start rest' };
+  }
+}
+
+/** End Rest / Resume Work for employee */
+export async function endEmployeeRest(employeeCode: string): Promise<{
+  success: boolean;
+  message: string;
+  break_minutes_taken?: number;
+  total_rest_minutes?: number;
+  absent_minutes?: number;
+  attendance?: AttendanceRecord;
+}> {
+  // Try Laravel first
+  try {
+    const res = await fetch(`${LARAVEL_API_BASE}/attendances/end-rest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_code: employeeCode }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) return data;
+    if (data.message) return data;
+  } catch {}
+
+  // Fallback to Python service
+  try {
+    const res = await fetch(`${FACE_API_BASE}/api/attendances/end-rest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_code: employeeCode }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to resume work' };
+  }
+}
+
+/** Clock out employee */
+export async function clockOutEmployee(employeeCode: string): Promise<{
+  success: boolean;
+  message: string;
+  attendance?: AttendanceRecord;
+}> {
+  try {
+    const res = await fetch(`${LARAVEL_API_BASE}/attendances/clock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_code: employeeCode }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to clock out' };
+  }
+}
+
+/** Format duration in minutes to user-friendly string */
+export function formatDuration(minutes?: number | null, fallback = '-'): string {
+  if (minutes === undefined || minutes === null || isNaN(minutes) || minutes < 0) {
+    return fallback;
+  }
+  if (minutes === 0) {
+    return '0 min';
+  }
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hrs > 0 && mins > 0) {
+    return `${hrs} hr ${mins} min`;
+  }
+  if (hrs > 0) {
+    return `${hrs} hr${hrs > 1 ? 's' : ''}`;
+  }
+  return `${mins} min${mins > 1 ? 's' : ''}`;
+}
+
+/** Format 24-hour time string "HH:MM:SS" or "HH:MM" to 12-hour AM/PM format */
+export function formatTimeAMPM(timeStr?: string | null): string {
+  if (!timeStr) return '—';
+  try {
+    const parts = timeStr.trim().split(':');
+    if (parts.length < 2) return timeStr;
+    let hour = parseInt(parts[0], 10);
+    const minute = parts[1];
+    if (isNaN(hour)) return timeStr;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    return `${hour.toString().padStart(2, '0')}:${minute} ${ampm}`;
+  } catch {
+    return timeStr;
+  }
+}
+
 
 /** Get attendance stats for today */
 export async function getAttendanceStats(): Promise<AttendanceStats | null> {

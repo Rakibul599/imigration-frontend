@@ -1,5 +1,3 @@
-'use client';
-
 export interface Theme1Data {
   eyebrow: string;
   title_line1: string;

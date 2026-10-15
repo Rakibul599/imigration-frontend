@@ -17,6 +17,7 @@ import {
   Plus,
   AlertCircle,
   Zap,
+  Coffee,
 } from 'lucide-react';
 import FaceEnrollmentModal from '@/components/FaceEnrollmentModal';
 import FaceAttendanceModal from '@/components/FaceAttendanceModal';
@@ -26,6 +27,8 @@ import {
   getAttendanceStats,
   getFaceProfiles,
   deleteEmployeeFaceProfile,
+  formatDuration,
+  formatTimeAMPM,
   AttendanceRecord,
   FaceProfileItem,
   AttendanceStats,
@@ -397,19 +400,21 @@ export default function MasterAdminAttendancePage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                  <th className="py-3 px-4">Employee</th>
-                  <th className="py-3 px-4">Company</th>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Clock In</th>
-                  <th className="py-3 px-4">Clock Out</th>
-                  <th className="py-3 px-4">Verification</th>
-                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Employee ID</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Name</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">General Working Time</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Working Start</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Rest Time</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Absent Time (Rest Over)</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Working End Time</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Total Actual Working Time</th>
+                  <th className="py-3.5 px-4 whitespace-nowrap">Over Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {filteredAttendances.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-400">
+                    <td colSpan={9} className="text-center py-12 text-slate-400">
                       <Camera className="mx-auto mb-2 opacity-40" size={32} />
                       <p>No attendance logs found in your company scope.</p>
                       <button
@@ -424,65 +429,112 @@ export default function MasterAdminAttendancePage() {
                 ) : (
                   filteredAttendances.map((att) => (
                     <tr key={att.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
+                      {/* 1. Employee ID */}
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                        <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                          {att.employee_code}
+                        </span>
+                      </td>
+
+                      {/* 2. Name */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5 min-w-[140px]">
                           <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#0b4da2] font-bold flex items-center justify-center shrink-0">
                             {att.name.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900">{att.name}</div>
-                            <div className="text-[10px] font-mono text-slate-400">
-                              {att.employee_code} • {att.role}
+                            <div className="font-bold text-slate-900 leading-tight">{att.name}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {att.role} {att.company_name ? `• ${att.company_name}` : ''}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-800">
-                        {att.company_name || 'N/A'}
+
+                      {/* 3. General Working Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="font-mono font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                          {att.general_working_hours ? `${att.general_working_hours.toFixed(1)} hrs` : '8.0 hrs'}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-600">{att.date}</td>
-                      <td className="py-3 px-4">
+
+                      {/* 4. Working Start */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {att.clock_in ? (
-                          <span className="font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                            {att.clock_in}
+                          <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                            {formatTimeAMPM(att.clock_in)}
                           </span>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        {att.clock_out ? (
-                          <span className="font-mono font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                            {att.clock_out}
+
+                      {/* 5. Rest Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {att.is_on_rest ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-100/90 px-2.5 py-0.5 rounded-full border border-amber-300 animate-pulse">
+                            <Coffee size={12} className="text-amber-700" />
+                            <span>Resting...</span>
+                          </span>
+                        ) : att.rest_time_minutes && att.rest_time_minutes > 0 ? (
+                          <span className="font-mono font-semibold text-slate-800 bg-amber-50/70 px-2 py-0.5 rounded border border-amber-200/80">
+                            {formatDuration(att.rest_time_minutes)}
                           </span>
                         ) : (
-                          <span className="text-slate-400 italic">Active (In shift)</span>
+                          <span className="text-slate-400">0 min</span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold uppercase bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                            {att.verification_method}
+
+                      {/* 6. Absent Time (Rest Time Over) */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {att.absent_minutes && att.absent_minutes > 0 ? (
+                          <span className="inline-flex items-center gap-1 font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200">
+                            <AlertCircle size={12} className="text-red-500" />
+                            <span>{formatDuration(att.absent_minutes)}</span>
                           </span>
-                          {att.confidence_score !== undefined && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                              {att.confidence_score}%
-                            </span>
-                          )}
-                        </div>
+                        ) : (
+                          <span className="text-slate-400">0 min</span>
+                        )}
                       </td>
-                      <td className="py-3 px-4 text-center">
-                        <span
-                          className={`inline-block text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                            att.status === 'present'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : att.status === 'late'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {att.status}
-                        </span>
+
+                      {/* 7. Working End Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {att.clock_out ? (
+                          <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            {formatTimeAMPM(att.clock_out)}
+                          </span>
+                        ) : att.clock_in ? (
+                          <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+                            <span>Working...</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* 8. Total Actual Working Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {att.actual_working_minutes && att.actual_working_minutes > 0 ? (
+                          <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                            {formatDuration(att.actual_working_minutes)}
+                          </span>
+                        ) : att.clock_in && !att.clock_out ? (
+                          <span className="text-slate-400 italic">In Shift</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
+                      {/* 9. Over Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {att.overtime_minutes && att.overtime_minutes > 0 ? (
+                          <span className="font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                            +{formatDuration(att.overtime_minutes)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </td>
                     </tr>
                   ))
