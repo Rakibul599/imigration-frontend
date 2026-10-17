@@ -4,14 +4,18 @@ import { useEffect, useState, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  Award,
   Building2,
+  Calendar,
   Camera,
   ChevronDown,
   ChevronRight,
   Clock,
   DollarSign,
   ExternalLink,
+  FileCheck,
   FileSpreadsheet,
+  FileText,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -193,13 +197,33 @@ export default function EmployeeLayout({
         ],
       },
       {
-        title: 'Employee',
+        title: 'Attendance & Applications',
         items: [
           {
-            name: 'Face Attendance & Clock-In',
+            name: 'Attendance & Face Punch',
             href: '/employee/attendance',
             icon: Camera,
             badge: 'Bio-Clock',
+          },
+          {
+            name: 'Apply Holiday',
+            href: '/employee/attendance/apply-holiday',
+            icon: Calendar,
+          },
+          {
+            name: 'Apply Annual Leave',
+            href: '/employee/attendance/apply-leave',
+            icon: Award,
+          },
+          {
+            name: 'Resignation Notice',
+            href: '/employee/attendance/apply-resignation',
+            icon: FileText,
+          },
+          {
+            name: 'My Documents & Logs',
+            href: '/employee/attendance/details',
+            icon: FileCheck,
           },
         ],
       },
@@ -505,7 +529,9 @@ export default function EmployeeLayout({
                     const isActive =
                       item.href === '/employee'
                         ? pathname === '/employee'
-                        : Boolean(item.href && pathname.startsWith(item.href));
+                        : item.href === '/employee/attendance'
+                        ? pathname === '/employee/attendance'
+                        : Boolean(item.href && (pathname === item.href || pathname.startsWith(item.href + '/')));
 
                     return (
                       <Link
@@ -628,7 +654,9 @@ export default function EmployeeLayout({
                 const isActive =
                   item.href === '/employee'
                     ? pathname === '/employee'
-                    : Boolean(item.href && pathname.startsWith(item.href));
+                    : item.href === '/employee/attendance'
+                    ? pathname === '/employee/attendance'
+                    : Boolean(item.href && (pathname === item.href || pathname.startsWith(item.href + '/')));
 
                 return (
                   <Link

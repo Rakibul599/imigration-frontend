@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Camera,
   CheckCircle2,
@@ -18,6 +18,9 @@ import {
   Check,
   Building2,
   Zap,
+  Search,
+  UserCheck,
+  ArrowRight,
 } from 'lucide-react';
 import {
   PoseDefinition,
@@ -47,6 +50,8 @@ const DEFAULT_POSES: PoseDefinition[] = [
   { id: 'center_final', name: 'Look Straight & Hold (Final)', key: 'center', instruction: 'Look straight at the camera and hold still.' }
 ];
 
+export type EnrollmentStep = 'select_employee' | 'camera';
+
 interface FaceEnrollmentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -68,6 +73,12 @@ export default function FaceEnrollmentModal({
   targetEmployee,
   trainedBy = 'Self',
 }: FaceEnrollmentModalProps) {
+  const [step, setStep] = useState<EnrollmentStep>(
+    trainedBy === 'Self' ? 'camera' : 'select_employee'
+  );
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'not_enrolled' | 'enrolled'>('all');
+
   const [poses, setPoses] = useState<PoseDefinition[]>(DEFAULT_POSES);
   const [currentPoseIndex, setCurrentPoseIndex] = useState(0);
   const [capturedSamples, setCapturedSamples] = useState<Array<{ pose: string; image: string; label: string }>>([]);
@@ -138,9 +149,30 @@ export default function FaceEnrollmentModal({
     capturedSamplesRef.current = capturedSamples;
   }, [capturedSamples]);
 
-  // Load available employees for SuperAdmin / MasterAdmin
+  // Stop Camera helper
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+    isBusyRef.current = false;
+  }, []);
+
+  // Modal lifecycle & initialize employee selection
   useEffect(() => {
     if (isOpen) {
+      if (trainedBy === 'Self') {
+        setStep('camera');
+      } else {
+        setStep('select_employee');
+      }
+      setEmployeeSearch('');
+      setFilterStatus('all');
+
       if (targetEmployee?.employee_code) {
         setCurrentEmployee(targetEmployee);
         setSelectedEmpCode(targetEmployee.employee_code);
@@ -170,8 +202,11 @@ export default function FaceEnrollmentModal({
           .catch((err) => console.error('Failed to load employees for face training:', err))
           .finally(() => setIsLoadingEmployees(false));
       }
+    } else {
+      stopCamera();
+      setStep(trainedBy === 'Self' ? 'camera' : 'select_employee');
     }
-  }, [isOpen, targetEmployee, trainedBy]);
+  }, [isOpen, targetEmployee, trainedBy, stopCamera]);
 
   const handleEmployeeChange = (code: string) => {
     setSelectedEmpCode(code);
@@ -183,7 +218,7 @@ export default function FaceEnrollmentModal({
         role: found.role,
         company_name: found.assigned_companies?.[0] || 'Assigned Company',
       });
-      // Clear any captured samples for the previous person
+      // Clear any captured samples for previous selection
       setCapturedSamples([]);
       capturedSamplesRef.current = [];
       setCurrentPoseIndex(0);
@@ -225,7 +260,7 @@ export default function FaceEnrollmentModal({
     }
   }, [isOpen]);
 
-  // Start Camera
+  // Start Camera - ONLY called when step is 'camera'
   const startCamera = useCallback(async () => {
     try {
       setCameraError(null);
@@ -239,6 +274,7 @@ export default function FaceEnrollmentModal({
       });
 
       streamRef.current = stream;
+      setIsCameraActive(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         try {
@@ -246,7 +282,6 @@ export default function FaceEnrollmentModal({
         } catch (e) {
           console.warn('Video play exception:', e);
         }
-        setIsCameraActive(true);
       }
     } catch (err: any) {
       setCameraError(
@@ -258,21 +293,9 @@ export default function FaceEnrollmentModal({
     }
   }, []);
 
-  // Stop Camera
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setIsCameraActive(false);
-    isBusyRef.current = false;
-  }, []);
-
+  // Camera activation based on step
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && step === 'camera') {
       startCamera();
     } else {
       stopCamera();
@@ -280,9 +303,19 @@ export default function FaceEnrollmentModal({
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen, step, startCamera, stopCamera]);
 
-  // Capture current frame from canvas (fast JPEG, max 480px width for fast CPU processing)
+  // Stream attach safeguard when step transitions to 'camera'
+  useEffect(() => {
+    if (step === 'camera' && streamRef.current && videoRef.current) {
+      if (videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch((e) => console.warn('Video attach play exception:', e));
+      }
+    }
+  }, [step]);
+
+  // Capture current frame from canvas
   const getCanvasFrameBase64 = useCallback((): string | null => {
     if (!videoRef.current || !canvasRef.current) return null;
     const video = videoRef.current;
@@ -292,7 +325,6 @@ export default function FaceEnrollmentModal({
     const vh = video.videoHeight;
     if (vw === 0 || vh === 0) return null;
 
-    // Scale to max width 480px for high-speed CPU landmark detection
     const targetWidth = Math.min(480, vw);
     const targetHeight = Math.round((vh / vw) * targetWidth);
 
@@ -302,7 +334,6 @@ export default function FaceEnrollmentModal({
     if (!ctx) return null;
 
     ctx.save();
-    // Do not mirror captured photo so face landmarks match standard orientation
     ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
     ctx.restore();
 
@@ -320,84 +351,66 @@ export default function FaceEnrollmentModal({
       const gain = audioCtx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
       osc.start();
-      osc.stop(audioCtx.currentTime + 0.1);
-    } catch {}
+      osc.stop(audioCtx.currentTime + 0.08);
+    } catch {
+      // Audio optional
+    }
   }, []);
 
-  // Capture current pose sample
+  // Capture pose at index
   const capturePoseAtIndex = useCallback(
-    (indexToCapture: number, existingFrame?: string | null) => {
-      // ABSOLUTE GATE: If admin has not selected an employee yet, DO NOT TAKE PHOTO
-      if (trainedBy !== 'Self' && !currentEmployeeRef.current) {
-        return;
-      }
+    (index: number, preCapturedFrame?: string) => {
+      const activeEmp = currentEmployeeRef.current || targetEmployee;
+      if (trainedBy !== 'Self' && !activeEmp) return;
 
-      // If already cooling down, completed all poses, or submitting: NEVER TAKE PHOTO
-      if (
-        isCoolingDownRef.current ||
-        allCompletedRef.current ||
-        isSubmittingRef.current
-      ) {
-        return;
-      }
-
-      const currentList = posesRef.current.length > 0 ? posesRef.current : DEFAULT_POSES;
-      if (indexToCapture < 0 || indexToCapture >= currentList.length) return;
-      const targetPose = currentList[indexToCapture];
-      if (!targetPose) return;
-
-      const frame = existingFrame || getCanvasFrameBase64();
+      const frame = preCapturedFrame || getCanvasFrameBase64();
       if (!frame) return;
 
-      // Lock cooldown immediately to prevent double snaps
-      isCoolingDownRef.current = true;
       triggerShutterFlash();
 
-      // Synchronously update captured samples ref AND state
-      const copy = [...capturedSamplesRef.current];
-      copy[indexToCapture] = {
-        pose: targetPose.key,
+      const list = posesRef.current.length > 0 ? posesRef.current : DEFAULT_POSES;
+      const pose = list[index] || { key: `pose_${index}`, name: `Pose ${index + 1}` };
+
+      const updated = [...capturedSamplesRef.current];
+      updated[index] = {
+        pose: pose.key,
         image: frame,
-        label: targetPose.name,
+        label: pose.name,
       };
-      capturedSamplesRef.current = copy;
-      setCapturedSamples(copy);
 
-      const validCount = copy.filter((s) => Boolean(s && s.image)).length;
-      const isDone = validCount >= currentList.length;
+      capturedSamplesRef.current = updated;
+      setCapturedSamples(updated);
 
-      setHoldProgress(100);
-      setIsPoseMatched(true);
-      setDetectionMessage(`✓ Captured: ${targetPose.name}!`);
+      isCoolingDownRef.current = true;
 
-      if (isDone) {
-        // ALL 15 POSES COMPLETED - PERMANENTLY HALT CAPTURING
-        allCompletedRef.current = true;
-        setAllCompleted(true);
-        isCoolingDownRef.current = true; // Lock permanently
-        matchStreakRef.current = 0;
-        setCurrentPoseIndex(currentList.length - 1);
-        setTimeout(() => {
-          setIsPoseMatched(false);
-          setHoldProgress(0);
-          isCoolingDownRef.current = true; // KEEP locked
-          setDetectionMessage('🎉 All 15 poses captured! Click "Enroll & Train All 15 Poses" below.');
-        }, 400);
-      } else {
-        // Advance to next uncaptured pose
-        let nextIndex = (indexToCapture + 1) % currentList.length;
-        if (copy[nextIndex]?.image) {
-          const firstUncaptured = copy.findIndex((s, i) => i < currentList.length && !s?.image);
-          if (firstUncaptured !== -1) {
-            nextIndex = firstUncaptured;
+      // Find next uncaptured index
+      let nextIndex = -1;
+      for (let i = index + 1; i < list.length; i++) {
+        if (!updated[i] || !updated[i].image) {
+          nextIndex = i;
+          break;
+        }
+      }
+      if (nextIndex === -1) {
+        for (let i = 0; i < index; i++) {
+          if (!updated[i] || !updated[i].image) {
+            nextIndex = i;
+            break;
           }
         }
+      }
 
+      if (nextIndex === -1) {
+        allCompletedRef.current = true;
+        setAllCompleted(true);
+        setDetectionMessage('All 15 poses successfully captured! Ready to train face.');
+      } else {
         currentPoseIndexRef.current = nextIndex;
         setCurrentPoseIndex(nextIndex);
         setTimeout(() => {
@@ -408,7 +421,7 @@ export default function FaceEnrollmentModal({
         }, 750);
       }
     },
-    [trainedBy, getCanvasFrameBase64, triggerShutterFlash]
+    [trainedBy, targetEmployee, getCanvasFrameBase64, triggerShutterFlash]
   );
 
   // Manual snapshot button click
@@ -418,9 +431,9 @@ export default function FaceEnrollmentModal({
     capturePoseAtIndex(currentPoseIndexRef.current);
   };
 
-  // Keyboard shortcut: Spacebar captures current pose
+  // Keyboard shortcut: Spacebar captures current pose (only in camera step)
   useEffect(() => {
-    if (!isOpen || submitSuccess || allCompleted || isSubmitting) return;
+    if (!isOpen || step !== 'camera' || submitSuccess || allCompleted || isSubmitting) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (trainedBy !== 'Self' && !currentEmployee) return;
@@ -433,18 +446,15 @@ export default function FaceEnrollmentModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, submitSuccess, allCompleted, isSubmitting, trainedBy, currentEmployee, handleManualCapture]);
+  }, [isOpen, step, submitSuccess, allCompleted, isSubmitting, trainedBy, currentEmployee, handleManualCapture]);
 
-  // CONTINUOUS LIVENESS & POSE ANALYSIS LOOP (UNBREAKABLE REF-BASED)
+  // Continuous Liveness & Pose Analysis Loop (Runs only in camera step)
   useEffect(() => {
-    // If modal not open, camera inactive, submission success, ALL COMPLETED, or SUBMITTING: DO NOT RUN LOOP!
-    if (!isOpen || !isCameraActive || submitSuccess || allCompleted || isSubmitting) return;
+    if (!isOpen || step !== 'camera' || !isCameraActive || submitSuccess || allCompleted || isSubmitting) return;
 
     const interval = setInterval(async () => {
-      // If admin has not chosen an employee, pause frame analysis
       if (trainedBy !== 'Self' && !currentEmployeeRef.current) return;
 
-      // 1. Permanent gate: If all poses completed, submitting, cooldown locked, or busy: STOP immediately
       if (
         allCompletedRef.current ||
         isSubmittingRef.current ||
@@ -468,35 +478,15 @@ export default function FaceEnrollmentModal({
       const pose = list[idx];
       if (!pose) return;
 
-      // If current pose is already captured, do not auto-capture again
-      if (capturedSamplesRef.current[idx]?.image) return;
-
       const frame = getCanvasFrameBase64();
       if (!frame) return;
 
-      isBusyRef.current = true;
       try {
+        isBusyRef.current = true;
         const result = await analyzePoseFrame(frame, pose.key);
 
-        // Double check gate after async network roundtrip!
-        if (
-          allCompletedRef.current ||
-          isCoolingDownRef.current ||
-          isSubmittingRef.current ||
-          (trainedBy !== 'Self' && !currentEmployeeRef.current)
-        ) {
-          return;
-        }
-
-        if (!result.face_detected) {
-          setFaceDetected(false);
-          setIsPoseMatched(false);
-          matchStreakRef.current = 0;
-          setHoldProgress(0);
-          setDetectionMessage(result.message || 'Position face inside the reticle');
-          setDetectedTags([]);
-        } else {
-          setFaceDetected(true);
+        if (result && result.success) {
+          setFaceDetected(result.face_detected);
           setDetectedTags(result.detected_tags || []);
 
           if (result.is_match) {
@@ -506,7 +496,6 @@ export default function FaceEnrollmentModal({
             if (autoCaptureEnabled && !isCoolingDownRef.current && !allCompletedRef.current && !isSubmittingRef.current) {
               matchStreakRef.current += 1;
               setHoldProgress(100);
-              // Auto-capture immediately on confirmed match!
               capturePoseAtIndex(idx, frame);
             }
           } else {
@@ -516,8 +505,8 @@ export default function FaceEnrollmentModal({
             setDetectionMessage(pose.instruction || `Perform: ${pose.name}`);
           }
         }
-      } catch (err) {
-        // Continue loop gracefully
+      } catch {
+        // Continue gracefully
       } finally {
         isBusyRef.current = false;
       }
@@ -529,6 +518,7 @@ export default function FaceEnrollmentModal({
     };
   }, [
     isOpen,
+    step,
     isCameraActive,
     submitSuccess,
     allCompleted,
@@ -569,10 +559,11 @@ export default function FaceEnrollmentModal({
         })),
       },
       {
-        onSuccess: (empCode, message) => {
+        onSuccess: (empCode) => {
           setIsSubmitting(false);
           setIsBackgroundTraining(false);
           setSubmitSuccess(true);
+          stopCamera();
           if (onSuccess) {
             onSuccess(empCode);
           }
@@ -584,6 +575,40 @@ export default function FaceEnrollmentModal({
         },
       }
     );
+  };
+
+  // Filtered employees for Step 1
+  const filteredEmployees = useMemo(() => {
+    return availableEmployees.filter((emp) => {
+      if (filterStatus === 'not_enrolled' && emp.is_face_enrolled) return false;
+      if (filterStatus === 'enrolled' && !emp.is_face_enrolled) return false;
+
+      if (!employeeSearch.trim()) return true;
+      const term = employeeSearch.toLowerCase().trim();
+      const codeMatch = (emp.employee_code || '').toLowerCase().includes(term);
+      const nameMatch = (emp.name || '').toLowerCase().includes(term);
+      const emailMatch = (emp.email || '').toLowerCase().includes(term);
+      const roleMatch = (emp.role || '').toLowerCase().includes(term);
+      const compMatch = (emp.assigned_companies || []).some((c) =>
+        c.toLowerCase().includes(term)
+      );
+      return codeMatch || nameMatch || emailMatch || roleMatch || compMatch;
+    });
+  }, [availableEmployees, employeeSearch, filterStatus]);
+
+  const handleModalClose = () => {
+    stopCamera();
+    onClose();
+  };
+
+  const handleProceedToCamera = () => {
+    if (!currentEmployee) return;
+    setStep('camera');
+  };
+
+  const handleBackToSelectEmployee = () => {
+    stopCamera();
+    setStep('select_employee');
   };
 
   if (!isOpen) return null;
@@ -604,54 +629,64 @@ export default function FaceEnrollmentModal({
               <Camera size={20} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-extrabold m-0 text-white tracking-wide uppercase">
                   Biometric Face Enrollment &amp; Liveness
                 </h3>
-                <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase">
+                {trainedBy !== 'Self' && (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                      step === 'select_employee'
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    }`}
+                  >
+                    {step === 'select_employee' ? 'Step 1: Choose Employee' : 'Step 2: 15-Pose Camera'}
+                  </span>
+                )}
+                <span className="text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full uppercase">
                   15 Poses • CPU Model
                 </span>
               </div>
               <p className="text-xs text-slate-400 m-0 mt-0.5 flex items-center gap-2 flex-wrap">
-                <span>Enrolling Staff:</span>
-                {(currentEmployee || targetEmployee) ? (
+                {step === 'select_employee' ? (
+                  <span>Select staff member to register 15-pose facial recognition</span>
+                ) : (
                   <>
+                    <span>Enrolling Staff:</span>
                     <span className="text-blue-300 font-bold">
-                      {(currentEmployee || targetEmployee)?.name} ({(currentEmployee || targetEmployee)?.employee_code})
+                      {activeEmp?.name} ({activeEmp?.employee_code})
                     </span>
-                    {(currentEmployee || targetEmployee)?.company_name && (
+                    {activeEmp?.company_name && (
                       <>
                         <span>•</span>
                         <span className="text-slate-300 truncate max-w-[180px]">
-                          {(currentEmployee || targetEmployee)?.company_name}
+                          {activeEmp?.company_name}
                         </span>
                       </>
                     )}
                   </>
-                ) : (
-                  <span className="text-amber-400 font-semibold italic">
-                    Select an employee below to calibrate
-                  </span>
                 )}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Auto Capture Toggle */}
-            <label className="hidden sm:flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-              <input
-                type="checkbox"
-                checked={autoCaptureEnabled}
-                onChange={(e) => setAutoCaptureEnabled(e.target.checked)}
-                className="rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              />
-              <span>Auto-Capture</span>
-            </label>
+            {step === 'camera' && (
+              <label className="hidden sm:flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={autoCaptureEnabled}
+                  onChange={(e) => setAutoCaptureEnabled(e.target.checked)}
+                  className="rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span>Auto-Capture</span>
+              </label>
+            )}
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleModalClose}
               className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors border border-slate-700"
             >
               <X size={16} />
@@ -672,85 +707,256 @@ export default function FaceEnrollmentModal({
               </div>
               <h2 className="text-xl font-black text-white m-0">Face Profile Enrolled &amp; Trained!</h2>
               <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
-                Biometric 128-dimensional encodings have been generated across all 15 poses and stored in MySQL database. {(currentEmployee || targetEmployee)?.name} can now clock in with instant face recognition!
+                Biometric 128-dimensional encodings have been generated across all 15 poses and stored in MySQL database. {activeEmp?.name} can now clock in with instant face recognition!
               </p>
 
               <div className="pt-4 flex items-center justify-center gap-3">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleModalClose}
                   className="px-6 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083a7c] text-white text-xs font-bold transition-all shadow-md cursor-pointer border-0"
                 >
                   Close &amp; Return to Dashboard
                 </button>
               </div>
             </div>
+          ) : step === 'select_employee' && trainedBy !== 'Self' ? (
+            /* ============================================================== */
+            /* STEP 1: EMPLOYEE SELECTION VIEW (Camera is completely OFF)    */
+            /* ============================================================== */
+            <div className="space-y-4">
+              {/* Guidance Banner */}
+              <div className="bg-gradient-to-r from-blue-950/60 via-slate-800/80 to-indigo-950/60 border border-blue-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+                    <UserCheck size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white tracking-wide uppercase m-0">
+                      Step 1: Choose Employee to Calibrate
+                    </h4>
+                    <p className="text-[11px] text-slate-300 m-0 mt-0.5">
+                      Select staff member from the list. The camera interface will open in the next step when you click &quot;Next&quot;.
+                    </p>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-400 bg-slate-900/80 border border-slate-700/60 px-3 py-1.5 rounded-xl shrink-0 self-start sm:self-auto">
+                  Total Staff: <span className="text-white font-bold">{availableEmployees.length}</span>
+                </div>
+              </div>
+
+              {/* Search & Filter Controls */}
+              <div className="space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  {/* Search Input */}
+                  <div className="relative flex-1">
+                    <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={employeeSearch}
+                      onChange={(e) => setEmployeeSearch(e.target.value)}
+                      placeholder="Search by name, employee code (e.g. EMP001), or company..."
+                      className="w-full bg-slate-800/90 border border-slate-700 focus:border-blue-500 hover:border-slate-600 rounded-xl pl-9 pr-8 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/30 transition shadow-inner"
+                    />
+                    {employeeSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setEmployeeSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer bg-transparent border-0"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 bg-slate-800/80 p-1 rounded-xl border border-slate-700 shrink-0 overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setFilterStatus('all')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 ${
+                        filterStatus === 'all'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-white bg-transparent'
+                      }`}
+                    >
+                      All ({availableEmployees.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterStatus('not_enrolled')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 flex items-center gap-1.5 ${
+                        filterStatus === 'not_enrolled'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-amber-400/90 hover:text-amber-300 bg-transparent'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <span>Needs Face ({availableEmployees.filter((e) => !e.is_face_enrolled).length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterStatus('enrolled')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border-0 flex items-center gap-1.5 ${
+                        filterStatus === 'enrolled'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-emerald-400/90 hover:text-emerald-300 bg-transparent'
+                      }`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      <span>Enrolled ({availableEmployees.filter((e) => e.is_face_enrolled).length})</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Employee Selection Cards */}
+              <div className="max-h-[300px] sm:max-h-[340px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                {isLoadingEmployees ? (
+                  <div className="py-12 text-center text-slate-400 text-xs">
+                    <RefreshCw size={24} className="animate-spin mx-auto text-blue-400 mb-2" />
+                    <span>Loading staff directory...</span>
+                  </div>
+                ) : filteredEmployees.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-xs bg-slate-800/40 rounded-xl border border-slate-700/60">
+                    <User size={28} className="mx-auto text-slate-500 mb-2" />
+                    <p className="font-semibold text-slate-300">No staff found matching criteria</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Try searching with a different name, code, or filter</p>
+                  </div>
+                ) : (
+                  filteredEmployees.map((emp) => {
+                    const isSelected = selectedEmpCode === emp.employee_code;
+                    return (
+                      <div
+                        key={emp.employee_code}
+                        onClick={() => handleEmployeeChange(emp.employee_code)}
+                        className={`p-3 sm:p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/40 shadow-md'
+                            : 'bg-slate-800/60 border-slate-700/70 hover:bg-slate-800 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                              isSelected
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-slate-700/80 text-slate-300'
+                            }`}
+                          >
+                            {emp.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-white text-xs sm:text-sm truncate">
+                                {emp.name}
+                              </span>
+                              <span className="font-mono text-[10px] font-bold text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/60">
+                                {emp.employee_code}
+                              </span>
+                              {emp.role && (
+                                <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                                  {emp.role}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                              <Building2 size={12} className="text-slate-500 shrink-0" />
+                              <span className="truncate">{emp.assigned_companies?.[0] || 'Assigned Company'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          {emp.is_face_enrolled ? (
+                            <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                              <CheckCircle2 size={12} />
+                              <span className="hidden sm:inline">Enrolled ({emp.face_sample_count || 15} Poses)</span>
+                              <span className="sm:hidden">Enrolled</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                              <AlertCircle size={12} />
+                              <span>Needs Face</span>
+                            </span>
+                          )}
+
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                              isSelected
+                                ? 'border-blue-400 bg-blue-500 text-white'
+                                : 'border-slate-600 bg-transparent'
+                            }`}
+                          >
+                            {isSelected && <Check size={12} strokeWidth={3} />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Selected Staff Confirmation Card */}
+              {currentEmployee ? (
+                <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs shadow-xs">
+                  <div className="flex items-center gap-2.5 text-emerald-300 font-semibold truncate">
+                    <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                    <span className="truncate">
+                      Ready to calibrate: <b className="text-white">{currentEmployee.name}</b> ({currentEmployee.employee_code}) • {currentEmployee.company_name || 'Assigned Company'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-emerald-400 font-bold shrink-0 hidden sm:inline">
+                    Click &quot;Next&quot; below to open camera ➔
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-3 text-center text-xs text-slate-400">
+                  Please select an employee from the list above to proceed to camera calibration.
+                </div>
+              )}
+            </div>
           ) : (
+            /* ============================================================== */
+            /* STEP 2: CAMERA & 15-POSE VIEW (Active only after clicking Next)*/
+            /* ============================================================== */
             <>
-              {/* Employee Selector for SuperAdmin / MasterAdmin */}
-              {trainedBy !== 'Self' && (
-                <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
-                      <User size={20} />
+              {/* Top Staff Confirmation & Switch Header in Step 2 */}
+              {trainedBy !== 'Self' && currentEmployee && (
+                <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3 sm:p-3.5 shadow-sm flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 truncate">
+                    <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shrink-0">
+                      <User size={18} />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <label htmlFor="staff-select" className="text-xs font-bold text-white tracking-wide">
-                          Select Employee to Train Face
-                        </label>
-                        <span className="text-[10px] font-bold text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded-full border border-blue-800/60 uppercase">
-                          Required
+                    <div className="truncate">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-xs font-bold text-white truncate">
+                          {currentEmployee.name}
+                        </span>
+                        <span className="font-mono text-[10px] font-bold text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded border border-blue-800/60 shrink-0">
+                          {currentEmployee.employee_code}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 m-0 mt-0.5">
-                        {currentEmployee
-                          ? `Enrolling: ${currentEmployee.name} (${currentEmployee.employee_code}) • ${currentEmployee.company_name || 'Assigned Company'}`
-                          : 'Please choose which staff member will be registered with these 15 poses.'}
+                      <p className="text-[11px] text-slate-400 m-0 mt-0.5 truncate">
+                        {currentEmployee.company_name || 'Assigned Company'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="min-w-[270px] sm:max-w-xs w-full">
-                    <select
-                      id="staff-select"
-                      value={selectedEmpCode}
-                      onChange={(e) => handleEmployeeChange(e.target.value)}
-                      disabled={isSubmitting || isBackgroundTraining}
-                      className="w-full bg-slate-900 border border-slate-600 focus:border-blue-500 hover:border-slate-500 text-white text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-blue-500/40 transition cursor-pointer"
-                    >
-                      <option value="">
-                        {isLoadingEmployees
-                          ? 'Loading employees list...'
-                          : `-- Choose Employee (${availableEmployees.length} Total) --`}
-                      </option>
-                      {availableEmployees.map((emp) => (
-                        <option key={emp.employee_code} value={emp.employee_code}>
-                          {emp.name} ({emp.employee_code}) {emp.is_face_enrolled ? `• [Enrolled (${emp.face_sample_count || 15} Poses)]` : '• [Not Enrolled]'}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBackToSelectEmployee}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 text-xs font-semibold cursor-pointer transition shrink-0"
+                    title="Change employee"
+                  >
+                    <ChevronLeft size={14} />
+                    <span>Change Employee</span>
+                  </button>
                 </div>
               )}
 
               {/* Camera Area + Viewfinder */}
               <div className="relative rounded-2xl bg-black overflow-hidden aspect-4/3 max-h-[360px] sm:max-h-[400px] mx-auto flex items-center justify-center shadow-inner border border-slate-800">
-                {/* Overlay asking to choose employee first */}
-                {trainedBy !== 'Self' && !currentEmployee && (
-                  <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center z-20 space-y-3">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center shadow-lg animate-pulse">
-                      <User size={28} />
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="text-sm font-bold text-white m-0">Please Select an Employee Above</h4>
-                      <p className="text-xs text-slate-300 max-w-xs m-0 leading-relaxed">
-                        Choose a staff member from the dropdown above before starting the 15-pose face calibration.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
                 {/* Live Video */}
                 <video
                   ref={videoRef}
@@ -789,7 +995,7 @@ export default function FaceEnrollmentModal({
 
                 {/* Camera Error Message */}
                 {cameraError && (
-                  <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center text-red-300 space-y-3">
+                  <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center text-red-300 space-y-3 z-30">
                     <AlertCircle size={36} className="text-red-400" />
                     <p className="text-xs font-semibold max-w-sm">{cameraError}</p>
                     <button
@@ -936,7 +1142,6 @@ export default function FaceEnrollmentModal({
                           capturedSamplesRef.current = updated;
                           setCapturedSamples(updated);
 
-                          // Allow capturing this specific pose
                           allCompletedRef.current = false;
                           setAllCompleted(false);
                           isCoolingDownRef.current = false;
@@ -988,53 +1193,89 @@ export default function FaceEnrollmentModal({
 
         {/* Modal Footer */}
         {!submitSuccess && (
-          <div className="bg-slate-800/80 border-t border-slate-700 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer border border-slate-600"
-            >
-              {isBackgroundTraining ? 'Close Window (Training in Background)' : 'Cancel'}
-            </button>
-
-            <div className="flex flex-wrap items-center gap-2.5">
-              {isBackgroundTraining && (
-                <div className="flex items-center gap-2 text-xs text-blue-300 font-semibold bg-blue-950/70 px-3 py-1.5 rounded-xl border border-blue-500/40">
-                  <RefreshCw size={13} className="animate-spin text-blue-400 shrink-0" />
-                  <span>AI training running in background... You can close this window.</span>
-                </div>
-              )}
+          step === 'select_employee' && trainedBy !== 'Self' ? (
+            /* Step 1 Footer: Cancel and Next */
+            <div className="bg-slate-800/80 border-t border-slate-700 px-5 py-3.5 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleModalClose}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer border border-slate-600"
+              >
+                Cancel
+              </button>
 
               <button
                 type="button"
-                onClick={handleTrainAndEnroll}
-                disabled={!activeEmp || capturedCount < 5 || isSubmitting}
-                className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 ${
-                  allPosesCompleted
-                    ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 ring-4 ring-emerald-500/40 shadow-emerald-500/30'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
-                }`}
+                onClick={handleProceedToCamera}
+                disabled={!currentEmployee}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/20"
               >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin" />
-                    <span>Training in Background...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={14} />
-                    <span>
-                      {!activeEmp
-                        ? 'Select an Employee Above'
-                        : allPosesCompleted
-                        ? `Enroll & Train All 15 Poses (${activeEmp.name})`
-                        : `Train with ${capturedCount} Poses (${activeEmp.name})`}
-                    </span>
-                  </>
-                )}
+                <Sparkles size={14} />
+                <span>Next: Open Camera &amp; Train Face</span>
+                <ChevronRight size={16} />
               </button>
             </div>
-          </div>
+          ) : (
+            /* Step 2 Footer: Back to Staff Selection and Submit */
+            <div className="bg-slate-800/80 border-t border-slate-700 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {trainedBy !== 'Self' ? (
+                <button
+                  type="button"
+                  onClick={handleBackToSelectEmployee}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer border border-slate-600"
+                >
+                  <ChevronLeft size={15} />
+                  <span>Back to Staff Selection</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleModalClose}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer border border-slate-600"
+                >
+                  {isBackgroundTraining ? 'Close Window (Training in Background)' : 'Cancel'}
+                </button>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                {isBackgroundTraining && (
+                  <div className="flex items-center gap-2 text-xs text-blue-300 font-semibold bg-blue-950/70 px-3 py-1.5 rounded-xl border border-blue-500/40">
+                    <RefreshCw size={13} className="animate-spin text-blue-400 shrink-0" />
+                    <span>AI training running in background... You can close this window.</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleTrainAndEnroll}
+                  disabled={!activeEmp || capturedCount < 5 || isSubmitting}
+                  className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border-0 ${
+                    allPosesCompleted
+                      ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 ring-4 ring-emerald-500/40 shadow-emerald-500/30'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      <span>Training in Background...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      <span>
+                        {!activeEmp
+                          ? 'Select an Employee Above'
+                          : allPosesCompleted
+                          ? `Enroll & Train All 15 Poses (${activeEmp.name})`
+                          : `Train with ${capturedCount} Poses (${activeEmp.name})`}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>

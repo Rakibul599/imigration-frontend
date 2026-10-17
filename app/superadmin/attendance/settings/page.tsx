@@ -26,6 +26,7 @@ import {
   X,
   Info,
   Briefcase,
+  CalendarCheck,
 } from 'lucide-react';
 import {
   OfficeLocation,
@@ -53,13 +54,14 @@ import {
   updatePublicHoliday,
   deletePublicHoliday,
   calculateShiftDuration,
+  updateYearlyAnnualLeave,
 } from '@/lib/attendanceSettingsStorage';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function OfficeLocationSettingsPage() {
-  // Navigation Tabs: 'schedule' | 'holidays' | 'geofence'
-  const [activeTab, setActiveTab] = useState<'schedule' | 'holidays' | 'geofence'>('schedule');
+  // Navigation Tabs: 'schedule' | 'holidays' | 'annual_leave' | 'geofence'
+  const [activeTab, setActiveTab] = useState<'schedule' | 'holidays' | 'annual_leave' | 'geofence'>('schedule');
 
   // --- ATTENDANCE SCHEDULE & HOLIDAYS STATE ---
   const [schedule, setSchedule] = useState<AttendanceSchedule>(DEFAULT_SCHEDULE);
@@ -75,6 +77,11 @@ export default function OfficeLocationSettingsPage() {
   const [selectedWeeklyDays, setSelectedWeeklyDays] = useState<string[]>(['Friday', 'Saturday']);
   const [isSavingGeneral, setIsSavingGeneral] = useState(false);
   const [isSavingHolidays, setIsSavingHolidays] = useState(false);
+
+  // Yearly Annual Leave Form State
+  const [yearlyAnnualLeaveDays, setYearlyAnnualLeaveDays] = useState<number>(14);
+  const [annualLeaveNotes, setAnnualLeaveNotes] = useState<string>('Standard corporate yearly annual leave policy');
+  const [isSavingAnnualLeave, setIsSavingAnnualLeave] = useState<boolean>(false);
 
   // Shift Modal State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -161,6 +168,12 @@ export default function OfficeLocationSettingsPage() {
         setGracePeriodMinutes(Number(data.schedule.grace_period_minutes) ?? 15);
         setRestTimeMinutes(Number(data.schedule.rest_time_minutes) ?? 60);
         setMonthlyHolidays(Number(data.schedule.monthly_fixed_holidays) ?? 2);
+        if (data.schedule.yearly_annual_leave_days !== undefined && data.schedule.yearly_annual_leave_days !== null) {
+          setYearlyAnnualLeaveDays(Number(data.schedule.yearly_annual_leave_days));
+        }
+        if (data.schedule.notes) {
+          setAnnualLeaveNotes(data.schedule.notes);
+        }
         if (Array.isArray(data.schedule.weekly_fixed_days)) {
           setSelectedWeeklyDays(data.schedule.weekly_fixed_days);
         }
@@ -417,6 +430,25 @@ export default function OfficeLocationSettingsPage() {
       showToast('success', `Holiday "${hol.title}" removed.`);
     } catch (err: any) {
       showToast('error', err.message || 'Failed to delete public holiday.');
+    }
+  };
+
+  // --- YEARLY ANNUAL LEAVE ACTIONS ---
+  const handleSaveAnnualLeave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (yearlyAnnualLeaveDays < 0 || yearlyAnnualLeaveDays > 365) {
+      showToast('error', 'Please enter a valid number of annual leave days (0 to 365).');
+      return;
+    }
+    setIsSavingAnnualLeave(true);
+    try {
+      const updated = await updateYearlyAnnualLeave(yearlyAnnualLeaveDays, annualLeaveNotes);
+      setSchedule(updated);
+      showToast('success', `Yearly annual leave set to ${yearlyAnnualLeaveDays} days per year.`);
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to update yearly annual leave settings.');
+    } finally {
+      setIsSavingAnnualLeave(false);
     }
   };
 
@@ -678,6 +710,26 @@ export default function OfficeLocationSettingsPage() {
               }`}
             >
               {holidays.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('annual_leave')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              activeTab === 'annual_leave'
+                ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+            }`}
+          >
+            <CalendarCheck size={15} />
+            <span>Yearly Annual Leave</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                activeTab === 'annual_leave' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {yearlyAnnualLeaveDays}d
             </span>
           </button>
 
@@ -1116,7 +1168,154 @@ export default function OfficeLocationSettingsPage() {
       )}
 
       {/* ========================================================= */}
-      {/* TAB 3: OFFICE GEOFENCE & LOCATIONS (Preserved) */}
+      {/* TAB 3: YEARLY ANNUAL LEAVE SETTINGS */}
+      {/* ========================================================= */}
+      {activeTab === 'annual_leave' && (
+        <div className="space-y-6">
+          {/* Card 1: Yearly Annual Leave Policy Settings */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CalendarCheck size={18} className="text-[#0b4da2]" />
+                  <h2 className="text-base font-bold text-slate-900 m-0">Yearly Annual Leave Policy</h2>
+                </div>
+                <p className="text-xs text-slate-500 m-0 mt-0.5">
+                  Configure the total yearly annual leave entitlement days. This directly reflects on the employee panel under Apply Annual Leave.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSaveAnnualLeave()}
+                disabled={isSavingAnnualLeave}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0b4da2] text-white hover:bg-blue-800 font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer border-0"
+              >
+                {isSavingAnnualLeave ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Saving Policy...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    <span>Save Annual Leave Policy</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAnnualLeave} className="mt-5 space-y-6">
+              {/* Main Allocation Input */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <div className="max-w-xl">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Total Yearly Annual Leave (Days / Year)
+                  </label>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Number of paid annual leave days granted to each employee per calendar year.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-44">
+                      <input
+                        type="number"
+                        min="0"
+                        max="365"
+                        step="0.5"
+                        value={yearlyAnnualLeaveDays}
+                        onChange={(e) => setYearlyAnnualLeaveDays(parseFloat(e.target.value) || 0)}
+                        className="w-full pl-4 pr-12 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b4da2]/30 focus:border-[#0b4da2] text-sm font-black text-slate-800 bg-white"
+                        placeholder="14"
+                        required
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                        Days
+                      </span>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[12, 14, 18, 21, 24, 30].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setYearlyAnnualLeaveDays(preset)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                            yearlyAnnualLeaveDays === preset
+                              ? 'bg-[#0b4da2] text-white border-[#0b4da2]'
+                              : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {preset} Days
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Policy Notes / Guidelines */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Policy Notes &amp; Terms for Employees
+                </label>
+                <textarea
+                  rows={3}
+                  value={annualLeaveNotes}
+                  onChange={(e) => setAnnualLeaveNotes(e.target.value)}
+                  placeholder="e.g. Standard corporate yearly annual leave policy. All leaves require prior manager approval."
+                  className="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b4da2]/30 focus:border-[#0b4da2] text-xs font-normal text-slate-800 bg-white"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Visible to administrators and referenced during leave evaluation.
+                </p>
+              </div>
+
+              {/* Employee Preview Summary Card */}
+              <div className="border border-indigo-100 bg-indigo-50/40 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Info size={16} className="text-[#0b4da2]" />
+                  <span className="text-xs font-bold text-slate-800">
+                    Live Employee Portal Preview (`/employee/attendance/apply-leave`)
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider m-0">
+                      Total Yearly Annual Leave
+                    </p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-2xl font-black text-slate-900">{yearlyAnnualLeaveDays}</span>
+                      <span className="text-xs text-slate-500 font-bold">Days / Year</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 m-0">Statutory annual entitlement</p>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-2xs">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider m-0">
+                      Total Remaining Annual Leave
+                    </p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-2xl font-black text-[#0b4da2]">{yearlyAnnualLeaveDays}</span>
+                      <span className="text-xs text-[#0b4da2] font-bold">Days</span>
+                    </div>
+                    <p className="text-[11px] text-[#0b4da2] font-semibold mt-1 m-0">Available to request (Unused)</p>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-3 m-0 flex items-center gap-1.5">
+                  <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                  <span>
+                    When saved, employee panel calculates remaining days dynamically as: Total Yearly Annual Leave minus approved taken days.
+                  </span>
+                </p>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: OFFICE GEOFENCE & LOCATIONS (Preserved) */}
       {/* ========================================================= */}
       {activeTab === 'geofence' && (
         <div className="space-y-6">

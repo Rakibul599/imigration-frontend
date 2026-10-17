@@ -16,6 +16,7 @@ import {
   Sparkles,
   Trash2,
   UserCheck,
+  UserMinus,
   Users,
   X,
 } from 'lucide-react';
@@ -194,6 +195,14 @@ export default function SuperAdminEmployeesPage() {
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+            <Link
+              href="/superadmin/employees/resignations"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all no-underline whitespace-nowrap"
+            >
+              <FileText size={14} className="text-rose-600" />
+              <span>Resignations &amp; Letters</span>
+            </Link>
+
             <button
               type="button"
               onClick={() => setIsCardModalOpen(true)}
@@ -464,6 +473,14 @@ export default function SuperAdminEmployeesPage() {
                   {/* Actions */}
                   <td className="py-3 px-4 align-middle text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      <Link
+                        href={`/superadmin/employees/resignations/new?employee_code=${emp.employee_code}`}
+                        title="Issue Resignation & Clearance"
+                        className="w-8 h-8 rounded border border-rose-200 bg-white hover:bg-rose-50 flex items-center justify-center text-rose-600 hover:text-rose-700 transition-colors no-underline shadow-2xs"
+                      >
+                        <UserMinus size={14} />
+                      </Link>
+
                       <Link
                         href={`/superadmin/employees/edit?id=${emp.id}`}
                         title="Edit Employee & Permissions"

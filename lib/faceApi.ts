@@ -255,12 +255,16 @@ export async function deleteEmployeeFaceProfile(employeeCode: string): Promise<b
 /** Get attendance records with filters */
 export async function getAttendanceRecords(params?: {
   date?: string;
+  start_date?: string;
+  end_date?: string;
   employee_code?: string;
   company_id?: string;
   search?: string;
 }): Promise<AttendanceRecord[]> {
   const query = new URLSearchParams();
   if (params?.date) query.set('date', params.date);
+  if (params?.start_date) query.set('start_date', params.start_date);
+  if (params?.end_date) query.set('end_date', params.end_date);
   if (params?.employee_code) query.set('employee_code', params.employee_code);
   if (params?.company_id) query.set('company_id', params.company_id);
   if (params?.search) query.set('search', params.search);

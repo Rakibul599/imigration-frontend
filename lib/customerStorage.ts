@@ -33,6 +33,8 @@ export interface CustomerRecord {
   company_id?: string;
   agent_id?: string;
   agent_name?: string;
+  program_id?: string;
+  program_name?: string;
   other_company_name?: string;
   other_company_boss_phone?: string;
   other_company_address?: string;
@@ -120,12 +122,18 @@ export function getCustomerFromCache(id: string | number): CustomerRecord | null
 /**
  * Fetch all customers from backend API
  */
-export async function fetchCustomers(companyId?: string, search?: string, sector?: string): Promise<CustomerRecord[]> {
+export async function fetchCustomers(
+  companyId?: string,
+  search?: string,
+  sector?: string,
+  programId?: string
+): Promise<CustomerRecord[]> {
   try {
     const params = new URLSearchParams();
     if (companyId) params.append('company_id', companyId);
     if (search) params.append('search', search);
     if (sector && sector !== 'ALL') params.append('sector', sector);
+    if (programId && programId !== 'ALL') params.append('program_id', programId);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -141,7 +149,7 @@ export async function fetchCustomers(companyId?: string, search?: string, sector
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && !companyId && !search && !sector && !programId) {
           try {
             const sanitized = sanitizeForStorage(data);
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
@@ -162,6 +170,9 @@ export async function fetchCustomers(companyId?: string, search?: string, sector
         let list: CustomerRecord[] = JSON.parse(cached);
         if (companyId) {
           list = list.filter((c) => !c.company_id || c.company_id === companyId);
+        }
+        if (programId && programId !== 'ALL') {
+          list = list.filter((c) => String(c.program_id) === String(programId));
         }
         if (search) {
           const s = search.toLowerCase();

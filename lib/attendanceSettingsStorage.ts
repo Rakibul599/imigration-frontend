@@ -4,6 +4,7 @@ export interface AttendanceSchedule {
   grace_period_minutes: number;
   rest_time_minutes: number;
   monthly_fixed_holidays: number;
+  yearly_annual_leave_days?: number;
   weekly_fixed_days: string[];
   notes?: string;
   created_at?: string;
@@ -50,6 +51,7 @@ export const DEFAULT_SCHEDULE: AttendanceSchedule = {
   grace_period_minutes: 15,
   rest_time_minutes: 60,
   monthly_fixed_holidays: 2,
+  yearly_annual_leave_days: 14,
   weekly_fixed_days: ['Friday', 'Saturday'],
   notes: 'Standard corporate attendance & leave policy',
 };
@@ -137,6 +139,31 @@ export async function updateGeneralSchedule(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || 'Failed to update attendance schedule.');
+  }
+
+  const json = await res.json();
+  return json.schedule;
+}
+
+/**
+ * Update yearly annual leave entitlement days per year
+ */
+export async function updateYearlyAnnualLeave(
+  yearly_annual_leave_days: number,
+  notes?: string
+): Promise<AttendanceSchedule> {
+  const res = await fetch(`${API_BASE}/attendance-settings/yearly-annual-leave`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ yearly_annual_leave_days, notes }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to update yearly annual leave settings.');
   }
 
   const json = await res.json();

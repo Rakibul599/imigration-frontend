@@ -32,6 +32,7 @@ import {
   Trash2,
   Upload,
   Briefcase,
+  BookOpen,
   Edit2,
   User,
   X,
@@ -39,6 +40,7 @@ import {
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend, updateStoredCompany } from '@/lib/companyStorage';
 import { AgentRecord, fetchAgents, getStoredAgents } from '@/lib/agentStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
 import {
   CustomerDocument,
   CustomerRecord,
@@ -148,6 +150,10 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     return typeof window !== 'undefined' ? getStoredAgents() : [];
   });
   const [agentId, setAgentId] = useState<string>('');
+  const [programs, setPrograms] = useState<ProgramRecord[]>(() => {
+    return typeof window !== 'undefined' ? getStoredPrograms() : [];
+  });
+  const [programId, setProgramId] = useState<string>('');
   const [passportNo, setPassportNo] = useState('');
   const [passportFile, setPassportFile] = useState<string>('');
   const [nidNo, setNidNo] = useState('');
@@ -288,11 +294,12 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     let isMounted = true;
     async function refreshBackgroundData() {
       try {
-        const [allComps, secList, svcList, agentList] = await Promise.all([
+        const [allComps, secList, svcList, agentList, progList] = await Promise.all([
           fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
           fetchWorkingSectors(),
           fetchServiceCards().catch(() => getStoredServices()),
           fetchAgents().catch(() => getStoredAgents()),
+          fetchPrograms().catch(() => getStoredPrograms()),
         ]);
 
         if (!isMounted) return;
@@ -301,6 +308,9 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
         setSectors(secList);
         if (Array.isArray(agentList)) {
           setAgents(agentList);
+        }
+        if (Array.isArray(progList)) {
+          setPrograms(progList);
         }
         if (svcList && svcList.length > 0) {
           setAvailableServices(svcList);
@@ -334,6 +344,9 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     }
     if (cust.agent_id) {
       setAgentId(String(cust.agent_id));
+    }
+    if (cust.program_id) {
+      setProgramId(String(cust.program_id));
     }
     setPassportNo(cust.passport_no || '');
     setPassportFile(cust.passport_file || '');
@@ -422,6 +435,24 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       })),
     ];
   }, [agents]);
+
+  // Select2 options for programs
+  const programOptions: Select2Option[] = useMemo(() => {
+    return [
+      {
+        value: '',
+        label: 'No Program (General / Unassigned)',
+        subLabel: 'Standard foreign worker deployment',
+        badge: 'General',
+      },
+      ...programs.map((p) => ({
+        value: String(p.id),
+        label: `${p.name}${p.code ? ` (${p.code})` : ''}`,
+        subLabel: [p.category, p.duration, p.fees ? `Fee: RM ${p.fees}` : null].filter(Boolean).join(' • ') || 'Standard program',
+        badge: p.status === 'active' ? 'Active' : p.status,
+      })),
+    ];
+  }, [programs]);
 
   // File Upload Helper
   const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -563,11 +594,14 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     setFeedback(null);
 
     const selectedAgent = agents.find((a) => String(a.id) === agentId);
+    const selectedProgram = programs.find((p) => String(p.id) === programId);
     const payload: Partial<CustomerRecord> = {
       full_name: fullName.trim(),
       company_id: companyId || (companies[0]?.id || ''),
       agent_id: agentId || undefined,
       agent_name: selectedAgent ? selectedAgent.name : undefined,
+      program_id: programId || undefined,
+      program_name: selectedProgram ? selectedProgram.name : undefined,
       passport_no: passportNo.trim(),
       passport_file: passportFile,
       nid_no: nidNo.trim(),
@@ -975,6 +1009,43 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
               ) : (
                 <div className="mt-1.5 text-[11px] text-slate-400">
                   Optional: Associate this foreign worker with a recruitment agent
+                </div>
+              )}
+            </div>
+
+            {/* Select Program - Placed directly below Select Recruitment Agent */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Select Program
+                </label>
+                <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  Program Scheme
+                </span>
+              </div>
+              <Select2Search
+                options={programOptions}
+                value={programId}
+                disabled={effectiveIsViewMode}
+                onChange={(val) => setProgramId(val)}
+                placeholder="Search & select recruitment program..."
+                searchPlaceholder="Type program name, code or category..."
+                icon={<BookOpen size={15} className="text-slate-400" />}
+              />
+              {programId ? (
+                <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                  <span className="text-indigo-700 font-medium truncate">
+                    Selected Program: <strong className="font-semibold text-slate-800">{programs.find((p) => String(p.id) === programId)?.name}</strong>
+                  </span>
+                  {programs.find((p) => String(p.id) === programId)?.code && (
+                    <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-semibold">
+                      {programs.find((p) => String(p.id) === programId)?.code}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-1.5 text-[11px] text-slate-400">
+                  Optional: Select a specific foreign worker recruitment / deployment program
                 </div>
               )}
             </div>

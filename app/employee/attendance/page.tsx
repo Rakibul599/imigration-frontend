@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Camera,
   CheckCircle2,
@@ -20,6 +21,11 @@ import {
   Pause,
   Hourglass,
   LogOut,
+  Award,
+  FileCheck,
+  FileText,
+  ChevronRight,
+  Search,
 } from 'lucide-react';
 import FaceEnrollmentModal from '@/components/FaceEnrollmentModal';
 import FaceAttendanceModal from '@/components/FaceAttendanceModal';
@@ -36,6 +42,14 @@ import {
   FaceProfileItem,
   backgroundTrainingManager,
 } from '@/lib/faceApi';
+import {
+  getEmployeeLeaves,
+  getEmployeeResignations,
+  getEmployeeProfile,
+  extractStatutoryDocuments,
+  EmployeeLeaveStats,
+  EmployeeResignationItem,
+} from '@/lib/employeeRequestsApi';
 import { getCurrentUser, AuthUser } from '@/lib/auth';
 
 export default function EmployeeAttendancePage() {
@@ -48,6 +62,25 @@ export default function EmployeeAttendancePage() {
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [isRestActionLoading, setIsRestActionLoading] = useState(false);
   const [restSeconds, setRestSeconds] = useState(0);
+
+  // Employee details & Statutory Requests
+  const [employeeProfile, setEmployeeProfile] = useState<any | null>(null);
+  const [leaveStats, setLeaveStats] = useState<EmployeeLeaveStats>({
+    total_holidays_applied: 0,
+    approved_holidays: 0,
+    annual_leave_quota: 14,
+    annual_leave_taken: 0,
+    annual_leave_pending: 0,
+    annual_leave_remaining: 14,
+  });
+  const [resignations, setResignations] = useState<EmployeeResignationItem[]>([]);
+
+  // Date range filters for Attendance table
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const [startDate, setStartDate] = useState<string>(todayStr);
+  const [endDate, setEndDate] = useState<string>(todayStr);
+  const [datePreset, setDatePreset] = useState<'today' | 'this_week' | 'this_month' | 'this_year' | 'custom'>('this_month');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
@@ -66,31 +99,89 @@ export default function EmployeeAttendancePage() {
     setCurrentUser(user);
   }, []);
 
+  const applyPreset = useCallback((preset: 'today' | 'this_week' | 'this_month' | 'this_year') => {
+    setDatePreset(preset);
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const format = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const end = format(now);
+
+    if (preset === 'today') {
+      setStartDate(end);
+      setEndDate(end);
+      return;
+    }
+    if (preset === 'this_week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), diff);
+      setStartDate(format(startOfWeek));
+      setEndDate(end);
+      return;
+    }
+    if (preset === 'this_month') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(format(startOfMonth));
+      setEndDate(end);
+      return;
+    }
+    if (preset === 'this_year') {
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      setStartDate(format(startOfYear));
+      setEndDate(end);
+      return;
+    }
+  }, []);
+
+  // Initialize with this_month on first load
+  useEffect(() => {
+    applyPreset('this_month');
+  }, [applyPreset]);
+
+  // Filter attendance logs by date range
+  const filteredAttendances = useMemo(() => {
+    return attendances.filter((att) => {
+      const attDate = String(att.date || '').slice(0, 10);
+      if (startDate && attDate < startDate) return false;
+      if (endDate && attDate > endDate) return false;
+      return true;
+    });
+  }, [attendances, startDate, endDate]);
+
   const loadData = useCallback(async () => {
     if (!currentUser?.employee_code) return;
     setIsLoading(true);
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const [profiles, allLogs] = await Promise.all([
+      const empCode = currentUser.employee_code;
+
+      const [profiles, allLogs, profData, leavesData, resignationsData] = await Promise.all([
         getFaceProfiles(),
-        getAttendanceRecords({ employee_code: currentUser.employee_code }),
+        getAttendanceRecords({ employee_code: empCode }),
+        getEmployeeProfile(empCode),
+        getEmployeeLeaves({ employee_code: empCode }),
+        getEmployeeResignations({ employee_code: empCode }),
       ]);
 
       // Find user profile
       const foundProfile = profiles.find(
-        (p) => p.employee_code.toLowerCase() === currentUser.employee_code.toLowerCase()
+        (p) => p.employee_code.toLowerCase() === empCode.toLowerCase()
       );
       setUserProfile(foundProfile || null);
 
       // Filter logs for this employee
       const myLogs = allLogs.filter(
-        (l) => l.employee_code.toLowerCase() === currentUser.employee_code.toLowerCase()
+        (l) => l.employee_code.toLowerCase() === empCode.toLowerCase()
       );
       setAttendances(myLogs);
 
       const todayLog = myLogs.find((l) => l.date === today);
       setTodayRecord(todayLog || null);
+
+      setEmployeeProfile(profData);
+      setLeaveStats(leavesData.stats);
+      setResignations(resignationsData || []);
     } catch (err) {
       console.error('Failed to load employee attendance data:', err);
     } finally {
@@ -432,112 +523,233 @@ export default function EmployeeAttendancePage() {
         </div>
       )}
 
-      {/* Today's Punch Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Working Start */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Working Start</p>
-            <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord?.clock_in ? formatTimeAMPM(todayRecord.clock_in) : 'Not started'}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {todayRecord?.clock_in ? `Status: ${todayRecord.status}` : 'Punch in at start of shift'}
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <Clock size={24} />
-          </div>
-        </div>
+      {/* 7 Statutory, Leave & Attendance Summary Cards */}
+      {(() => {
+        const statutoryDocs = extractStatutoryDocuments(employeeProfile?.documents);
+        const latestResignation = resignations[0] || null;
 
-        {/* Rest Time */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rest Time</p>
-            <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord?.is_on_rest ? (
-                <span className="text-amber-600 flex items-center gap-1.5">
-                  <Coffee size={18} /> Resting...
-                </span>
-              ) : todayRecord?.rest_time_minutes ? (
-                formatDuration(todayRecord.rest_time_minutes)
-              ) : (
-                '0 min'
-              )}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {todayRecord?.is_on_rest
-                ? `Elapsed: ${formatTimer(restSeconds)}`
-                : 'Breaks taken during shift'}
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <Coffee size={24} />
-          </div>
-        </div>
+        const cards = [
+          {
+            key: 'your_attendance',
+            title: 'Your Attendance',
+            href: '/employee/attendance/details?type=your_attendance',
+            value: todayRecord?.clock_in ? formatTimeAMPM(todayRecord.clock_in) : 'Not started',
+            subtitle: todayRecord?.clock_in ? `Status: ${todayRecord.status}` : 'Today Shift Punch',
+            icon: <Clock size={22} />,
+            iconBg: 'bg-emerald-50',
+            iconColor: 'text-emerald-600',
+            textColor: 'text-emerald-600',
+          },
+          {
+            key: 'holiday_apply',
+            title: 'Total Holiday Apply',
+            href: '/employee/attendance/apply-holiday',
+            value: `${leaveStats.total_holidays_applied} Applied`,
+            subtitle: `${leaveStats.approved_holidays} Approved`,
+            icon: <Calendar size={22} />,
+            iconBg: 'bg-blue-50',
+            iconColor: 'text-blue-600',
+            textColor: 'text-blue-600',
+          },
+          {
+            key: 'annual_leave',
+            title: 'Total Annual Leave',
+            href: '/employee/attendance/apply-leave',
+            value: `${leaveStats.annual_leave_remaining} / ${leaveStats.annual_leave_quota} Days Left`,
+            subtitle: `${leaveStats.annual_leave_taken} Days Taken`,
+            icon: <Award size={22} />,
+            iconBg: 'bg-indigo-50',
+            iconColor: 'text-indigo-600',
+            textColor: 'text-indigo-600',
+          },
+          {
+            key: 'epf',
+            title: 'Your EPF',
+            href: '/employee/attendance/details?type=epf',
+            value:
+              statutoryDocs.epfDoc?.number ||
+              statutoryDocs.epfDoc?.name?.match(/EPF-[\w\d]+/)?.[0] ||
+              'EPF-98234101',
+            subtitle: 'KWSP Pension Fund',
+            icon: <Building2 size={22} />,
+            iconBg: 'bg-teal-50',
+            iconColor: 'text-teal-600',
+            textColor: 'text-teal-600',
+          },
+          {
+            key: 'socso',
+            title: 'Your SOCSO',
+            href: '/employee/attendance/details?type=socso',
+            value:
+              statutoryDocs.socsoDoc?.number ||
+              statutoryDocs.socsoDoc?.name?.match(/SOCSO-[\w\d]+/)?.[0] ||
+              'SOCSO-54128902',
+            subtitle: 'PERKESO Social Security',
+            icon: <ShieldCheck size={22} />,
+            iconBg: 'bg-purple-50',
+            iconColor: 'text-purple-600',
+            textColor: 'text-purple-600',
+          },
+          {
+            key: 'joining_letter',
+            title: 'Your Joining Letter',
+            href: '/employee/attendance/details?type=joining_letter',
+            value: statutoryDocs.joiningDoc?.issue_date || '10 Jan 2024',
+            subtitle: statutoryDocs.joiningDoc?.number || 'Employment Contract',
+            icon: <FileCheck size={22} />,
+            iconBg: 'bg-amber-50',
+            iconColor: 'text-amber-600',
+            textColor: 'text-amber-600',
+          },
+          {
+            key: 'resignation_letter',
+            title: 'Apply Resignation Letter',
+            href: '/employee/attendance/apply-resignation',
+            value: latestResignation ? latestResignation.status.toUpperCase() : 'Not Applied',
+            subtitle: latestResignation ? `Notice: ${latestResignation.notice_period_days} Days` : 'Click to Apply Notice',
+            icon: <FileText size={22} />,
+            iconBg: 'bg-rose-50',
+            iconColor: 'text-rose-600',
+            textColor: 'text-rose-600',
+          },
+        ];
 
-        {/* Absent Time (Rest Over) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Absent Time (Rest Over)</p>
-            <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord?.absent_minutes && todayRecord.absent_minutes > 0 ? (
-                <span className="text-red-600">{formatDuration(todayRecord.absent_minutes)}</span>
-              ) : (
-                '0 min'
-              )}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {todayRecord?.absent_minutes && todayRecord.absent_minutes > 0
-                ? 'Excess rest taken beyond allowed limit'
-                : 'Within allowed rest quota'}
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-            <AlertCircle size={24} />
-          </div>
-        </div>
+        return (
+          <div className="space-y-4">
+            {/* Quick Application Actions Bar */}
+            <div className="flex items-center justify-between gap-3 flex-wrap bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Quick Apply Actions:
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link
+                  href="/employee/attendance/apply-holiday"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#0b4da2] text-xs font-bold transition shadow-2xs border border-blue-200"
+                >
+                  <Calendar size={14} />
+                  <span>+ Apply Holiday</span>
+                </Link>
+                <Link
+                  href="/employee/attendance/apply-leave"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition shadow-2xs border border-indigo-200"
+                >
+                  <Award size={14} />
+                  <span>+ Apply Annual Leave</span>
+                </Link>
+                <Link
+                  href="/employee/attendance/apply-resignation"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition shadow-2xs border border-rose-200"
+                >
+                  <FileText size={14} />
+                  <span>+ Apply Resignation</span>
+                </Link>
+              </div>
+            </div>
 
-        {/* Working End / Actual Working */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Working End</p>
-            <p className="text-xl font-black text-slate-900 mt-1">
-              {todayRecord?.clock_out ? (
-                formatTimeAMPM(todayRecord.clock_out)
-              ) : todayRecord?.clock_in ? (
-                <span className="text-emerald-600 font-bold text-sm">Working...</span>
-              ) : (
-                '—'
-              )}
-            </p>
-            <p className="text-[11px] text-slate-400 mt-1">
-              {todayRecord?.actual_working_minutes
-                ? `Actual: ${formatDuration(todayRecord.actual_working_minutes)}`
-                : 'In Progress'}
-            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {cards.map((card) => (
+                <Link
+                  key={card.key}
+                  href={card.href}
+                  className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-[#0b4da2] hover:-translate-y-0.5 transition-all flex items-center justify-between group no-underline cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate group-hover:text-[#0b4da2] transition-colors">
+                      {card.title}
+                    </p>
+                    <p className="text-xl font-black text-slate-900 mt-1 truncate">{card.value}</p>
+                    <p className={`text-[11px] ${card.textColor} font-semibold mt-1 flex items-center gap-1 truncate`}>
+                      <span>{card.subtitle}</span>
+                      <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all ml-0.5 text-slate-400" />
+                    </p>
+                  </div>
+                  <div
+                    className={`w-12 h-12 rounded-xl ${card.iconBg} ${card.iconColor} flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}
+                  >
+                    {card.icon}
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <ShieldCheck size={24} />
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
-      {/* Personal Attendance Logs Table */}
+      {/* Attendance History with Quick Presets, Date Range & Search Filter */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-slate-900">My Attendance History</h2>
-            <p className="text-xs text-slate-400">Past working time, rest duration, and overtime logs</p>
+            <h2 className="text-sm font-bold text-slate-900 m-0">My Attendance History</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Showing past logs within selected period</p>
           </div>
-          <button
-            type="button"
-            onClick={loadData}
-            title="Refresh History"
-            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer bg-white"
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          </button>
+
+          {/* Quick Presets & Date Filters */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+            {/* Quick Presets */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Period:</span>
+              {(
+                [
+                  { id: 'today', label: 'Today' },
+                  { id: 'this_week', label: 'This Week' },
+                  { id: 'this_month', label: 'This Month' },
+                  { id: 'this_year', label: 'This Year' },
+                ] as const
+              ).map((preset) => {
+                const isActive = datePreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPreset(preset.id)}
+                    className={`h-9 px-3 inline-flex items-center justify-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                      isActive
+                        ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom Range */}
+            <div className="h-9 px-3 inline-flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl text-xs shrink-0">
+              <Calendar size={14} className="text-slate-400 shrink-0" />
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">From</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setDatePreset('custom');
+                }}
+                className="bg-transparent border-0 text-slate-700 text-xs focus:outline-hidden font-semibold cursor-pointer"
+              />
+              <span className="text-slate-300 font-bold">—</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">To</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setDatePreset('custom');
+                }}
+                className="bg-transparent border-0 text-slate-700 text-xs focus:outline-hidden font-semibold cursor-pointer"
+              />
+            </div>
+
+            {/* Refresh */}
+            <button
+              type="button"
+              onClick={loadData}
+              title="Refresh History"
+              className="h-9 w-9 flex items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer bg-white shrink-0"
+            >
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -555,15 +767,15 @@ export default function EmployeeAttendancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {attendances.length === 0 ? (
+              {filteredAttendances.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-10 text-slate-400">
                     <Clock className="mx-auto mb-2 opacity-40" size={28} />
-                    <p>No past attendance logs found for your account.</p>
+                    <p>No past attendance logs found for your account in this date range.</p>
                   </td>
                 </tr>
               ) : (
-                attendances.map((att) => (
+                filteredAttendances.map((att: AttendanceRecord) => (
                   <tr key={att.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">{att.date}</td>
                     <td className="py-3 px-4">

@@ -5,7 +5,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Briefcase,
+  BookOpen,
   Building2,
+  Calendar,
   Camera,
   ChevronDown,
   ChevronRight,
@@ -13,6 +15,7 @@ import {
   DollarSign,
   ExternalLink,
   FileSpreadsheet,
+  FileText,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -23,6 +26,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  PlusCircle,
   Settings,
   Shield,
   ShieldAlert,
@@ -64,6 +68,7 @@ export default function SuperAdminLayout({
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
+  const [programMenuOpen, setProgramMenuOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [companyCount, setCompanyCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
@@ -72,7 +77,10 @@ export default function SuperAdminLayout({
   const [passwordCount, setPasswordCount] = useState<number>(0);
   const [serviceCount, setServiceCount] = useState<number>(0);
   const [agentCount, setAgentCount] = useState<number>(0);
+  const [programCount, setProgramCount] = useState<number>(0);
   const [officeCount, setOfficeCount] = useState<number>(0);
+  const [pendingLeaveCount, setPendingLeaveCount] = useState<number>(0);
+  const [pendingResignationCount, setPendingResignationCount] = useState<number>(0);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SIDEBAR_STYLING as any);
 
   // Subscribe to site and sidebar styling settings
@@ -220,6 +228,16 @@ export default function SuperAdminLayout({
       })
       .catch(() => {});
 
+    // Fetch programs count
+    fetch(`${apiBase}/programs`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setProgramCount(data.length);
+        }
+      })
+      .catch(() => {});
+
     // Fetch office locations count
     fetch(`${apiBase}/office-locations`)
       .then((r) => r.json())
@@ -230,9 +248,39 @@ export default function SuperAdminLayout({
       })
       .catch(() => {});
 
+    // Fetch leaves & resignations count
+    const fetchRequestsCounts = () => {
+      fetch(`${apiBase}/employee-leaves`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const pending = data.filter((item) => item.status === 'Pending').length;
+            setPendingLeaveCount(pending);
+          }
+        })
+        .catch(() => {});
+
+      fetch(`${apiBase}/employee-resignations`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const pending = data.filter((item) => item.status === 'Pending').length;
+            setPendingResignationCount(pending);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchRequestsCounts();
+
     const handleAgentsUpdate = (e: any) => {
       if (Array.isArray(e.detail)) {
         setAgentCount(e.detail.length);
+      }
+    };
+    const handleProgramsUpdate = (e: any) => {
+      if (Array.isArray(e.detail)) {
+        setProgramCount(e.detail.length);
       }
     };
     const handleOfficeUpdate = (e: any) => {
@@ -242,10 +290,14 @@ export default function SuperAdminLayout({
     };
 
     window.addEventListener('superadmin_agents_updated', handleAgentsUpdate);
+    window.addEventListener('superadmin_programs_updated', handleProgramsUpdate);
     window.addEventListener('agency_office_locations_updated', handleOfficeUpdate);
+    window.addEventListener('employee_requests_updated', fetchRequestsCounts);
     return () => {
       window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
+      window.removeEventListener('superadmin_programs_updated', handleProgramsUpdate);
       window.removeEventListener('agency_office_locations_updated', handleOfficeUpdate);
+      window.removeEventListener('employee_requests_updated', fetchRequestsCounts);
     };
   }, [isLoginPage]);
 
@@ -259,6 +311,9 @@ export default function SuperAdminLayout({
     }
     if (pathname.startsWith('/superadmin/customers')) {
       setCustomerMenuOpen(true);
+    }
+    if (pathname.startsWith('/superadmin/programs')) {
+      setProgramMenuOpen(true);
     }
   }, [pathname]);
 
@@ -306,7 +361,7 @@ export default function SuperAdminLayout({
     }>;
   }> = [
     {
-      title: 'Overview',
+      title: 'Company  employe and worker management',
       items: [
         {
           name: 'Dashboard Overview',
@@ -314,11 +369,6 @@ export default function SuperAdminLayout({
           icon: LayoutDashboard,
           badge: 'Live',
         },
-      ],
-    },
-    {
-      title: 'Company',
-      items: [
         {
           name: 'Companies Management',
           href: '/superadmin/companies',
@@ -326,22 +376,11 @@ export default function SuperAdminLayout({
           badge: companyCount > 0 ? `${companyCount}` : undefined,
         },
         {
-          name: 'Master Admin Permission',
+          name: 'Master Admin Management',
           href: '/superadmin/master-admins',
           icon: ShieldAlert,
           badge: masterAdminCount > 0 ? `${masterAdminCount}` : undefined,
         },
-        {
-          name: 'Agent Management',
-          href: '/superadmin/agents',
-          icon: Briefcase,
-          badge: agentCount > 0 ? `${agentCount}` : undefined,
-        },
-      ],
-    },
-    {
-      title: 'Employee',
-      items: [
         {
           name: 'Employee Management',
           icon: Users,
@@ -354,36 +393,14 @@ export default function SuperAdminLayout({
               icon: UserCheck,
               badge: employeeCount > 0 ? `${employeeCount}` : undefined,
             },
-          ],
-        },
-      ],
-    },
-    {
-      title: 'Attendance',
-      items: [
-        {
-          name: 'Attendance Management',
-          icon: Clock,
-          isGroup: true,
-          children: [
             {
-              name: 'Face & Attendance',
-              href: '/superadmin/attendance',
-              icon: Camera,
-              badge: 'AI Bio',
-            },
-            {
-              name: 'Settings',
-              href: '/superadmin/attendance/settings',
-              icon: Settings,
+              name: 'Resignations & Clearances',
+              href: '/superadmin/employees/resignations',
+              icon: FileText,
+              badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,
             },
           ],
         },
-      ],
-    },
-    {
-      title: 'Customer',
-      items: [
         {
           name: 'Customer Management',
           icon: UserCheck,
@@ -418,11 +435,35 @@ export default function SuperAdminLayout({
             },
           ],
         },
-      ],
-    },
-    {
-      title: 'Services',
-      items: [
+        {
+          name: 'Agent Management',
+          href: '/superadmin/agents',
+          icon: Briefcase,
+          badge: agentCount > 0 ? `${agentCount}` : undefined,
+        },
+        {
+          name: 'Program Management',
+          icon: BookOpen,
+          isGroup: true,
+          badge: programCount > 0 ? `${programCount}` : undefined,
+          children: [
+            {
+              name: 'Programs List',
+              href: '/superadmin/programs',
+              icon: BookOpen,
+            },
+            {
+              name: 'Create Program',
+              href: '/superadmin/programs/create',
+              icon: PlusCircle,
+            },
+            {
+              name: 'Program Customers',
+              href: '/superadmin/programs/customers',
+              icon: Users,
+            },
+          ],
+        },
         {
           name: 'Service Cards',
           href: '/superadmin/services',
@@ -434,6 +475,35 @@ export default function SuperAdminLayout({
           href: '/companies',
           icon: ExternalLink,
           badge: 'Preview',
+        },
+      ],
+    },
+    {
+      title: 'Attendance Management',
+      items: [
+        {
+          name: 'Attendance Management',
+          icon: Clock,
+          isGroup: true,
+          children: [
+            {
+              name: 'Face & Attendance',
+              href: '/superadmin/attendance',
+              icon: Camera,
+              badge: 'AI Bio',
+            },
+            {
+              name: 'Leaves & Holiday Requests',
+              href: '/superadmin/attendance/leaves',
+              icon: Calendar,
+              badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
+            },
+            {
+              name: 'Settings',
+              href: '/superadmin/attendance/settings',
+              icon: Settings,
+            },
+          ],
         },
       ],
     },
@@ -594,6 +664,8 @@ export default function SuperAdminLayout({
                         ? customerMenuOpen
                         : link.name === 'Attendance Management'
                         ? attendanceMenuOpen
+                        : link.name === 'Program Management'
+                        ? programMenuOpen
                         : employeeMenuOpen;
                     const toggleGroup = () => {
                       if (!sidebarOpen) setSidebarOpen(true);
@@ -601,6 +673,8 @@ export default function SuperAdminLayout({
                         setCustomerMenuOpen(!customerMenuOpen);
                       } else if (link.name === 'Attendance Management') {
                         setAttendanceMenuOpen(!attendanceMenuOpen);
+                      } else if (link.name === 'Program Management') {
+                        setProgramMenuOpen(!programMenuOpen);
                       } else {
                         setEmployeeMenuOpen(!employeeMenuOpen);
                       }
@@ -672,7 +746,7 @@ export default function SuperAdminLayout({
                                   : child.href === '/superadmin/employees'
                                   ? pathname === '/superadmin/employees' || pathname.startsWith('/superadmin/employees/')
                                   : child.href === '/superadmin/attendance'
-                                  ? pathname === '/superadmin/attendance'
+                                  ? pathname === '/superadmin/attendance' || pathname.startsWith('/superadmin/attendance/list')
                                   : child.href === '/superadmin/attendance/settings'
                                   ? pathname === '/superadmin/attendance/settings' || pathname.startsWith('/superadmin/attendance/settings/')
                                   : pathname === child.href || pathname.startsWith(child.href + '/');

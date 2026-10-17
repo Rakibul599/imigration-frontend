@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Building2,
+  Calendar,
   Camera,
   ChevronDown,
   ChevronRight,
@@ -12,6 +13,7 @@ import {
   DollarSign,
   ExternalLink,
   FileSpreadsheet,
+  FileText,
   Globe2,
   KeyRound,
   LayoutDashboard,
@@ -65,6 +67,8 @@ export default function MasterAdminLayout({
   const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
+  const [pendingLeaveCount, setPendingLeaveCount] = useState<number>(0);
+  const [pendingResignationCount, setPendingResignationCount] = useState<number>(0);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SIDEBAR_STYLING as any);
 
   // Subscribe to site and sidebar styling settings
@@ -180,6 +184,36 @@ export default function MasterAdminLayout({
         }
       })
       .catch(() => {});
+
+    // Fetch leaves & resignations count
+    const fetchRequestsCounts = () => {
+      fetch(`${apiBase}/employee-leaves`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const pending = data.filter((item) => item.status === 'Pending').length;
+            setPendingLeaveCount(pending);
+          }
+        })
+        .catch(() => {});
+
+      fetch(`${apiBase}/employee-resignations`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const pending = data.filter((item) => item.status === 'Pending').length;
+            setPendingResignationCount(pending);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchRequestsCounts();
+
+    window.addEventListener('employee_requests_updated', fetchRequestsCounts);
+    return () => {
+      window.removeEventListener('employee_requests_updated', fetchRequestsCounts);
+    };
   }, [isLoginPage]);
 
   // Auto-expand employee and customer menus when navigating
@@ -235,7 +269,7 @@ export default function MasterAdminLayout({
     }>;
   }> = [
     {
-      title: 'Overview',
+      title: 'Company  employe and worker management',
       items: [
         {
           name: 'Dashboard Overview',
@@ -243,22 +277,12 @@ export default function MasterAdminLayout({
           icon: LayoutDashboard,
           badge: 'Live',
         },
-      ],
-    },
-    {
-      title: 'Company',
-      items: [
         {
           name: 'Companies Management',
           href: '/masteradmin/companies',
           icon: Building2,
           badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
         },
-      ],
-    },
-    {
-      title: 'Employee',
-      items: [
         {
           name: 'Employee Management',
           icon: Users,
@@ -271,36 +295,14 @@ export default function MasterAdminLayout({
               icon: UserCheck,
               badge: employeeCount > 0 ? `${employeeCount}` : undefined,
             },
-          ],
-        },
-      ],
-    },
-    {
-      title: 'Attendance',
-      items: [
-        {
-          name: 'Attendance Management',
-          icon: Clock,
-          isGroup: true,
-          children: [
             {
-              name: 'Face & Attendance',
-              href: '/masteradmin/attendance',
-              icon: Camera,
-              badge: 'AI Bio',
-            },
-            {
-              name: 'Settings',
-              href: '/masteradmin/attendance/settings',
-              icon: Settings,
+              name: 'Resignations & Clearances',
+              href: '/masteradmin/employees/resignations',
+              icon: FileText,
+              badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,
             },
           ],
         },
-      ],
-    },
-    {
-      title: 'Customer',
-      items: [
         {
           name: 'Customer Management',
           icon: UserCheck,
@@ -335,16 +337,40 @@ export default function MasterAdminLayout({
             },
           ],
         },
-      ],
-    },
-    {
-      title: 'Services',
-      items: [
         {
           name: 'Services Portal',
           href: '/companies',
           icon: Sparkles,
           badge: 'Cards',
+        },
+      ],
+    },
+    {
+      title: 'Attendance Management',
+      items: [
+        {
+          name: 'Attendance Management',
+          icon: Clock,
+          isGroup: true,
+          children: [
+            {
+              name: 'Face & Attendance',
+              href: '/masteradmin/attendance',
+              icon: Camera,
+              badge: 'AI Bio',
+            },
+            {
+              name: 'Leaves & Holiday Requests',
+              href: '/masteradmin/attendance/leaves',
+              icon: Calendar,
+              badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
+            },
+            {
+              name: 'Settings',
+              href: '/masteradmin/attendance/settings',
+              icon: Settings,
+            },
+          ],
         },
       ],
     },
@@ -577,7 +603,7 @@ export default function MasterAdminLayout({
                                   ? pathname === '/masteradmin/employees' ||
                                     pathname.startsWith('/masteradmin/employees/')
                                   : child.href === '/masteradmin/attendance'
-                                  ? pathname === '/masteradmin/attendance'
+                                  ? pathname === '/masteradmin/attendance' || pathname.startsWith('/masteradmin/attendance/list')
                                   : child.href === '/masteradmin/attendance/settings'
                                   ? pathname === '/masteradmin/attendance/settings' || pathname.startsWith('/masteradmin/attendance/settings/')
                                   : pathname === child.href || pathname.startsWith(child.href + '/');
