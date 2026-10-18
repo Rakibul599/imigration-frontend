@@ -362,3 +362,82 @@ th, table th {
 .anim-card-from-top {
   animation: cardFromTop 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+@media print {
+  /* Hide all non-printable elements */
+  .print\:hidden,
+  .top-strip,
+  aside,
+  header,
+  footer,
+  nav {
+    display: none !important;
+  }
+
+  /* Reset body and root */
+  body, html {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Reset main layout padding & margins */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Prevent horizontal cutoffs and scrolling containers */
+  main,
+  div,
+  section,
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Remove fixed/absolute positioning that overlaps pages */
+  .fixed,
+  .sticky {
+    position: static !important;
+  }
+
+  /* Table print optimization */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 6px 8px !important;
+    color: #0f172a !important;
+    font-size: 10px !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-weight: 700 !important;
+  }
+
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+}

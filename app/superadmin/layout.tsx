@@ -499,6 +499,11 @@ export default function SuperAdminLayout({
               badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
             },
             {
+              name: 'Reports',
+              href: '/superadmin/attendance/reports',
+              icon: FileSpreadsheet,
+            },
+            {
               name: 'Settings',
               href: '/superadmin/attendance/settings',
               icon: Settings,
@@ -540,9 +545,9 @@ export default function SuperAdminLayout({
   const isDarkSidebar = isColorDark(sidebarBg);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden print:bg-white print:overflow-visible">
       {/* Top Strip matching official frontend */}
-      <div className="top-strip z-50">
+      <div className="top-strip z-50 print:hidden">
         <span>Official Super Administrator Portal</span>
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline">Server: Laravel 11 API (MySQL Connected)</span>
@@ -567,7 +572,7 @@ export default function SuperAdminLayout({
         {/* Mobile Backdrop */}
         {mobileMenuOpen && (
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 lg:hidden"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 lg:hidden print:hidden"
             onClick={() => setMobileMenuOpen(false)}
           />
         )}
@@ -578,7 +583,7 @@ export default function SuperAdminLayout({
             backgroundColor: sidebarBg,
             borderColor: sidebarBorder,
           }}
-          className={`fixed top-[32px] bottom-0 left-0 z-50 flex flex-col border-r transition-all duration-300 shadow-sm ${
+          className={`fixed top-[32px] bottom-0 left-0 z-50 flex flex-col border-r transition-all duration-300 shadow-sm print:hidden ${
             sidebarOpen ? 'w-64' : 'w-20'
           } ${
             mobileMenuOpen
@@ -977,12 +982,12 @@ export default function SuperAdminLayout({
 
         {/* Main Content Area */}
         <div
-          className={`flex-1 flex flex-col min-h-[calc(100vh-32px)] min-w-0 max-w-full overflow-x-hidden transition-all duration-300 ${
+          className={`flex-1 flex flex-col min-h-[calc(100vh-32px)] min-w-0 max-w-full overflow-x-hidden transition-all duration-300 print:pl-0 print:min-h-0 print:overflow-visible ${
             sidebarOpen ? 'lg:pl-64' : 'lg:pl-20'
           }`}
         >
           {/* White Header Top Bar */}
-          <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between sticky top-[32px] z-30 shadow-xs">
+          <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between sticky top-[32px] z-30 shadow-xs print:hidden">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setMobileMenuOpen(true)}
@@ -1020,10 +1025,10 @@ export default function SuperAdminLayout({
           </header>
 
           {/* White/Light Page Body */}
-          <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-4 sm:p-8 bg-[#f8fafc]">{children}</main>
+          <main className="flex-1 min-w-0 max-w-full overflow-x-hidden p-4 sm:p-8 bg-[#f8fafc] print:p-0 print:bg-white print:overflow-visible">{children}</main>
 
           {/* White Footer */}
-          <footer className="border-t border-slate-200 bg-white py-4 px-8 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+          <footer className="border-t border-slate-200 bg-white py-4 px-8 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2 print:hidden">
             <span>Super Administrator Management Portal</span>
             <span className="font-mono text-[11px] text-slate-400">Laravel 11 REST API • MySQL Connected</span>
           </footer>

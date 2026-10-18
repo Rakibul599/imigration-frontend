@@ -25,8 +25,10 @@ import {
   UserX,
   ArrowUpRight,
   ArrowDownRight,
+  BarChart3,
   BookOpen,
   DollarSign,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export function DynamicCardIcon({
@@ -81,6 +83,8 @@ export function DynamicCardIcon({
     case 'ArrowDownRight': return <ArrowDownRight {...props} />;
     case 'BookOpen': return <BookOpen {...props} />;
     case 'DollarSign': return <DollarSign {...props} />;
+    case 'BarChart3': return <BarChart3 {...props} />;
+    case 'FileSpreadsheet': return <FileSpreadsheet {...props} />;
     default: return <Coins {...props} />;
   }
 }
