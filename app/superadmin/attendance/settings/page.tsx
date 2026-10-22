@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   Clock,
   Calendar,
@@ -27,12 +28,14 @@ import {
   Info,
   Briefcase,
   CalendarCheck,
+  Crosshair,
+  Shapes,
 } from 'lucide-react';
+
 import {
   OfficeLocation,
   fetchOfficeLocations,
   getStoredOfficeLocations,
-  createOfficeLocation,
   updateOfficeLocation,
   deleteOfficeLocation,
   calculateDistanceMeters,
@@ -62,6 +65,17 @@ const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
 export default function OfficeLocationSettingsPage() {
   // Navigation Tabs: 'schedule' | 'holidays' | 'annual_leave' | 'geofence'
   const [activeTab, setActiveTab] = useState<'schedule' | 'holidays' | 'annual_leave' | 'geofence'>('schedule');
+
+  // Detect URL tab query parameter if present
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'geofence' || tab === 'schedule' || tab === 'holidays' || tab === 'annual_leave') {
+        setActiveTab(tab as any);
+      }
+    }
+  }, []);
 
   // --- ATTENDANCE SCHEDULE & HOLIDAYS STATE ---
   const [schedule, setSchedule] = useState<AttendanceSchedule>(DEFAULT_SCHEDULE);
@@ -118,22 +132,6 @@ export default function OfficeLocationSettingsPage() {
     return [];
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null);
-
-  // Location Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    address: '',
-    latitude: '',
-    longitude: '',
-    radius_meters: 150,
-    is_active: true,
-    notes: '',
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDetectingGps, setIsDetectingGps] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
 
   // Live Test Geofence Widget states
   const [isTestingLocation, setIsTestingLocation] = useState(false);
@@ -452,109 +450,7 @@ export default function OfficeLocationSettingsPage() {
     }
   };
 
-  // --- LOCATION ACTIONS (Preserved) ---
-  const handleOpenCreateModal = () => {
-    setEditingLocation(null);
-    setFormData({
-      name: '',
-      address: '',
-      latitude: '',
-      longitude: '',
-      radius_meters: 150,
-      is_active: true,
-      notes: '',
-    });
-    setFormError(null);
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEditModal = (loc: OfficeLocation) => {
-    setEditingLocation(loc);
-    setFormData({
-      name: loc.name,
-      address: loc.address || '',
-      latitude: String(loc.latitude),
-      longitude: String(loc.longitude),
-      radius_meters: loc.radius_meters || 150,
-      is_active: loc.is_active,
-      notes: loc.notes || '',
-    });
-    setFormError(null);
-    setIsModalOpen(true);
-  };
-
-  const handleDetectGPS = async () => {
-    setIsDetectingGps(true);
-    setFormError(null);
-    try {
-      const coords = await detectUserCoordinates();
-      setFormData((prev) => ({
-        ...prev,
-        latitude: coords.latitude.toFixed(6),
-        longitude: coords.longitude.toFixed(6),
-      }));
-      showToast('success', `Coordinates detected via ${coords.source === 'gps' ? 'Device GPS' : 'Network IP'}!`);
-    } catch (err: any) {
-      setFormError(err.message || 'Could not detect current coordinates.');
-    } finally {
-      setIsDetectingGps(false);
-    }
-  };
-
-  const handleSubmitLocation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name.trim()) {
-      setFormError('Please enter office name.');
-      return;
-    }
-    const lat = parseFloat(formData.latitude);
-    const lng = parseFloat(formData.longitude);
-
-    if (isNaN(lat) || lat < -90 || lat > 90) {
-      setFormError('Please enter a valid latitude (-90.0 to 90.0).');
-      return;
-    }
-    if (isNaN(lng) || lng < -180 || lng > 180) {
-      setFormError('Please enter a valid longitude (-180.0 to 180.0).');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setFormError(null);
-
-    try {
-      if (editingLocation) {
-        await updateOfficeLocation(editingLocation.id, {
-          name: formData.name.trim(),
-          address: formData.address.trim() || undefined,
-          latitude: lat,
-          longitude: lng,
-          radius_meters: Number(formData.radius_meters),
-          is_active: formData.is_active,
-          notes: formData.notes.trim() || undefined,
-        });
-        showToast('success', `Office location "${formData.name}" updated!`);
-      } else {
-        await createOfficeLocation({
-          name: formData.name.trim(),
-          address: formData.address.trim() || undefined,
-          latitude: lat,
-          longitude: lng,
-          radius_meters: Number(formData.radius_meters),
-          is_active: formData.is_active,
-          notes: formData.notes.trim() || undefined,
-        });
-        showToast('success', `New office location "${formData.name}" added!`);
-      }
-
-      setIsModalOpen(false);
-      await loadLocations();
-    } catch (err: any) {
-      setFormError(err.message || 'Failed to save office location.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  // --- LOCATION ACTIONS ---
 
   const handleToggleLocationActive = async (loc: OfficeLocation) => {
     try {
@@ -1326,13 +1222,13 @@ export default function OfficeLocationSettingsPage() {
                 Clock-in attendance is checked against registered office GPS perimeters.
               </p>
             </div>
-            <button
-              onClick={handleOpenCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083c80] text-white font-bold text-xs transition-all shadow-xs cursor-pointer border-0"
+            <Link
+              href="/superadmin/attendance/settings/locations/new"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083c80] text-white font-bold text-xs transition-all shadow-xs no-underline"
             >
               <Plus size={15} />
               <span>Add Office Location</span>
-            </button>
+            </Link>
           </div>
 
           {/* Overview Stats Cards */}
@@ -1616,9 +1512,16 @@ export default function OfficeLocationSettingsPage() {
                           </td>
 
                           <td className="py-3.5 px-4 text-center">
-                            <span className="font-bold font-mono text-slate-800 bg-slate-100 px-2 py-0.5 rounded-full text-xs">
-                              {loc.radius_meters}m
-                            </span>
+                            {loc.geofence_type === 'polygon' ? (
+                              <span className="font-bold font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full text-[11px] inline-flex items-center gap-1 shadow-2xs">
+                                <Shapes size={12} className="text-indigo-600" />
+                                <span>Polygon Room</span>
+                              </span>
+                            ) : (
+                              <span className="font-bold font-mono text-slate-800 bg-slate-100 px-2.5 py-1 rounded-full text-xs">
+                                {loc.radius_meters}m
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-4 text-center">
@@ -1637,14 +1540,13 @@ export default function OfficeLocationSettingsPage() {
 
                           <td className="py-3.5 px-4 text-right">
                             <div className="inline-flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(loc)}
+                              <Link
+                                href={`/superadmin/attendance/settings/locations/${loc.id}`}
                                 className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                title="Edit office"
+                                title="Edit office geofence"
                               >
                                 <Edit2 size={14} />
-                              </button>
+                              </Link>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteLocation(loc)}
@@ -1896,144 +1798,6 @@ export default function OfficeLocationSettingsPage() {
         </div>
       )}
 
-      {/* ========================================================= */}
-      {/* MODAL: ADD / EDIT OFFICE LOCATION (Preserved) */}
-      {/* ========================================================= */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MapPin size={18} className="text-[#0b4da2]" />
-                <h3 className="text-base font-bold text-slate-900 m-0">
-                  {editingLocation ? 'Edit Office Geofence' : 'Register New Office Location'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitLocation} className="p-5 space-y-4">
-              {formError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-                  <AlertTriangle size={15} className="shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Office Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Main Headquarters, Subang Branch"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 focus:bg-white focus:border-[#0b4da2] focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Address (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="Street, City, Postal Code"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 focus:bg-white focus:border-[#0b4da2] focus:outline-hidden"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-700">Latitude *</label>
-                    <button
-                      type="button"
-                      onClick={handleDetectGPS}
-                      disabled={isDetectingGps}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-0.5 border-0 bg-transparent cursor-pointer p-0"
-                    >
-                      {isDetectingGps ? 'Detecting...' : 'Autofill GPS'}
-                    </button>
-                  </div>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    placeholder="e.g. 3.1579"
-                    value={formData.latitude}
-                    onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono text-slate-800 focus:bg-white focus:border-[#0b4da2] focus:outline-hidden"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Longitude *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    placeholder="e.g. 101.7116"
-                    value={formData.longitude}
-                    onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono text-slate-800 focus:bg-white focus:border-[#0b4da2] focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Permitted Radius: <span className="text-[#0b4da2] font-mono">{formData.radius_meters}m</span>
-                </label>
-                <input
-                  type="range"
-                  min="20"
-                  max="2000"
-                  step="10"
-                  value={formData.radius_meters}
-                  onChange={(e) => setFormData({ ...formData, radius_meters: parseInt(e.target.value, 10) || 150 })}
-                  className="w-full accent-[#0b4da2] cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="loc_active"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="rounded text-[#0b4da2] focus:ring-[#0b4da2]"
-                />
-                <label htmlFor="loc_active" className="text-xs font-semibold text-slate-700 cursor-pointer">
-                  Active (enforce attendance verification against this office)
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition border-0 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-[#0b4da2] hover:bg-[#083c80] text-white text-xs font-bold transition shadow-xs cursor-pointer border-0 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : editingLocation ? 'Update Location' : 'Save Location'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

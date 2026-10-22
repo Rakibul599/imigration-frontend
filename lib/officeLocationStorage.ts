@@ -1,5 +1,10 @@
 'use client';
 
+export interface PolygonPoint {
+  lat: number;
+  lng: number;
+}
+
 export interface OfficeLocation {
   id: number | string;
   name: string;
@@ -7,6 +12,8 @@ export interface OfficeLocation {
   latitude: number;
   longitude: number;
   radius_meters: number;
+  geofence_type?: 'circle' | 'polygon';
+  polygon_coordinates?: PolygonPoint[] | null;
   is_active: boolean;
   notes?: string;
   created_at?: string;
@@ -23,6 +30,7 @@ export interface GeofenceCheckResult {
     location: OfficeLocation;
     distanceMeters: number;
     inside: boolean;
+    geofenceType?: 'circle' | 'polygon';
   }>;
 }
 
@@ -37,9 +45,69 @@ const defaultOfficeLocation: OfficeLocation = {
   latitude: 3.1579,
   longitude: 101.7116,
   radius_meters: 200,
+  geofence_type: 'circle',
+  polygon_coordinates: null,
   is_active: true,
   notes: 'Primary agency headquarters geofence',
 };
+
+/**
+ * Standard Ray-Casting Algorithm to test if a GPS point is inside a polygon boundary
+ */
+export function isPointInPolygon(
+  lat: number,
+  lng: number,
+  polygon: PolygonPoint[]
+): boolean {
+  if (!polygon || polygon.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lng;
+    const yj = polygon[j].lat;
+
+    const intersect =
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Calculate approximate polygon perimeter in meters
+ */
+export function calculatePolygonPerimeterMeters(polygon: PolygonPoint[]): number {
+  if (!polygon || polygon.length < 2) return 0;
+  let perimeter = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const next = polygon[(i + 1) % polygon.length];
+    perimeter += calculateDistanceMeters(polygon[i].lat, polygon[i].lng, next.lat, next.lng);
+  }
+  return Math.round(perimeter);
+}
+
+/**
+ * Calculate approximate polygon area in square meters using Planar Equirectangular Projection
+ */
+export function calculatePolygonAreaSqMeters(polygon: PolygonPoint[]): number {
+  if (!polygon || polygon.length < 3) return 0;
+  const avgLat = polygon.reduce((acc, p) => acc + p.lat, 0) / polygon.length;
+  const latFactor = 111320; // ~111.32 km per degree latitude
+  const lngFactor = 111320 * Math.cos((avgLat * Math.PI) / 180);
+
+  let area = 0;
+  for (let i = 0; i < polygon.length; i++) {
+    const j = (i + 1) % polygon.length;
+    const xi = polygon[i].lng * lngFactor;
+    const yi = polygon[i].lat * latFactor;
+    const xj = polygon[j].lng * lngFactor;
+    const yj = polygon[j].lat * latFactor;
+    area += xi * yj - xj * yi;
+  }
+  return Math.round(Math.abs(area) / 2);
+}
 
 /**
  * Calculate distance between two GPS coordinates in meters using the Haversine formula
@@ -245,6 +313,8 @@ export async function fetchOfficeLocations(activeOnly = false): Promise<OfficeLo
           latitude: Number(item.latitude),
           longitude: Number(item.longitude),
           radius_meters: Number(item.radius_meters) || 150,
+          geofence_type: (item.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
+          polygon_coordinates: Array.isArray(item.polygon_coordinates) ? item.polygon_coordinates : null,
           is_active: item.is_active !== undefined ? Boolean(item.is_active) : true,
           notes: item.notes || undefined,
           created_at: item.created_at,
@@ -262,6 +332,40 @@ export async function fetchOfficeLocations(activeOnly = false): Promise<OfficeLo
   }
 
   return getStoredOfficeLocations();
+}
+
+/**
+ * Fetch a single office location by ID
+ */
+export async function getOfficeLocationById(id: number | string): Promise<OfficeLocation | null> {
+  try {
+    const res = await fetch(`${API_BASE}/office-locations/${id}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const item = await res.json();
+      return {
+        id: item.id,
+        name: item.name,
+        address: item.address || undefined,
+        latitude: Number(item.latitude),
+        longitude: Number(item.longitude),
+        radius_meters: Number(item.radius_meters) || 150,
+        geofence_type: (item.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
+        polygon_coordinates: Array.isArray(item.polygon_coordinates) ? item.polygon_coordinates : null,
+        is_active: Boolean(item.is_active),
+        notes: item.notes || undefined,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      };
+    }
+  } catch (err) {
+    console.warn(`Failed to fetch office location ${id} from API, checking local cache:`, err);
+  }
+
+  const cached = getStoredOfficeLocations();
+  return cached.find((l) => String(l.id) === String(id)) || null;
 }
 
 /**
@@ -284,6 +388,8 @@ export async function createOfficeLocation(
       latitude: Number(data.latitude),
       longitude: Number(data.longitude),
       radius_meters: Number(data.radius_meters) || 150,
+      geofence_type: data.geofence_type || 'circle',
+      polygon_coordinates: data.polygon_coordinates || null,
       is_active: data.is_active !== undefined ? Boolean(data.is_active) : true,
       notes: data.notes?.trim() || null,
     }),
@@ -305,6 +411,8 @@ export async function createOfficeLocation(
     latitude: Number(created.latitude),
     longitude: Number(created.longitude),
     radius_meters: Number(created.radius_meters) || 150,
+    geofence_type: (created.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
+    polygon_coordinates: Array.isArray(created.polygon_coordinates) ? created.polygon_coordinates : null,
     is_active: Boolean(created.is_active),
     notes: created.notes || undefined,
     created_at: created.created_at,
@@ -337,6 +445,8 @@ export async function updateOfficeLocation(
       latitude: data.latitude !== undefined ? Number(data.latitude) : undefined,
       longitude: data.longitude !== undefined ? Number(data.longitude) : undefined,
       radius_meters: data.radius_meters !== undefined ? Number(data.radius_meters) : undefined,
+      geofence_type: data.geofence_type,
+      polygon_coordinates: data.polygon_coordinates,
       is_active: data.is_active,
       notes: data.notes !== undefined ? data.notes.trim() : undefined,
     }),
@@ -358,6 +468,8 @@ export async function updateOfficeLocation(
     latitude: Number(updated.latitude),
     longitude: Number(updated.longitude),
     radius_meters: Number(updated.radius_meters) || 150,
+    geofence_type: (updated.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
+    polygon_coordinates: Array.isArray(updated.polygon_coordinates) ? updated.polygon_coordinates : null,
     is_active: Boolean(updated.is_active),
     notes: updated.notes || undefined,
     created_at: updated.created_at,
@@ -424,11 +536,17 @@ export function checkLocationInOfficeArea(
   let isInsideAny = false;
 
   const allCalculations = activeLocations.map((loc) => {
-    const dist = calculateDistanceMeters(userLat, userLng, loc.latitude, loc.longitude);
-    const inside = dist <= loc.radius_meters;
+    const centerDist = calculateDistanceMeters(userLat, userLng, loc.latitude, loc.longitude);
+    let inside = false;
 
-    if (dist < minDistance) {
-      minDistance = dist;
+    if (loc.geofence_type === 'polygon' && Array.isArray(loc.polygon_coordinates) && loc.polygon_coordinates.length >= 3) {
+      inside = isPointInPolygon(userLat, userLng, loc.polygon_coordinates);
+    } else {
+      inside = centerDist <= (loc.radius_meters || 150);
+    }
+
+    if (centerDist < minDistance) {
+      minDistance = centerDist;
       nearestLocation = loc;
     }
 
@@ -438,8 +556,9 @@ export function checkLocationInOfficeArea(
 
     return {
       location: loc,
-      distanceMeters: dist,
+      distanceMeters: centerDist,
       inside,
+      geofenceType: loc.geofence_type || 'circle',
     };
   });
 

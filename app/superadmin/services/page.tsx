@@ -748,7 +748,7 @@ export default function SuperAdminServicesPage() {
                         type="button"
                         disabled={isFirst || isSubmitting}
                         onClick={(e) => handleMoveLeft(card, e)}
-                        title="Move Left (বামে সরান)"
+                        title="Move Left"
                         aria-label="Move Left"
                         className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-white hover:shadow-xs disabled:opacity-25 disabled:bg-transparent disabled:shadow-none disabled:cursor-not-allowed transition-all cursor-pointer"
                       >
@@ -758,7 +758,7 @@ export default function SuperAdminServicesPage() {
                         type="button"
                         disabled={isLast || isSubmitting}
                         onClick={(e) => handleMoveRight(card, e)}
-                        title="Move Right (ডানে সরান)"
+                        title="Move Right"
                         aria-label="Move Right"
                         className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-white hover:shadow-xs disabled:opacity-25 disabled:bg-transparent disabled:shadow-none disabled:cursor-not-allowed transition-all cursor-pointer"
                       >
@@ -769,7 +769,7 @@ export default function SuperAdminServicesPage() {
                         type="button"
                         disabled={isFirst || isSubmitting}
                         onClick={(e) => handleMoveRowUp(card, e)}
-                        title="Move Up (উপরে সরান)"
+                        title="Move Up"
                         aria-label="Move Up"
                         className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-white hover:shadow-xs disabled:opacity-25 disabled:bg-transparent disabled:shadow-none disabled:cursor-not-allowed transition-all cursor-pointer"
                       >
@@ -779,7 +779,7 @@ export default function SuperAdminServicesPage() {
                         type="button"
                         disabled={isLast || isSubmitting}
                         onClick={(e) => handleMoveRowDown(card, e)}
-                        title="Move Down (নিচে সরান)"
+                        title="Move Down"
                         aria-label="Move Down"
                         className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-white hover:shadow-xs disabled:opacity-25 disabled:bg-transparent disabled:shadow-none disabled:cursor-not-allowed transition-all cursor-pointer"
                       >
@@ -865,7 +865,7 @@ export default function SuperAdminServicesPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900 m-0">
-                    Priority &amp; Display Order Architecture (প্রাধান্য ও ক্রম সাজান)
+                    Priority &amp; Display Order Architecture
                   </h3>
                   <p className="text-xs text-slate-400 m-0">
                     Arrange which cards appear before or after on the Employer Services Portal (/services).
@@ -982,7 +982,7 @@ export default function SuperAdminServicesPage() {
                           type="button"
                           disabled={isFirst}
                           onClick={() => handleModalMoveItem(idx, 'top')}
-                          title="Move to Start (#1 Priority / সবার প্রথমে)"
+                          title="Move to Start (#1 Priority)"
                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer transition-colors"
                         >
                           <ChevronsLeft size={14} />
@@ -991,7 +991,7 @@ export default function SuperAdminServicesPage() {
                           type="button"
                           disabled={isFirst}
                           onClick={() => handleModalMoveItem(idx, 'up')}
-                          title="Move Left / Earlier (বামে / আগে)"
+                          title="Move Left / Earlier"
                           aria-label="Move Left"
                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-[#0b4da2] disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer transition-colors"
                         >
@@ -1001,7 +1001,7 @@ export default function SuperAdminServicesPage() {
                           type="button"
                           disabled={isLast}
                           onClick={() => handleModalMoveItem(idx, 'down')}
-                          title="Move Right / Later (ডানে / পরে)"
+                          title="Move Right / Later"
                           aria-label="Move Right"
                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-[#0b4da2] disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer transition-colors"
                         >
@@ -1011,7 +1011,7 @@ export default function SuperAdminServicesPage() {
                           type="button"
                           disabled={isLast}
                           onClick={() => handleModalMoveItem(idx, 'bottom')}
-                          title="Move to End (Last Priority / সবার শেষে)"
+                          title="Move to End (Last Priority)"
                           className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer transition-colors"
                         >
                           <ChevronsRight size={14} />
@@ -1122,7 +1122,7 @@ export default function SuperAdminServicesPage() {
                 {/* Priority / Display Order Position */}
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center justify-between">
-                    <span>Display Priority (ক্রম অবস্থান / Priority Rank) *</span>
+                    <span>Display Priority (Priority Rank) *</span>
                     <span className="text-[10px] text-blue-600 font-semibold">1 = First, 2 = Second...</span>
                   </label>
                   <div className="flex items-center gap-3">
