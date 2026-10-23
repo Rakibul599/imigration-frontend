@@ -1,10 +1,13 @@
+const path = require('path');
+
 module.exports = {
   apps: [
     {
       name: 'acco-frontend',
-      script: './node_modules/next/dist/bin/next',
+      script: path.resolve(__dirname, 'node_modules/next/dist/bin/next'),
       args: 'start -p 3000',
-      cwd: './',
+      cwd: __dirname,
+      interpreter: 'node',
       instances: 1,
       autorestart: true,
       watch: false,

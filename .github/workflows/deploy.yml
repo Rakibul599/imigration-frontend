@@ -103,19 +103,22 @@ jobs:
 
             echo "Using PM2: $PM2_BIN"
 
-            # আগের হ্যাং বা জম্বি প্রসেস সম্পূর্ণ ক্লিন করা
-            $PM2_BIN delete acco-frontend 2>/dev/null || true
-            fuser -k 3000/tcp 2>/dev/null || true
-            pkill -f "next start" 2>/dev/null || true
-            pkill -f "next-server" 2>/dev/null || true
-            sleep 2
+            # PM2 ডেমন আপডেট করা (ভার্সন মিসম্যাচ ওয়ার্নিং ফিক্স)
+            $PM2_BIN update 2>/dev/null || true
 
-            # সরাসরি Next.js বাইনারি দিয়ে চালু করা (যাতে স্ট্যাটিক হ্যাশ ও ক্যাশ ১০০% ফ্রেশ লোড হয়)
-            if [ -f "./ecosystem.config.js" ]; then
-              PORT=3000 $PM2_BIN start ecosystem.config.js --update-env
-            else
-              PORT=3000 $PM2_BIN start ./node_modules/next/dist/bin/next --name "acco-frontend" -- start -p 3000
+            # পুরনো প্রসেস সরানো
+            $PM2_BIN delete acco-frontend 2>/dev/null || true
+
+            # পোর্ট ৩০০০ এ কোনো পুরনো হ্যাং প্রসেস থাকলে তা সরানো (কোনো pkill ছাড়া)
+            fuser -k 3000/tcp 2>/dev/null || true
+            PID_3000=$(lsof -ti:3000 2>/dev/null || true)
+            if [ -n "$PID_3000" ]; then
+              kill -9 $PID_3000 2>/dev/null || true
             fi
+            sleep 1
+
+            # সম্পূর্ণ ফ্রেশ শুরু ecosystem.config.js দিয়ে
+            $PM2_BIN start ecosystem.config.js --update-env
 
             $PM2_BIN save || true
 
