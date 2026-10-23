@@ -110,11 +110,11 @@ jobs:
             # পুরনো প্রসেস সরানো
             $PM2_BIN delete acco-frontend 2>/dev/null || true
 
-            # পোর্ট ৩০০০ এ কোনো পুরনো হ্যাং প্রসেস থাকলে তা সরানো
-            fuser -k 3000/tcp 2>/dev/null || true
-            PID_3000=$(lsof -ti:3000 2>/dev/null || true)
+            # পোর্ট ৩০০০ এ কোনো পুরনো হ্যাং প্রসেস থাকলে তা সরানো (sudo ও সাধারণ কিল দুটোই ট্রাই করা)
+            sudo -n fuser -k 3000/tcp 2>/dev/null || fuser -k 3000/tcp 2>/dev/null || true
+            PID_3000=$(sudo -n lsof -ti:3000 2>/dev/null || lsof -ti:3000 2>/dev/null || true)
             if [ -n "$PID_3000" ]; then
-              kill -9 $PID_3000 2>/dev/null || true
+              sudo -n kill -9 $PID_3000 2>/dev/null || kill -9 $PID_3000 2>/dev/null || true
             fi
             sleep 1
 
@@ -126,33 +126,25 @@ jobs:
             # ওয়ার্মআপ
             sleep 3
 
-            # ডায়াগনস্টিক রিপোর্ট তৈরি করা (ব্রাউজার ও কার্ল থেকে ভেরিফাই করার জন্য)
-            mkdir -p public
-            {
-              echo "=== 1. CURRENT USER & DIR ==="
-              whoami
-              pwd
-              echo "=== 2. DIRECTORIES CHECK ==="
-              ls -la /home/acco-fe-ssh/htdocs/ 2>/dev/null || echo "No /home/acco-fe-ssh/htdocs"
-              ls -la /home/acco1122/htdocs/ 2>/dev/null || echo "No /home/acco1122/htdocs"
-              echo "=== 3. NGINX VHOST CONFIG FOR ACCO.INK ==="
-              grep -rn "proxy_pass" /etc/nginx/sites-enabled/ 2>/dev/null || grep -rn "proxy_pass" /etc/nginx/conf.d/ 2>/dev/null || true
-              cat /etc/nginx/sites-enabled/*acco* 2>/dev/null || cat /etc/nginx/conf.d/*acco* 2>/dev/null || true
-              echo "=== 4. LISTENING PORTS ==="
-              ss -tlpn 2>/dev/null || netstat -tlpn 2>/dev/null || true
-              echo "=== 5. RUNNING PROCESSES ==="
-              ps aux | grep -E "node|next|pm2" | grep -v grep || true
-              echo "=== 6. PM2 LIST & LOGS ==="
-              $PM2_BIN list
-              $PM2_BIN logs acco-frontend --lines 20 --nostream || true
-              echo "=== 7. LOCAL RESPONSES ==="
-              echo "--- Port 3000 ---"
-              curl -sI http://127.0.0.1:3000 || true
-              curl -s http://127.0.0.1:3000 | grep -o '"buildId":"[^"]*"' || true
-              echo "--- Port 3001 ---"
-              curl -sI http://127.0.0.1:3001 || true
-            } > public/debug_report.txt 2>&1 || true
-            cp public/debug_report.txt /home/acco1122/htdocs/acco.ink/public/debug_report.txt 2>/dev/null || true
-            cp public/debug_report.txt "$HOME/htdocs/acco.ink/public/debug_report.txt" 2>/dev/null || true
+            # ডায়াগনস্টিক রিপোর্ট সরাসরি কনসোলে প্রিন্ট করা
+            echo "==================== DIAGNOSTIC REPORT ===================="
+            echo "1. CURRENT USER & DIR:"
+            whoami
+            pwd
+            echo "2. SUDO ACCESS CHECK:"
+            sudo -n true 2>/dev/null && echo "SUDO: AVAILABLE" || echo "SUDO: NOT AVAILABLE"
+            echo "3. NGINX VHOST CONFIG FOR ACCO.INK:"
+            cat /etc/nginx/sites-enabled/*acco* 2>/dev/null || cat /etc/nginx/conf.d/*acco* 2>/dev/null || grep -rn "proxy_pass" /etc/nginx/ 2>/dev/null || true
+            echo "4. LISTENING PORTS & PROCESS PIDS:"
+            ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null || true
+            echo "5. RUNNING NODE PROCESSES:"
+            ps aux | grep -E "node|next|pm2" | grep -v grep || true
+            echo "6. PM2 STATUS:"
+            $PM2_BIN list
+            echo "7. PM2 LOGS (acco-frontend):"
+            $PM2_BIN logs acco-frontend --lines 20 --nostream || true
+            echo "8. LOCAL CURL TEST ON PORT 3000:"
+            curl -sI http://127.0.0.1:3000 || true
+            echo "==========================================================="
 
             echo "Frontend successfully deployed and running on acco.ink!"
