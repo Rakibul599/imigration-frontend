@@ -233,10 +233,10 @@ function ProgramCustomersContent() {
       )}
 
       {/* Header section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
-            <BookOpen size={14} />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="min-w-0 flex-1">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
+            <BookOpen size={14} className="shrink-0" />
             <Link href="/superadmin/programs" className="hover:underline">
               Program Management
             </Link>
@@ -246,26 +246,26 @@ function ProgramCustomersContent() {
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             Program Customers Directory
           </h1>
-          <p className="text-slate-500 text-sm mt-0.5">
+          <p className="text-slate-500 text-sm mt-0.5 max-w-2xl leading-relaxed">
             Filter, monitor, and manage foreign worker enrollments and deployment assignments by program.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
           <Link
             href="/superadmin/programs"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs"
+            className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap"
           >
-            <BookOpen size={14} className="text-slate-500" />
-            Programs List
+            <BookOpen size={14} className="text-slate-500 shrink-0" />
+            <span>Programs List</span>
           </Link>
 
           <Link
             href="/superadmin/customers/create"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm"
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm whitespace-nowrap"
           >
-            <Plus size={15} />
-            Add Foreign Worker
+            <Plus size={15} className="shrink-0" />
+            <span>Add Foreign Worker</span>
           </Link>
         </div>
       </div>

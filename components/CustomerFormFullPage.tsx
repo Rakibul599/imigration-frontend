@@ -34,6 +34,7 @@ import {
   Briefcase,
   BookOpen,
   Edit2,
+  Target,
   User,
   X,
 } from 'lucide-react';
@@ -60,6 +61,16 @@ import {
 } from '@/lib/serviceStorage';
 import { getMasterAdminUser, getCurrentUser, getSuperAdminUser, AuthUser } from '@/lib/auth';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
+import {
+  CustomerFinanceBalance,
+  TARGET_CATEGORIES,
+  PAYMENT_TERMS,
+  getStoredCustomerTargets,
+  fetchCustomerTargets,
+  fetchCustomerDeposits,
+  saveCustomerTarget,
+  getCustomerFinanceBalance,
+} from '@/lib/customerFinanceStorage';
 
 interface CustomerFormFullPageProps {
   portalType: 'superadmin' | 'masteradmin' | 'employee';
@@ -177,6 +188,19 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive' | 'absent'>('active');
 
+  // Target Amount states
+  const [targetAmount, setTargetAmount] = useState<number | ''>('');
+  const [targetCategory, setTargetCategory] = useState<string>(TARGET_CATEGORIES[0]);
+  const [targetDate, setTargetDate] = useState<string>(
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [targetTerms, setTargetTerms] = useState<string>(PAYMENT_TERMS[0]);
+  const [targetStatus, setTargetStatus] = useState<'In Progress' | 'Achieved' | 'On Hold' | 'Cancelled'>('In Progress');
+  const [targetRemarks, setTargetRemarks] = useState<string>('');
+  const [existingTargetId, setExistingTargetId] = useState<string | number | null>(null);
+  const [existingTargetCreatedAt, setExistingTargetCreatedAt] = useState<string | null>(null);
+  const [customerBalance, setCustomerBalance] = useState<CustomerFinanceBalance | null>(null);
+
   // Service cards for tagging uploaded documents & foreign worker portal clearance
   const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
     return typeof window !== 'undefined' ? getStoredServices() : [];
@@ -276,6 +300,13 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     if (!currentUser) return true;
     if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
     return Boolean(currentUser.module_permissions?.customers?.create);
+  }, [portalType, currentUser]);
+
+  const canManageTarget = useMemo(() => {
+    if (portalType !== 'employee') return true;
+    if (!currentUser) return true;
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
+    return currentUser.module_permissions?.customers?.target_amount !== false;
   }, [portalType, currentUser]);
 
   const effectiveIsViewMode = isViewMode || (portalType === 'employee' && isEditing && !canEdit);
@@ -407,6 +438,101 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
         setIsLoadingCustomer(false);
       });
   }, [editId]);
+
+  // Load customer target amount and ledger balance if editing
+  useEffect(() => {
+    if (!editId) return;
+
+    const refreshBalance = () => {
+      const bal = getCustomerFinanceBalance(editId);
+      if (bal) setCustomerBalance(bal);
+    };
+
+    try {
+      const localTargets = getStoredCustomerTargets();
+      const foundLocal = localTargets.find((t) => String(t.customer_id) === String(editId));
+      if (foundLocal) {
+        setExistingTargetId(foundLocal.id);
+        setTargetAmount(foundLocal.target_amount);
+        if (foundLocal.target_category) setTargetCategory(foundLocal.target_category);
+        if (foundLocal.target_date) setTargetDate(foundLocal.target_date);
+        if (foundLocal.payment_terms) setTargetTerms(foundLocal.payment_terms);
+        if (foundLocal.status) setTargetStatus(foundLocal.status);
+        if (foundLocal.remarks) setTargetRemarks(foundLocal.remarks);
+        if (foundLocal.created_at) setExistingTargetCreatedAt(foundLocal.created_at);
+      }
+      refreshBalance();
+    } catch {}
+
+    Promise.all([
+      fetchCustomerTargets().catch(() => []),
+      fetchCustomerDeposits().catch(() => []),
+    ])
+      .then(([targetList]) => {
+        if (Array.isArray(targetList)) {
+          const found = targetList.find((t) => String(t.customer_id) === String(editId));
+          if (found) {
+            setExistingTargetId(found.id);
+            setTargetAmount(found.target_amount);
+            if (found.target_category) setTargetCategory(found.target_category);
+            if (found.target_date) setTargetDate(found.target_date);
+            if (found.payment_terms) setTargetTerms(found.payment_terms);
+            if (found.status) setTargetStatus(found.status);
+            if (found.remarks) setTargetRemarks(found.remarks);
+            if (found.created_at) setExistingTargetCreatedAt(found.created_at);
+          }
+        }
+        refreshBalance();
+      })
+      .catch(() => {});
+
+    const updateListener = () => refreshBalance();
+    window.addEventListener('customerTargetsUpdated', updateListener);
+    window.addEventListener('customerDepositsUpdated', updateListener);
+    window.addEventListener('customerPendingsUpdated', updateListener);
+    return () => {
+      window.removeEventListener('customerTargetsUpdated', updateListener);
+      window.removeEventListener('customerDepositsUpdated', updateListener);
+      window.removeEventListener('customerPendingsUpdated', updateListener);
+    };
+  }, [editId]);
+
+  // Dynamic live financial calculation for Target Amount
+  const liveFinancialCalculation = useMemo(() => {
+    const inputTarget = targetAmount === '' ? 0 : Number(targetAmount) || 0;
+    const totalDeposited = customerBalance ? Number(customerBalance.total_deposited) || 0 : 0;
+
+    // In case this customer has other targets established
+    const existingTargetObj = existingTargetId
+      ? getStoredCustomerTargets().find((t) => String(t.id) === String(existingTargetId))
+      : null;
+    const oldTargetAmt = existingTargetObj ? Number(existingTargetObj.target_amount) || 0 : 0;
+    const otherTargetsTotal = Math.max(0, (customerBalance?.total_target || 0) - oldTargetAmt);
+
+    const calculatedTotalTarget = otherTargetsTotal + inputTarget;
+    const calculatedPending = Math.max(0, calculatedTotalTarget - totalDeposited);
+    const progressPercent =
+      calculatedTotalTarget > 0
+        ? Math.min(100, Math.round((totalDeposited / calculatedTotalTarget) * 100))
+        : 0;
+
+    let status: 'Pending' | 'Partially Paid' | 'Settled' = 'Pending';
+    if (calculatedTotalTarget > 0 && totalDeposited >= calculatedTotalTarget) {
+      status = 'Settled';
+    } else if (totalDeposited > 0) {
+      status = 'Partially Paid';
+    }
+
+    return {
+      inputTarget,
+      totalDeposited,
+      calculatedTotalTarget,
+      calculatedPending,
+      progressPercent,
+      status,
+      hasFinancialData: calculatedTotalTarget > 0 || totalDeposited > 0,
+    };
+  }, [targetAmount, customerBalance, existingTargetId]);
 
   // Select2 options for employer companies
   const companyOptions: Select2Option[] = useMemo(() => {
@@ -644,9 +770,57 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     try {
       if (isEditing && editId) {
         await updateCustomer(editId, payload);
+        if (canManageTarget && targetAmount !== '' && Number(targetAmount) >= 0) {
+          try {
+            await saveCustomerTarget({
+              id: existingTargetId || `target_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              customer_id: editId,
+              customer_name: fullName.trim(),
+              passport_no: passportNo.trim(),
+              nid_no: nidNo.trim(),
+              company_id: companyId || undefined,
+              company_name: companies.find((c) => c.id === companyId)?.name || companyId || undefined,
+              target_amount: Number(targetAmount),
+              target_category: targetCategory,
+              target_date: targetDate || undefined,
+              quota_workers_count: 1,
+              payment_terms: targetTerms,
+              status: targetStatus,
+              remarks: targetRemarks.trim(),
+              created_at: existingTargetCreatedAt || new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          } catch (tErr) {
+            console.warn('Failed to update target amount:', tErr);
+          }
+        }
         setFeedback({ type: 'success', message: 'Customer record updated successfully!' });
       } else {
-        await createCustomer(payload);
+        const created = await createCustomer(payload);
+        if (created && created.id && canManageTarget && targetAmount !== '' && Number(targetAmount) > 0) {
+          try {
+            await saveCustomerTarget({
+              id: `target_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              customer_id: created.id,
+              customer_name: created.full_name || fullName.trim(),
+              passport_no: created.passport_no || passportNo.trim(),
+              nid_no: created.nid_no || nidNo.trim(),
+              company_id: created.company_id || companyId || undefined,
+              company_name: companies.find((c) => c.id === companyId)?.name || created.company_id || undefined,
+              target_amount: Number(targetAmount),
+              target_category: targetCategory,
+              target_date: targetDate || undefined,
+              quota_workers_count: 1,
+              payment_terms: targetTerms,
+              status: targetStatus,
+              remarks: targetRemarks.trim(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          } catch (tErr) {
+            console.warn('Failed to save initial target amount:', tErr);
+          }
+        }
         setFeedback({ type: 'success', message: 'Customer profile registered successfully!' });
       }
 
@@ -1330,6 +1504,225 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
             </div>
           )}
         </div>
+
+        {/* Card: Target Amount (Under Working Sector, Basic Salary & OT) */}
+        {canManageTarget && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Target size={15} className="text-[#0b4da2]" />
+                <span>Target Amount</span>
+              </div>
+              <span className="text-[11px] text-blue-600 font-semibold">Customer Financial Target</span>
+            </div>
+
+            <p className="text-[11px] text-slate-500 m-0">
+              Establish financial target milestone, service package value, payment terms, and collection schedule for this worker.
+            </p>
+
+            {/* Live Financial Ledger Balance Overview */}
+            {liveFinancialCalculation.hasFinancialData ? (
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                      Live Financial Balance Calculation
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+                      (Target − Deposited = Pending)
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      liveFinancialCalculation.status === 'Settled'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : liveFinancialCalculation.status === 'Partially Paid'
+                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                        : 'bg-amber-100 text-amber-800 border border-amber-200'
+                    }`}
+                  >
+                    {liveFinancialCalculation.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5 font-mono text-center">
+                  <div className="bg-blue-50/70 p-2.5 rounded-lg border border-blue-100">
+                    <span className="text-[10px] text-blue-700 block uppercase font-bold">Total Target</span>
+                    <span className="font-black text-blue-900 text-xs sm:text-sm">
+                      RM {liveFinancialCalculation.calculatedTotalTarget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-100">
+                    <span className="text-[10px] text-emerald-700 block uppercase font-bold">Total Deposited</span>
+                    <span className="font-black text-emerald-900 text-xs sm:text-sm">
+                      RM {liveFinancialCalculation.totalDeposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className={`p-2.5 rounded-lg border ${
+                    liveFinancialCalculation.calculatedPending === 0 && liveFinancialCalculation.calculatedTotalTarget > 0
+                      ? 'bg-emerald-100/70 border-emerald-300'
+                      : 'bg-amber-50/70 border-amber-200'
+                  }`}>
+                    <span className={`text-[10px] block uppercase font-bold ${
+                      liveFinancialCalculation.calculatedPending === 0 && liveFinancialCalculation.calculatedTotalTarget > 0
+                        ? 'text-emerald-700'
+                        : 'text-amber-700'
+                    }`}>
+                      Remaining Pending
+                    </span>
+                    <span className={`font-black text-xs sm:text-sm ${
+                      liveFinancialCalculation.calculatedPending === 0 && liveFinancialCalculation.calculatedTotalTarget > 0
+                        ? 'text-emerald-800'
+                        : 'text-amber-900'
+                    }`}>
+                      RM {liveFinancialCalculation.calculatedPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress bar if target is set */}
+                {liveFinancialCalculation.calculatedTotalTarget > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex justify-between text-[11px] text-slate-500 font-mono">
+                      <span>Collection Progress</span>
+                      <span className="font-bold text-slate-700">{liveFinancialCalculation.progressPercent}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          liveFinancialCalculation.status === 'Settled'
+                            ? 'bg-emerald-500'
+                            : 'bg-blue-600'
+                        }`}
+                        style={{ width: `${liveFinancialCalculation.progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <span>Enter a target amount below to automatically calculate financial dues and ledger balances.</span>
+                <span className="text-[10px] font-bold text-slate-400 font-mono uppercase shrink-0">Formula: Target − Deposit = Pending</span>
+              </div>
+            )}
+
+            {/* Inputs Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Target Amount */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Target Amount (RM)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                    RM
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    disabled={effectiveIsViewMode}
+                    value={targetAmount}
+                    onChange={(e) => setTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 3500.00"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-11 pr-3 py-2.5 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
+                  />
+                </div>
+              </div>
+
+              {/* Target Category */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Target Category
+                </label>
+                <select
+                  disabled={effectiveIsViewMode}
+                  value={targetCategory}
+                  onChange={(e) => setTargetCategory(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
+                >
+                  {TARGET_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Target Completion Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Target Due Date
+                </label>
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="date"
+                    disabled={effectiveIsViewMode}
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Target Status */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Target Status
+                </label>
+                <select
+                  disabled={effectiveIsViewMode}
+                  value={targetStatus}
+                  onChange={(e) => setTargetStatus(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
+                >
+                  <option value="In Progress">In Progress</option>
+                  <option value="Achieved">Achieved</option>
+                  <option value="On Hold">On Hold</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Payment Terms */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Payment Terms
+                </label>
+                <select
+                  disabled={effectiveIsViewMode}
+                  value={targetTerms}
+                  onChange={(e) => setTargetTerms(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
+                >
+                  {PAYMENT_TERMS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Remarks / Case Notes */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Remarks / Financial Notes
+                </label>
+                <input
+                  type="text"
+                  disabled={effectiveIsViewMode}
+                  value={targetRemarks}
+                  onChange={(e) => setTargetRemarks(e.target.value)}
+                  placeholder="Additional terms or package notes for this worker..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Card: Others Company Information */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">

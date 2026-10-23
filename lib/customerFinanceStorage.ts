@@ -23,6 +23,25 @@ export interface CustomerTargetAmountRecord {
   updated_at?: string;
 }
 
+export const TARGET_CATEGORIES = [
+  'Complete Migration Package',
+  'Foreign Worker Permit (Calling Visa)',
+  'Annual Levi Quota Fee',
+  'FOMEMA Medical Clearance',
+  'Insurance & Security Bond',
+  'Work Permit Renewal',
+  'Visa Extension & Stamping',
+  'Custom Employer Package',
+];
+
+export const PAYMENT_TERMS = [
+  'Full Upfront Payment',
+  '2 Installments (50% / 50%)',
+  '3 Installments',
+  'Monthly Salary Deduction',
+  'Employer Sponsored',
+];
+
 export interface CustomerDepositAmountRecord {
   id: string | number;
   customer_id: number | string;

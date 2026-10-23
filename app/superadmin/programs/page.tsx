@@ -240,43 +240,44 @@ export default function SuperAdminProgramsListPage() {
       )}
 
       {/* Header section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
-            <BookOpen size={14} />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="min-w-0 flex-1">
+          <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
+            <BookOpen size={14} className="shrink-0" />
             <span>Recruitment &amp; Deployment Schemes</span>
           </div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             Program Management
           </h1>
-          <p className="text-slate-500 text-sm mt-0.5">
+          <p className="text-slate-500 text-sm mt-0.5 max-w-2xl leading-relaxed">
             Configure foreign worker recruitment programs, government schemes, quotas, and worker assignments.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
           <button
+            type="button"
             onClick={() => setIsCardModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs"
+            className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
           >
-            <SlidersHorizontal size={14} className="text-slate-500" />
-            Manage Cards
+            <SlidersHorizontal size={14} className="text-slate-500 shrink-0" />
+            <span>Manage Cards</span>
           </button>
 
           <Link
             href="/superadmin/programs/customers"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs"
+            className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
           >
-            <Users size={14} className="text-slate-500" />
-            Program Customers
+            <Users size={14} className="text-slate-500 shrink-0" />
+            <span>Program Customers</span>
           </Link>
 
           <Link
             href="/superadmin/programs/create"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm hover:shadow"
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-sm hover:shadow whitespace-nowrap cursor-pointer"
           >
-            <Plus size={15} />
-            Create Program
+            <Plus size={15} className="shrink-0" />
+            <span>Create Program</span>
           </Link>
         </div>
       </div>
@@ -295,7 +296,7 @@ export default function SuperAdminProgramsListPage() {
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   {card.title}
                 </span>
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100/60 flex items-center justify-center text-indigo-600">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100/60 flex items-center justify-center text-indigo-600 shrink-0">
                   <DynamicCardIcon icon={card.icon} size={18} />
                 </div>
               </div>
@@ -314,16 +315,16 @@ export default function SuperAdminProgramsListPage() {
       </div>
 
       {/* Search, Filter, and Controls Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
             placeholder="Search by program name, code, category, or keywords..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-9 py-2 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+            className="w-full h-10 pl-10 pr-9 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
           />
           {searchTerm && (
             <button
@@ -335,15 +336,15 @@ export default function SuperAdminProgramsListPage() {
           )}
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Filter Tabs & Controls */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
           {/* Status Select */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-10">
             {(['all', 'active', 'upcoming', 'inactive', 'closed'] as const).map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${
+                className={`h-8 px-3 rounded-lg text-xs font-semibold capitalize transition-all inline-flex items-center justify-center ${
                   statusFilter === st
                     ? 'bg-white text-slate-900 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -359,7 +360,7 @@ export default function SuperAdminProgramsListPage() {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-3 py-2 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              className="h-10 px-3 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
             >
               <option value="all">All Categories</option>
               {categories.map((c) => (
@@ -373,7 +374,7 @@ export default function SuperAdminProgramsListPage() {
           <button
             onClick={loadData}
             title="Refresh List"
-            className="p-2 text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all"
+            className="h-10 w-10 flex items-center justify-center text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shrink-0"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -430,7 +431,7 @@ export default function SuperAdminProgramsListPage() {
                     className="hover:bg-slate-50/70 transition-colors group"
                   >
                     {/* Program Name & Code */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle">
                       <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
                         {program.name}
                       </div>
@@ -451,7 +452,7 @@ export default function SuperAdminProgramsListPage() {
                     </td>
 
                     {/* Category */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <div className="font-medium text-slate-800">
                         {program.category || 'General Workforce'}
                       </div>
@@ -459,15 +460,15 @@ export default function SuperAdminProgramsListPage() {
                     </td>
 
                     {/* Duration */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <div className="flex items-center gap-1.5 font-medium text-slate-800">
-                        <Clock size={13} className="text-slate-400" />
+                        <Clock size={13} className="text-slate-400 shrink-0" />
                         <span>{program.duration || 'Not specified'}</span>
                       </div>
                     </td>
 
                     {/* Fees */}
-                    <td className="py-4 px-4 align-top font-medium text-slate-900">
+                    <td className="py-4 px-4 align-middle font-medium text-slate-900 whitespace-nowrap">
                       {program.fees && Number(program.fees) > 0 ? (
                         <span className="font-mono font-semibold text-emerald-700">
                           RM {Number(program.fees).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -478,25 +479,25 @@ export default function SuperAdminProgramsListPage() {
                     </td>
 
                     {/* Enrolled Workers */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <Link
                         href={`/superadmin/programs/customers?program_id=${program.id}`}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 transition-colors"
                         title="View workers assigned to this program"
                       >
-                        <Users size={12} />
+                        <Users size={12} className="shrink-0" />
                         <span>{program.customers_count ?? 0} Workers</span>
-                        <ExternalLink size={10} className="opacity-60" />
+                        <ExternalLink size={10} className="opacity-60 shrink-0" />
                       </Link>
                     </td>
 
                     {/* Status */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       {statusBadge(program.status)}
                     </td>
 
                     {/* Actions */}
-                    <td className="py-4 px-4 align-top text-right">
+                    <td className="py-4 px-4 align-middle text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <Link
                           href={`/superadmin/programs/customers?program_id=${program.id}`}
