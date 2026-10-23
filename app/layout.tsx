@@ -38,6 +38,7 @@ export const metadata: Metadata = {
 };
 
 import SiteSettingsProvider from '@/components/SiteSettingsProvider';
+import ChunkErrorReloader from '@/components/ChunkErrorReloader';
 
 export default function RootLayout({
   children,
@@ -48,6 +49,7 @@ export default function RootLayout({
     <html lang="en">
       <head />
       <body className="font-sans antialiased">
+        <ChunkErrorReloader />
         <SiteSettingsProvider />
         {children}
       </body>
