@@ -47,7 +47,7 @@ export default function Navbar() {
   const panelInfo = getUserPanelInfo();
 
   const isLoginActive =
-    pathname === '/login' || pathname.startsWith('/superadmin/login');
+    pathname === '/login' || pathname.startsWith('/masteradmin/login');
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -140,15 +140,6 @@ export default function Navbar() {
         <span>Official portal for Foreign Workers &amp; Employer Services</span>
         <div className="flex items-center gap-4">
           <span className="hidden sm:inline">Last updated: 06 September 2026</span>
-          {!isLoggedIn && (
-            <Link
-              href="/superadmin/login"
-              className="inline-flex items-center gap-1 text-emerald-300 hover:text-white font-semibold transition-colors no-underline text-xs"
-            >
-              <ShieldCheck size={12} />
-              <span>Super Admin</span>
-            </Link>
-          )}
           {isLoggedIn && currentUser && (
             <div className="flex items-center gap-2.5 border-l border-white/20 pl-3">
               {panelInfo.hasPanel ? (
@@ -371,36 +362,6 @@ export default function Navbar() {
                       </div>
                     </Link>
 
-                    <div className="my-1 border-t border-slate-100" />
-
-                    {/* 3. Super Admin Console */}
-                    <Link
-                      href="/superadmin/login"
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        setMenuOpen(false);
-                      }}
-                      className="nav-dropdown-item flex items-start gap-3 p-2.5 rounded-lg hover:bg-emerald-50/70 transition-all duration-150 group/item border border-transparent hover:border-emerald-100/80 no-underline"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5 group-hover/item:bg-emerald-600 group-hover/item:text-white transition-colors shadow-sm">
-                        <ShieldCheck size={18} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[13px] font-bold text-slate-800 group-hover/item:text-emerald-700 transition-colors">
-                            Super Admin Console
-                          </span>
-                          <ChevronRight
-                            size={13}
-                            className="text-slate-300 group-hover/item:text-emerald-600 group-hover/item:translate-x-0.5 transition-all"
-                          />
-                        </div>
-                        <p className="text-[11px] text-slate-500 m-0 mt-0.5 leading-tight font-normal">
-                          Master root administrative control &amp; governance
-                        </p>
-                      </div>
-                    </Link>
-
                     {/* Dropdown Footer */}
                     <div className="mt-2 pt-2 px-3 pb-1 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
                       <span className="flex items-center gap-1">
@@ -451,25 +412,6 @@ export default function Navbar() {
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-bold leading-tight">Master Admin Portal</div>
                         <div className="text-[10px] text-slate-500 leading-tight">Assigned companies access</div>
-                      </div>
-                      <ChevronRight size={14} className="text-slate-400" />
-                    </Link>
-
-                    <Link
-                      href="/superadmin/login"
-                      onClick={() => setMenuOpen(false)}
-                      className={`nav-dropdown-item flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
-                        pathname.startsWith('/superadmin')
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                          : 'bg-slate-50/80 border-slate-200/60 text-slate-700'
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                        <ShieldCheck size={16} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-bold leading-tight">Super Admin Console</div>
-                        <div className="text-[10px] text-slate-500 leading-tight">Master administration</div>
                       </div>
                       <ChevronRight size={14} className="text-slate-400" />
                     </Link>

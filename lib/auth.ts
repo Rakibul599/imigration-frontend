@@ -378,9 +378,13 @@ export function getUserPanelInfo(): {
     !isMasterUser;
 
   if (isRealSuperAdmin) {
+    const superUrl =
+      typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SUPERADMIN_URL
+        ? process.env.NEXT_PUBLIC_SUPERADMIN_URL
+        : '/superadmin';
     return {
       hasPanel: true,
-      panelUrl: '/superadmin',
+      panelUrl: superUrl,
       panelLabel: 'Your Panel',
       panelBadge: 'Super Admin',
       roleType: 'SUPER_ADMIN',

@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const superAdminUrl = (process.env.NEXT_PUBLIC_SUPERADMIN_URL || 'http://localhost:3002').replace(/\/+$/, '');
+
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -7,8 +9,18 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/superadmin/employees/:id/edit',
-        destination: '/superadmin/employees/edit?id=:id',
+        source: '/superadmin',
+        destination: `${superAdminUrl}`,
+        permanent: false,
+      },
+      {
+        source: '/superadmin/login',
+        destination: `${superAdminUrl}/login`,
+        permanent: false,
+      },
+      {
+        source: '/superadmin/:path*',
+        destination: `${superAdminUrl}/:path*`,
         permanent: false,
       },
     ];
