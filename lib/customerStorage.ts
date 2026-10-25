@@ -404,14 +404,34 @@ export async function fetchWorkingSectors(): Promise<WorkingSector[]> {
   ];
 }
 
-export async function createWorkingSector(name: string, description?: string): Promise<WorkingSector> {
+export async function fetchAllWorkingSectors(): Promise<WorkingSector[]> {
+  try {
+    const res = await fetch(`${API_BASE}/working-sectors?all=1`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch all working sectors from backend:', err);
+  }
+  return fetchWorkingSectors();
+}
+
+export async function createWorkingSector(
+  name: string,
+  description?: string,
+  status: string = 'active'
+): Promise<WorkingSector> {
   const res = await fetch(`${API_BASE}/working-sectors`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, status }),
   });
 
   if (!res.ok) {
@@ -419,7 +439,54 @@ export async function createWorkingSector(name: string, description?: string): P
     throw new Error(errData.message || 'Failed to create sector');
   }
 
-  return await res.json();
+  const created = await res.json();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('working_sectors_updated'));
+  }
+  return created;
+}
+
+export async function updateWorkingSector(
+  id: number,
+  data: { name?: string; description?: string; status?: string }
+): Promise<WorkingSector> {
+  const res = await fetch(`${API_BASE}/working-sectors/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || 'Failed to update sector');
+  }
+
+  const updated = await res.json();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('working_sectors_updated'));
+  }
+  return updated;
+}
+
+export async function deleteWorkingSector(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/working-sectors/${id}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || 'Failed to delete sector');
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('working_sectors_updated'));
+  }
 }
 
 /**

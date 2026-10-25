@@ -9,6 +9,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { Theme2Data } from '@/lib/themeSettings';
+import FreeTrialDropdownButton from './FreeTrialDropdownButton';
 
 interface Theme2HeroProps {
   data: Theme2Data;
@@ -75,22 +76,24 @@ export default function Theme2Hero({ data }: Theme2HeroProps) {
   ];
 
   return (
-    <section className="relative overflow-hidden pt-12 md:pt-16 pb-0 select-none bg-radial-theme2">
-      {/* Background ambient radial glow spots */}
-      <div
-        className="absolute top-0 right-1/4 w-[600px] h-[600px] rounded-full pointer-events-none opacity-40 blur-3xl"
-        style={{
-          background:
-            'radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, rgba(16, 185, 129, 0.05) 70%, transparent 100%)',
-        }}
-      />
-      <div
-        className="absolute bottom-10 left-10 w-[450px] h-[450px] rounded-full pointer-events-none opacity-30 blur-2xl"
-        style={{
-          background:
-            'radial-gradient(circle, rgba(74, 222, 128, 0.25) 0%, transparent 70%)',
-        }}
-      />
+    <section className="relative z-30 pt-12 md:pt-16 pb-0 select-none bg-radial-theme2">
+      {/* Background ambient radial glow spots (isolated in overflow-hidden to prevent horizontal page scrolling) */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute top-0 right-1/4 w-[600px] h-[600px] rounded-full opacity-40 blur-3xl"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(34, 197, 94, 0.3) 0%, rgba(16, 185, 129, 0.05) 70%, transparent 100%)',
+          }}
+        />
+        <div
+          className="absolute bottom-10 left-10 w-[450px] h-[450px] rounded-full opacity-30 blur-2xl"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(74, 222, 128, 0.25) 0%, transparent 70%)',
+          }}
+        />
+      </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
@@ -126,15 +129,9 @@ export default function Theme2Hero({ data }: Theme2HeroProps) {
               </p>
             </div>
 
-            {/* CTA Button */}
-            <div className="pt-2">
-              <Link
-                href={data.btn_link || '/login'}
-                className="inline-flex items-center justify-center gap-2 px-9 py-3.5 rounded-lg bg-[#272f3a] hover:bg-[#1a202c] text-white text-base font-bold shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 no-underline cursor-pointer"
-              >
-                <span>{data.btn_text}</span>
-                <ArrowRight size={18} className="text-emerald-400" />
-              </Link>
+            {/* CTA Button with 1, 3, 6, 10 Months Free Trial Hover Dropdown */}
+            <div className="pt-2 flex items-center gap-3 relative z-50">
+              <FreeTrialDropdownButton buttonText={data.btn_text || 'Get Free Trial'} />
             </div>
           </div>
 

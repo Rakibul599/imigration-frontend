@@ -79,6 +79,10 @@ export interface AuthUser {
   customer_id?: number | string;
   passport_no?: string;
   can_login?: boolean;
+  trial_status?: 'none' | 'trial_active' | 'paid_active' | 'expired' | string;
+  trial_ends_at?: string;
+  subscription_package?: string;
+  subscription_ends_at?: string;
 }
 
 const STORAGE_KEY = 'portal_current_user';

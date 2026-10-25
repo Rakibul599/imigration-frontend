@@ -29,6 +29,8 @@ import {
   Layers,
   PieChart,
   Plus,
+  Power,
+  PowerOff,
   Receipt,
   RotateCcw,
   Search,
@@ -44,6 +46,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import CompanyStatusModal from '@/components/CompanyStatusModal';
 import {
   Company,
   resolveFileUrl,
@@ -172,6 +175,9 @@ export default function SuperAdminCompaniesPage() {
   const [formLogo, setFormLogo] = useState(LOGO_PRESETS[0].path);
   const [formDescription, setFormDescription] = useState('');
 
+  // Status & Auto-Deactivation Modal State
+  const [statusModalCompany, setStatusModalCompany] = useState<Company | null>(null);
+
   // Initial load
   useEffect(() => {
     setCompanies(getStoredCompanies());
@@ -197,9 +203,15 @@ export default function SuperAdminCompaniesPage() {
       setStatCards(getStoredCompanyStatCards());
     });
 
+    // Periodic check every 15s for auto-deactivation timer expiration
+    const timerInterval = setInterval(() => {
+      setCompanies(getStoredCompanies());
+    }, 15000);
+
     return () => {
       unsubComp();
       unsubCards();
+      clearInterval(timerInterval);
     };
   }, []);
 
@@ -208,6 +220,18 @@ export default function SuperAdminCompaniesPage() {
     setTimeout(() => {
       setNotification(null);
     }, 3500);
+  };
+
+  const handleCompanyStatusUpdated = (updatedCompany: Company) => {
+    setCompanies((prev) =>
+      prev.map((c) => (c.id === updatedCompany.id ? { ...c, ...updatedCompany } : c))
+    );
+    showToast(
+      'success',
+      `Company "${updatedCompany.name}" status updated to ${
+        updatedCompany.status === 'inactive' ? 'Inactive' : 'Active'
+      }${updatedCompany.auto_deactivate_at ? ' (Auto-Off scheduled)' : ''}.`
+    );
   };
 
   // KPI Calculations
@@ -253,7 +277,7 @@ export default function SuperAdminCompaniesPage() {
           return {
             value: selectedSingleCompany.name,
             sub: `${selectedSingleCompany.roc || 'Verified Entity'} • View Profile →`,
-            link: `/superadmin/companies/${encodeURIComponent(selectedSingleCompany.id)}`,
+            link: `/companies/${encodeURIComponent(selectedSingleCompany.id)}`,
             isLink: true,
             isCompanyEntity: true,
             theme: {
@@ -267,7 +291,7 @@ export default function SuperAdminCompaniesPage() {
         return {
           value: `${companies.length}`,
           sub: card.subtitle || 'View Company List →',
-          link: '/superadmin/companies/registered',
+          link: '/companies/registered',
           isLink: true,
           isCompanyEntity: false,
           theme: {
@@ -845,7 +869,7 @@ export default function SuperAdminCompaniesPage() {
 
           <div className="flex items-center gap-2">
             <Link
-              href="/superadmin/companies/create"
+              href="/companies/create"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-xs transition-colors cursor-pointer border-0 no-underline"
             >
               <Plus size={14} />
@@ -1143,7 +1167,7 @@ export default function SuperAdminCompaniesPage() {
                 <th className="py-3 px-4 border-r border-green-600/60 text-right min-w-[135px]">
                   Total Profit Wallet
                 </th>
-                <th className="py-3 px-4 text-right min-w-[105px]">
+                <th className="py-3 px-4 text-right min-w-[145px]">
                   Actions
                 </th>
               </tr>
@@ -1168,13 +1192,32 @@ export default function SuperAdminCompaniesPage() {
                         />
                       </div>
                       <div className="min-w-0">
-                        <Link
-                          href={`/superadmin/companies/${encodeURIComponent(company.id)}`}
-                          className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-bold text-xs tracking-tight block truncate no-underline"
-                          title={company.name}
-                        >
-                          {company.name}
-                        </Link>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Link
+                            href={`/companies/${encodeURIComponent(company.id)}`}
+                            className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-bold text-xs tracking-tight block truncate no-underline"
+                            title={company.name}
+                          >
+                            {company.name}
+                          </Link>
+                          {company.status === 'inactive' ? (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-200 shrink-0">
+                              Inactive
+                            </span>
+                          ) : company.auto_deactivate_at ? (
+                            <span
+                              title={`Scheduled auto-off: ${new Date(company.auto_deactivate_at).toLocaleString()}`}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-200 shrink-0 cursor-help"
+                            >
+                              <Clock size={9} />
+                              <span>Auto-off timer</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                              Active
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400 truncate block">
                           {company.sector}
                         </span>
@@ -1220,6 +1263,37 @@ export default function SuperAdminCompaniesPage() {
                   {/* 8. Action Buttons */}
                   <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1.5">
+                      {/* Manage Status & Auto-Deactivation Timer */}
+                      <button
+                        type="button"
+                        onClick={() => setStatusModalCompany(company)}
+                        title={
+                          company.status === 'inactive'
+                            ? 'Company is Inactive - Click to Reactivate or manage status'
+                            : company.auto_deactivate_at
+                            ? `Active (Scheduled Auto-Off: ${new Date(company.auto_deactivate_at).toLocaleString()}) - Click to manage`
+                            : 'Company is Active - Click to Deactivate or Set Auto-Off Timer'
+                        }
+                        className={`w-8 h-8 rounded border flex items-center justify-center transition-colors cursor-pointer shadow-2xs relative ${
+                          company.status === 'inactive'
+                            ? 'border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                            : company.auto_deactivate_at
+                            ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {company.status === 'inactive' ? (
+                          <PowerOff size={14} />
+                        ) : company.auto_deactivate_at ? (
+                          <Clock size={14} />
+                        ) : (
+                          <Power size={14} />
+                        )}
+                        {company.auto_deactivate_at && company.status !== 'inactive' && (
+                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-white animate-pulse" />
+                        )}
+                      </button>
+
                       {/* Services Cards */}
                       <Link
                         href={`/services?company=${encodeURIComponent(company.id)}`}
@@ -1231,7 +1305,7 @@ export default function SuperAdminCompaniesPage() {
 
                       {/* View Full Company Profile Page */}
                       <Link
-                        href={`/superadmin/companies/${encodeURIComponent(company.id)}`}
+                        href={`/companies/${encodeURIComponent(company.id)}`}
                         title="View Full Company & Directors Profile"
                         className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-blue-50 flex items-center justify-center text-slate-600 hover:text-[#0b4da2] transition-colors shadow-2xs no-underline"
                       >
@@ -1240,7 +1314,7 @@ export default function SuperAdminCompaniesPage() {
 
                       {/* Edit Company */}
                       <Link
-                        href={`/superadmin/companies/create?id=${encodeURIComponent(company.id)}`}
+                        href={`/companies/create?id=${encodeURIComponent(company.id)}`}
                         title="Edit Company Details"
                         className="w-8 h-8 rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors shadow-2xs no-underline"
                       >
@@ -2009,6 +2083,15 @@ export default function SuperAdminCompaniesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* COMPANY STATUS & AUTO-DEACTIVATION MODAL */}
+      {statusModalCompany && (
+        <CompanyStatusModal
+          company={statusModalCompany}
+          onClose={() => setStatusModalCompany(null)}
+          onUpdated={handleCompanyStatusUpdated}
+        />
       )}
     </div>
   );

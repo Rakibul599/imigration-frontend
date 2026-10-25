@@ -12,6 +12,7 @@ import {
   Car,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Coins,
   CreditCard,
@@ -25,6 +26,7 @@ import {
   Globe2,
   Image as ImageIcon,
   Languages,
+  Layers,
   Mail,
   MapPin,
   Phone,
@@ -143,12 +145,9 @@ function CreateCompanyFormContent() {
   const [bankName, setBankName] = useState('');
   const [bankAccountName, setBankAccountName] = useState('');
   const [bankAccountNo, setBankAccountNo] = useState('');
-  const [sector, setSector] = useState(SECTOR_OPTIONS[0]);
-  const [companySectors, setCompanySectors] = useState<string[]>([SECTOR_OPTIONS[0]]);
+  const [sector, setSector] = useState('');
+  const [companySectors, setCompanySectors] = useState<string[]>([]);
   const [sectorsList, setSectorsList] = useState<WorkingSector[]>([]);
-  const [isAddingSector, setIsAddingSector] = useState(false);
-  const [newSectorName, setNewSectorName] = useState('');
-  const [isSavingSector, setIsSavingSector] = useState(false);
   const [totalWorkers, setTotalWorkers] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState('Verified JIM');
@@ -178,12 +177,24 @@ function CreateCompanyFormContent() {
   } | null>(null);
 
   useEffect(() => {
-    fetchWorkingSectors()
-      .then((list) => {
-        if (list && list.length > 0) setSectorsList(list);
-      })
-      .catch(() => {});
-  }, []);
+    const loadSectors = () => {
+      fetchWorkingSectors()
+        .then((list) => {
+          if (list && list.length > 0) {
+            setSectorsList(list);
+            if (!editId) {
+              const active = list.filter((s) => (s.status || 'active') === 'active');
+              setSector((prev) => prev || active[0]?.name || list[0]?.name || '');
+              setCompanySectors((prev) => (prev.length > 0 ? prev : [active[0]?.name || list[0]?.name || '']));
+            }
+          }
+        })
+        .catch(() => {});
+    };
+    loadSectors();
+    window.addEventListener('working_sectors_updated', loadSectors);
+    return () => window.removeEventListener('working_sectors_updated', loadSectors);
+  }, [editId]);
 
   // Generate random default ROC on new company
   useEffect(() => {
@@ -208,13 +219,13 @@ function CreateCompanyFormContent() {
         setBankName(comp.bankName || '');
         setBankAccountName(comp.bankAccountName || '');
         setBankAccountNo(comp.bankAccountNo || '');
-        const secStr = comp.sector || SECTOR_OPTIONS[0];
+        const secStr = comp.sector || '';
         const secArr = comp.sectors && Array.isArray(comp.sectors) && comp.sectors.length > 0
           ? comp.sectors
-          : secStr.split(',').map((s) => s.trim()).filter(Boolean);
-        const finalSecs = secArr.length > 0 ? secArr : [SECTOR_OPTIONS[0]];
-        setCompanySectors(finalSecs);
-        setSector(finalSecs[0]);
+          : (secStr ? secStr.split(',').map((s) => s.trim()).filter(Boolean) : []);
+        const primarySec = secArr[0] || secStr || '';
+        setCompanySectors(secArr.length > 0 ? secArr : (primarySec ? [primarySec] : []));
+        setSector(primarySec);
         setTotalWorkers(comp.totalWorkers || 0);
         setDescription(comp.description || '');
         setTag(comp.tag || 'Verified JIM');
@@ -236,50 +247,12 @@ function CreateCompanyFormContent() {
     }
   }, [editId]);
 
-  const allAvailableSectors = useMemo(() => {
-    const list = new Set<string>();
-    if (sector) list.add(sector);
-    companySectors.forEach((s) => list.add(s));
-    SECTOR_OPTIONS.forEach((s) => list.add(s));
-    sectorsList.forEach((s) => list.add(s.name));
-    return Array.from(list);
-  }, [sector, companySectors, sectorsList]);
-
-  const handleCreateSector = async () => {
-    if (!newSectorName.trim()) return;
-    setIsSavingSector(true);
-    try {
-      const created = await createWorkingSector(newSectorName.trim());
-      setSectorsList((prev) => [...prev, created]);
-      const addedName = created.name;
-      setCompanySectors((prev) => (prev.includes(addedName) ? prev : [...prev, addedName]));
-      setSector(addedName);
-      setNewSectorName('');
-      setIsAddingSector(false);
-    } catch (err) {
-      console.error('Failed to create working sector:', err);
-    } finally {
-      setIsSavingSector(false);
-    }
-  };
-
-  const handleAddExistingSectorToCompany = (secToAdd: string) => {
-    if (!secToAdd) return;
-    if (!companySectors.includes(secToAdd)) {
-      setCompanySectors((prev) => [...prev, secToAdd]);
-    }
-    setSector(secToAdd);
-  };
-
-  const handleRemoveSectorFromCompany = (secToRemove: string) => {
-    if (companySectors.length <= 1) {
-      alert('The company must have at least one assigned working sector.');
-      return;
-    }
-    const updated = companySectors.filter((s) => s !== secToRemove);
-    setCompanySectors(updated);
-    if (sector === secToRemove) {
-      setSector(updated[0]);
+  const handleSectorChange = (selectedSector: string) => {
+    setSector(selectedSector);
+    if (selectedSector) {
+      setCompanySectors([selectedSector]);
+    } else {
+      setCompanySectors([]);
     }
   };
 
@@ -813,7 +786,7 @@ function CreateCompanyFormContent() {
       }
 
       // Successfully saved to localStorage, navigate to registered company list page
-      router.push('/superadmin/companies/registered');
+      router.push('/companies/registered');
     } catch (err: any) {
       console.error('Error saving company:', err);
       setErrorMessage(err.message || 'Failed to save company to storage.');
@@ -825,15 +798,15 @@ function CreateCompanyFormContent() {
     <div className="space-y-6 max-w-5xl mx-auto pb-16">
       {/* Breadcrumb Navigation */}
       <div className="flex items-center gap-2 text-xs text-slate-500">
-        <Link href="/superadmin" className="hover:text-[#0b4da2] transition-colors">
+        <Link href="/" className="hover:text-[#0b4da2] transition-colors">
           Dashboard
         </Link>
         <ChevronRight size={13} className="text-slate-400" />
-        <Link href="/superadmin/companies" className="hover:text-[#0b4da2] transition-colors">
+        <Link href="/companies" className="hover:text-[#0b4da2] transition-colors">
           Companies Management
         </Link>
         <ChevronRight size={13} className="text-slate-400" />
-        <Link href="/superadmin/companies/registered" className="hover:text-[#0b4da2] transition-colors">
+        <Link href="/companies/registered" className="hover:text-[#0b4da2] transition-colors">
           Registered Companies
         </Link>
         <ChevronRight size={13} className="text-slate-400" />
@@ -866,7 +839,7 @@ function CreateCompanyFormContent() {
 
           <div className="flex items-center gap-2 shrink-0">
             <Link
-              href="/superadmin/companies/registered"
+              href="/companies/registered"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors no-underline"
             >
               <ArrowLeft size={14} />
@@ -940,95 +913,60 @@ function CreateCompanyFormContent() {
               <div className="flex items-center justify-between mb-1.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 m-0">
-                    Company Working Sector(s) <span className="text-red-500">*</span>
+                    Company Working Sector <span className="text-red-500">*</span>
                   </label>
                   <p className="text-[11px] text-slate-500 m-0">
-                    Only sectors assigned to this company will appear in customer registration dropdowns.
+                    Select the business / industry sector for this company from the configured sectors.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAddingSector(!isAddingSector)}
-                  className="px-2.5 py-1 bg-blue-50 text-[#0b4da2] hover:bg-blue-100 rounded-lg text-xs font-bold inline-flex items-center gap-1 border border-blue-200 cursor-pointer transition-colors"
+                <Link
+                  href="/companies/sectors"
+                  target="_blank"
+                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border border-slate-300 no-underline transition-colors"
+                  title="Add or manage sectors in the Company Sectors management page"
                 >
-                  <Plus size={13} />
-                  <span>{isAddingSector ? 'Cancel' : '+ Add New Sector'}</span>
-                </button>
+                  <Layers size={13} />
+                  <span>Manage Sectors</span>
+                </Link>
               </div>
 
-              {/* Inline Add New Sector Box */}
-              {isAddingSector && (
-                <div className="flex items-center gap-2 mb-3 p-3 bg-blue-50/80 border border-blue-200 rounded-xl animate-in fade-in duration-150">
-                  <input
-                    type="text"
-                    value={newSectorName}
-                    onChange={(e) => setNewSectorName(e.target.value)}
-                    placeholder="Enter new sector name (e.g. Oil & Gas, Aviation, Security Services)..."
-                    className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleCreateSector();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCreateSector}
-                    disabled={isSavingSector || !newSectorName.trim()}
-                    className="px-3.5 py-1.5 bg-[#0b4da2] hover:bg-[#083a7c] text-white rounded-lg text-xs font-bold cursor-pointer border-0 disabled:opacity-50"
-                  >
-                    {isSavingSector ? 'Saving...' : 'Create & Assign to Company'}
-                  </button>
-                </div>
-              )}
-
-              {/* Active Assigned Sectors Badges */}
-              <div className="mb-2 flex flex-wrap gap-2 items-center min-h-[38px] p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
-                  Assigned Sectors:
-                </span>
-                {companySectors.map((secName) => (
-                  <span
-                    key={secName}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-blue-100 text-[#0b4da2] border border-blue-200 shadow-2xs"
-                  >
-                    <Briefcase size={12} className="shrink-0" />
-                    <span>{secName}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSectorFromCompany(secName)}
-                      className="text-blue-500 hover:text-red-600 ml-0.5 p-0.5 rounded cursor-pointer bg-transparent border-0"
-                      title="Remove sector"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-
-              {/* Add Existing Sector Dropdown */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Briefcase size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  <select
-                    value={sector}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSector(val);
-                      handleAddExistingSectorToCompany(val);
-                    }}
-                    className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 cursor-pointer"
-                  >
-                    <option value="">-- Choose existing sector to add to this company --</option>
-                    {allAvailableSectors.map((s: string) => (
-                      <option key={s} value={s}>
-                        {s} {companySectors.includes(s) ? '✓ (Assigned)' : ''}
+              <div className="relative">
+                <Briefcase size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <select
+                  required
+                  value={sector}
+                  onChange={(e) => handleSectorChange(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all cursor-pointer appearance-none"
+                >
+                  <option value="">-- Choose Company Sector --</option>
+                  {sectorsList
+                    .filter((s) => (s.status || 'active') === 'active')
+                    .map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
                       </option>
                     ))}
-                  </select>
-                </div>
+                  {/* Keep existing sector visible if editing a legacy company */}
+                  {sector && !sectorsList.some((s) => s.name === sector) && (
+                    <option value={sector}>{sector} (Assigned)</option>
+                  )}
+                </select>
+                <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>
+
+              {sector && (
+                <div className="mt-2 flex items-center justify-between p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs">
+                  <div className="flex items-center gap-2 text-[#0b4da2]">
+                    <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                    <span>
+                      Selected Sector: <strong className="font-bold text-slate-900">{sector}</strong>
+                    </span>
+                  </div>
+                  <span className="text-[10px] bg-blue-100 text-[#0b4da2] font-semibold px-2 py-0.5 rounded-md border border-blue-200">
+                    Active
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Phone No */}
@@ -1888,7 +1826,7 @@ function CreateCompanyFormContent() {
         {/* BOTTOM FORM ACTIONS */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
           <Link
-            href="/superadmin/companies/registered"
+            href="/companies/registered"
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors text-center no-underline"
           >
             Cancel &amp; Return

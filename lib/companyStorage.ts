@@ -79,7 +79,30 @@ export function getStoredCompanies(): Company[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      // Auto-check for companies whose auto_deactivate_at timer has passed
+      const now = Date.now();
+      let changed = false;
+      const checked = parsed.map((comp: Company) => {
+        if (
+          comp.status !== 'inactive' &&
+          comp.auto_deactivate_at &&
+          new Date(comp.auto_deactivate_at).getTime() <= now
+        ) {
+          changed = true;
+          return {
+            ...comp,
+            status: 'inactive' as const,
+            deactivated_at: new Date().toISOString(),
+          };
+        }
+        return comp;
+      });
+
+      if (changed) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(checked));
+        window.dispatchEvent(new Event(STORAGE_EVENT));
+      }
+      return checked;
     }
     return defaultCompanies;
   } catch (err) {
@@ -275,6 +298,75 @@ export async function updateStoredCompany(company: Company): Promise<Company[]> 
   }
 
   return updated;
+}
+
+/**
+ * Update company active/inactive status and optional auto-deactivation timer.
+ */
+export async function updateCompanyStatus(
+  companyId: string,
+  status: 'active' | 'inactive' | 'suspended',
+  autoDeactivateAt?: string | null,
+  reason?: string | null,
+  duration?: string | null
+): Promise<Company[]> {
+  const current = getStoredCompanies();
+  const company = current.find((c) => c.id === companyId);
+  if (!company) return current;
+
+  const updatedCompany: Company = {
+    ...company,
+    status,
+    auto_deactivate_at: autoDeactivateAt !== undefined ? autoDeactivateAt : company.auto_deactivate_at,
+    deactivated_at: status === 'inactive' ? new Date().toISOString() : null,
+    deactivation_reason: reason !== undefined ? reason : company.deactivation_reason,
+    deactivation_duration: duration !== undefined ? duration : company.deactivation_duration,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedList = current.map((c) => (c.id === companyId ? updatedCompany : c));
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+      window.dispatchEvent(new Event(STORAGE_EVENT));
+    } catch (err) {
+      console.error('LocalStorage error updating company status:', err);
+    }
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(companyId)}/status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        status,
+        auto_deactivate_at: autoDeactivateAt,
+        deactivation_reason: reason,
+        deactivation_duration: duration,
+      }),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      if (result.company) {
+        const synced = updatedList.map((c) =>
+          c.id === companyId ? { ...updatedCompany, ...result.company } : c
+        );
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(synced));
+          window.dispatchEvent(new Event(STORAGE_EVENT));
+        }
+        return synced;
+      }
+    }
+  } catch (err) {
+    console.warn('Backend updateStatus failed, saved in local cache:', err);
+  }
+
+  return updatedList;
 }
 
 /**

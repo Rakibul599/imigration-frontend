@@ -201,7 +201,7 @@ export default function HomeClient({ initialTheme }: HomeClientProps) {
         </section>
       )}
 
-      <section className="intro-section" id="information">
+      <section className="intro-section relative z-10" id="information">
         <div className="container intro-content">
           <div className="section-kicker">ENTERPRISE DIRECTORY & LEDGER</div>
           <h2>

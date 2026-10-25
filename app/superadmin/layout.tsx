@@ -18,6 +18,7 @@ import {
   FileText,
   Globe2,
   KeyRound,
+  Layers,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -65,12 +66,14 @@ export default function SuperAdminLayout({
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [companyMenuOpen, setCompanyMenuOpen] = useState(true);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
   const [programMenuOpen, setProgramMenuOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [companyCount, setCompanyCount] = useState<number>(0);
+  const [pendingTrialCount, setPendingTrialCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
   const [masterAdminCount, setMasterAdminCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
@@ -273,6 +276,17 @@ export default function SuperAdminLayout({
 
     fetchRequestsCounts();
 
+    // Fetch trial applications count
+    const fetchTrialCount = () => {
+      fetch(`${apiBase}/company-trial-applications?status=pending`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) setPendingTrialCount(data.length);
+        })
+        .catch(() => {});
+    };
+    fetchTrialCount();
+
     const handleAgentsUpdate = (e: any) => {
       if (Array.isArray(e.detail)) {
         setAgentCount(e.detail.length);
@@ -289,11 +303,13 @@ export default function SuperAdminLayout({
       }
     };
 
+    window.addEventListener('company_trials_updated', fetchTrialCount);
     window.addEventListener('superadmin_agents_updated', handleAgentsUpdate);
     window.addEventListener('superadmin_programs_updated', handleProgramsUpdate);
     window.addEventListener('agency_office_locations_updated', handleOfficeUpdate);
     window.addEventListener('employee_requests_updated', fetchRequestsCounts);
     return () => {
+      window.removeEventListener('company_trials_updated', fetchTrialCount);
       window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
       window.removeEventListener('superadmin_programs_updated', handleProgramsUpdate);
       window.removeEventListener('agency_office_locations_updated', handleOfficeUpdate);
@@ -303,6 +319,9 @@ export default function SuperAdminLayout({
 
   // Auto-expand menus when navigating
   useEffect(() => {
+    if (pathname.startsWith('/superadmin/companies') || pathname.startsWith('/companies')) {
+      setCompanyMenuOpen(true);
+    }
     if (pathname.startsWith('/superadmin/employees')) {
       setEmployeeMenuOpen(true);
     }
@@ -370,10 +389,49 @@ export default function SuperAdminLayout({
           badge: 'Live',
         },
         {
-          name: 'Companies Management',
-          href: '/superadmin/companies',
+          name: 'Company Management',
           icon: Building2,
-          badge: companyCount > 0 ? `${companyCount}` : undefined,
+          badge: pendingTrialCount > 0 ? `${pendingTrialCount} New` : companyCount > 0 ? `${companyCount}` : undefined,
+          isGroup: true,
+          children: [
+            {
+              name: 'Create Company',
+              href: '/superadmin/companies/create',
+              icon: PlusCircle,
+            },
+            {
+              name: 'Company List',
+              href: '/superadmin/companies',
+              icon: Building2,
+              badge: companyCount > 0 ? `${companyCount}` : undefined,
+            },
+            {
+              name: 'Company Sectors',
+              href: '/superadmin/companies/sectors',
+              icon: Briefcase,
+            },
+            {
+              name: 'Customer Quotation',
+              href: '/superadmin/companies/quotations',
+              icon: FileSpreadsheet,
+            },
+            {
+              name: 'Customer Invoice',
+              href: '/superadmin/companies/invoices',
+              icon: DollarSign,
+            },
+            {
+              name: 'Trial Applications',
+              href: '/superadmin/companies/trial-applications',
+              icon: Sparkles,
+              badge: pendingTrialCount > 0 ? `${pendingTrialCount} New` : undefined,
+            },
+            {
+              name: 'Subscription Plans',
+              href: '/superadmin/companies/plans',
+              icon: Layers,
+            },
+          ],
         },
         {
           name: 'Master Admin Management',
@@ -665,7 +723,9 @@ export default function SuperAdminLayout({
                       (child) => pathname === child.href || pathname.startsWith(child.href)
                     );
                     const isGroupOpen =
-                      link.name === 'Customer Management'
+                      link.name === 'Company Management'
+                        ? companyMenuOpen
+                        : link.name === 'Customer Management'
                         ? customerMenuOpen
                         : link.name === 'Attendance Management'
                         ? attendanceMenuOpen
@@ -674,7 +734,9 @@ export default function SuperAdminLayout({
                         : employeeMenuOpen;
                     const toggleGroup = () => {
                       if (!sidebarOpen) setSidebarOpen(true);
-                      if (link.name === 'Customer Management') {
+                      if (link.name === 'Company Management') {
+                        setCompanyMenuOpen(!companyMenuOpen);
+                      } else if (link.name === 'Customer Management') {
                         setCustomerMenuOpen(!customerMenuOpen);
                       } else if (link.name === 'Attendance Management') {
                         setAttendanceMenuOpen(!attendanceMenuOpen);
@@ -704,7 +766,9 @@ export default function SuperAdminLayout({
                               : sidebarText,
                             borderLeftColor: isChildActive ? sidebarActiveText : 'transparent',
                           }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border-l-4 shadow-2xs hover:opacity-90 border-0 text-left"
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border-l-4 shadow-2xs hover:opacity-90 text-left ${
+                            isChildActive ? 'font-bold' : 'border-transparent'
+                          }`}
                         >
                           <Icon
                             size={18}
@@ -712,7 +776,7 @@ export default function SuperAdminLayout({
                             className="shrink-0"
                           />
                           {sidebarOpen && (
-                            <div className="flex-1 flex items-center justify-between truncate">
+                            <div className="flex-1 flex items-center justify-between min-w-0">
                               <span className="truncate">{link.name}</span>
                               <div className="flex items-center gap-1.5 shrink-0 ml-2">
                                 {link.badge && (
@@ -742,11 +806,25 @@ export default function SuperAdminLayout({
 
                         {/* Collapsible Submenu */}
                         {sidebarOpen && isGroupOpen && (
-                          <div className="pl-3.5 pr-1 py-1 space-y-1 ml-2 border-l border-slate-700/30">
+                          <div className="pl-3 pr-1 py-1 space-y-1 ml-3.5 border-l border-slate-700/30">
                             {link.children?.map((child) => {
                               const ChildIcon = child.icon;
                               const isChildItemActive =
-                                child.href === '/superadmin/customers'
+                                child.href === '/superadmin/companies'
+                                  ? pathname === '/superadmin/companies' || pathname === '/companies'
+                                  : child.href === '/superadmin/companies/create'
+                                  ? pathname === '/superadmin/companies/create' || pathname === '/companies/create'
+                                  : child.href === '/superadmin/companies/sectors'
+                                  ? pathname.startsWith('/superadmin/companies/sectors') || pathname.startsWith('/companies/sectors')
+                                  : child.href === '/superadmin/companies/quotations'
+                                  ? pathname.startsWith('/superadmin/companies/quotations') || pathname.startsWith('/companies/quotations')
+                                  : child.href === '/superadmin/companies/invoices'
+                                  ? pathname.startsWith('/superadmin/companies/invoices') || pathname.startsWith('/companies/invoices')
+                                  : child.href === '/superadmin/companies/trial-applications'
+                                  ? pathname.startsWith('/superadmin/companies/trial-applications') || pathname.startsWith('/companies/trial-applications')
+                                  : child.href === '/superadmin/companies/plans'
+                                  ? pathname.startsWith('/superadmin/companies/plans') || pathname.startsWith('/companies/plans')
+                                  : child.href === '/superadmin/customers'
                                   ? pathname === '/superadmin/customers' || pathname === '/superadmin/customers/create' || pathname.startsWith('/superadmin/customers/edit') || pathname.startsWith('/superadmin/customers/view')
                                   : child.href === '/superadmin/employees'
                                   ? pathname === '/superadmin/employees' || pathname.startsWith('/superadmin/employees/')
@@ -769,7 +847,7 @@ export default function SuperAdminLayout({
                                       ? (isDarkSidebar ? '#ffffff' : sidebarActiveText)
                                       : (isDarkSidebar ? 'rgba(255,255,255,0.7)' : sidebarText),
                                   }}
-                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
                                     isChildItemActive ? 'font-bold' : ''
                                   }`}
                                 >
@@ -780,7 +858,7 @@ export default function SuperAdminLayout({
                                     }}
                                     className="shrink-0"
                                   />
-                                  <div className="flex-1 flex items-center justify-between truncate">
+                                  <div className="flex-1 flex items-center justify-between min-w-0">
                                     <span className="truncate">{child.name}</span>
                                     {child.badge && (
                                       <span
@@ -792,7 +870,7 @@ export default function SuperAdminLayout({
                                             : 'rgba(0,0,0,0.06)',
                                           color: isChildItemActive ? '#ffffff' : sidebarText,
                                         }}
-                                        className="text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5"
+                                        className="text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5 shrink-0"
                                       >
                                         {child.badge}
                                       </span>

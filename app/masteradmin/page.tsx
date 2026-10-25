@@ -3,16 +3,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
+  AlertCircle,
   ArrowRight,
   Briefcase,
   Building2,
   CheckCircle2,
+  Clock,
   Coins,
   ExternalLink,
   KeyRound,
   LayoutDashboard,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
   Users,
   Wallet,
@@ -97,8 +100,87 @@ export default function MasterAdminDashboard() {
     // },
   ], [permittedCompanies.length]);
 
+  const isTrialActive = currentUser?.trial_status === 'trial_active';
+  const isPaidActive = currentUser?.trial_status === 'paid_active';
+  const isExpired = currentUser?.trial_status === 'expired';
+
   return (
     <div className="space-y-6 max-w-full min-w-0">
+      {/* Trial / Subscription Status Banner */}
+      {isTrialActive && (
+        <div className="bg-gradient-to-r from-amber-500 via-emerald-600 to-teal-700 text-white rounded-2xl p-4 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 text-yellow-300">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-sm tracking-tight">3-Day Free Trial Active</span>
+                <span className="bg-white/25 text-white text-[10px] font-bold px-2 py-0.2 rounded-full uppercase">
+                  Full Access
+                </span>
+              </div>
+              <p className="text-xs text-white/90 mt-0.5">
+                Enjoy full Master Administrator access. Your 3-day trial expires on{' '}
+                <strong>
+                  {currentUser?.trial_ends_at
+                    ? new Date(currentUser.trial_ends_at).toLocaleDateString()
+                    : 'in 3 days'}
+                </strong>
+                . To unlock your full{' '}
+                <strong>{currentUser?.subscription_package ? currentUser.subscription_package.replace('_', ' ') : 'package'}</strong>, please arrange payment with Super Admin.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-bold bg-white text-emerald-800 px-3 py-1.5 rounded-xl shadow-xs">
+              3 Days Free
+            </span>
+          </div>
+        </div>
+      )}
+
+      {isPaidActive && (
+        <div className="bg-gradient-to-r from-[#0b4da2] via-[#093a8e] to-[#072a6b] text-white rounded-2xl p-4 shadow-md flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0 text-yellow-300">
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <div className="font-bold text-sm">
+                Subscription Active — {currentUser?.subscription_package ? currentUser.subscription_package.replace('_', ' ').toUpperCase() : 'ENTERPRISE PLAN'}
+              </div>
+              <p className="text-xs text-blue-100">
+                Full commercial license verified. Valid until{' '}
+                <strong>
+                  {currentUser?.subscription_ends_at
+                    ? new Date(currentUser.subscription_ends_at).toLocaleDateString()
+                    : 'active'}
+                </strong>
+                .
+              </p>
+            </div>
+          </div>
+          <span className="bg-emerald-500/90 text-white text-[11px] font-extrabold px-3 py-1 rounded-xl">
+            Verified Active
+          </span>
+        </div>
+      )}
+
+      {isExpired && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl p-4 shadow-xs flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertCircle size={20} className="text-rose-600 shrink-0" />
+            <div>
+              <div className="font-bold text-xs">Your 3-Day Free Trial Has Expired</div>
+              <p className="text-[11px] text-rose-700 mt-0.5">
+                Please contact Super Admin to activate your selected package and continue managing your company ledgers.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* TOP TAB SYSTEM (Extensible for adding more tabs in the future) */}
       {/* ========================================================================= */}
