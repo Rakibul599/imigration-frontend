@@ -13,7 +13,8 @@ export interface CustomerTargetAmountRecord {
   company_id?: string;
   company_name?: string;
   target_amount: number; // in RM
-  target_category: string; // Visa, Levi, Permit, FOMEMA, Package
+  target_year?: number | string; // e.g. 2026, 2027
+  target_category?: string; // Visa, Levi, Permit, FOMEMA, Package
   target_date?: string; // Target Due/Completion Date
   quota_workers_count?: number; // Quota count
   payment_terms?: string; // Lump sum, Installments, Monthly
@@ -62,7 +63,7 @@ export interface CustomerDepositAmountRecord {
   purpose: string; // Levi Deposit, Visa Fee, Medical, Advance
   receipt_url?: string; // Stored file URL or dataUrl
   receipt_filename?: string;
-  verification_status: 'Verified' | 'Pending Verification' | 'Reconciled';
+  verification_status: 'Payment Success' | 'Payment Pending' | 'Verified' | 'Pending Verification' | 'Reconciled';
   remarks?: string;
   created_at: string;
   updated_at?: string;

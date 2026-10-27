@@ -283,35 +283,11 @@ function ProgramCustomersContent() {
             <h2 className="text-xl font-bold tracking-tight">
               {currentProgram ? currentProgram.name : 'All Programs & General Scheme Workers'}
             </h2>
-            <p className="text-xs text-indigo-200/80 leading-relaxed">
-              {currentProgram?.description
-                ? currentProgram.description
-                : 'Displaying foreign workers across all recruitment initiatives. Choose a program below to isolate workers belonging to that specific scheme.'}
-            </p>
-
-            {currentProgram && (
+            {currentProgram?.category && (
               <div className="flex items-center gap-3 pt-1 flex-wrap text-xs">
-                {currentProgram.code && (
-                  <span className="font-mono bg-white/15 px-2.5 py-1 rounded-lg text-white font-semibold">
-                    {currentProgram.code}
-                  </span>
-                )}
-                {currentProgram.category && (
-                  <span className="bg-indigo-700/60 px-2.5 py-1 rounded-lg text-indigo-100 border border-indigo-400/30">
-                    {currentProgram.category}
-                  </span>
-                )}
-                {currentProgram.duration && (
-                  <span className="bg-indigo-700/60 px-2.5 py-1 rounded-lg text-indigo-100 border border-indigo-400/30 flex items-center gap-1">
-                    <Clock size={12} />
-                    {currentProgram.duration}
-                  </span>
-                )}
-                {currentProgram.fees && Number(currentProgram.fees) > 0 && (
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2.5 py-1 rounded-lg font-mono font-semibold">
-                    Fee: RM {Number(currentProgram.fees).toLocaleString()}
-                  </span>
-                )}
+                <span className="bg-indigo-700/60 px-2.5 py-1 rounded-lg text-indigo-100 border border-indigo-400/30">
+                  {currentProgram.category}
+                </span>
               </div>
             )}
           </div>
@@ -337,7 +313,7 @@ function ProgramCustomersContent() {
               <option value="all">🌐 All Programs (Show All)</option>
               {programs.map((prog) => (
                 <option key={prog.id} value={String(prog.id)}>
-                  {prog.name} {prog.code ? `(${prog.code})` : ''}
+                  {prog.name}
                 </option>
               ))}
             </select>
@@ -505,12 +481,12 @@ function ProgramCustomersContent() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-3.5 px-4">Foreign Worker / Customer</th>
-                  <th className="py-3.5 px-4">Assigned Program</th>
-                  <th className="py-3.5 px-4">Employer Company</th>
-                  <th className="py-3.5 px-4">Recruitment Agent</th>
-                  <th className="py-3.5 px-4">Passport &amp; NID</th>
-                  <th className="py-3.5 px-4">Sector &amp; Salary</th>
+                  <th className="py-3.5 px-4">Worker Name</th>
+                  <th className="py-3.5 px-4">Program</th>
+                  <th className="py-3.5 px-4">Company</th>
+                  <th className="py-3.5 px-4">Agent</th>
+                  <th className="py-3.5 px-4">Passport</th>
+                  <th className="py-3.5 px-4">Sector</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
@@ -519,9 +495,9 @@ function ProgramCustomersContent() {
                 {filteredCustomers.map((cust) => (
                   <tr key={cust.id} className="hover:bg-slate-50/70 transition-colors group">
                     {/* Worker Info */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
                           {cust.profile_pic ? (
                             <img
                               src={cust.profile_pic}
@@ -529,109 +505,78 @@ function ProgramCustomersContent() {
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <User size={16} className="text-slate-400" />
+                            <User size={15} className="text-slate-400" />
                           )}
                         </div>
-                        <div>
-                          <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                            {cust.full_name}
-                          </div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">
-                            ID: #{cust.id} {cust.username ? `• @${cust.username}` : ''}
-                          </div>
+                        <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                          {cust.full_name}
                         </div>
                       </div>
                     </td>
 
                     {/* Program Info */}
-                    <td className="py-4 px-4 align-top">
-                      {cust.program_id ? (
-                        <div className="space-y-1">
-                          <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-0.5 rounded-lg text-xs">
-                            <BookOpen size={11} />
-                            {cust.program_name || 'Assigned Program'}
-                          </span>
-                          <button
-                            onClick={() => {
-                              setReassignWorker(cust);
-                              setTargetProgramId(String(cust.program_id || ''));
-                            }}
-                            className="block text-[10px] text-slate-400 hover:text-indigo-600 transition-colors"
-                          >
-                            Change Program
-                          </button>
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="inline-flex items-center gap-1 font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
-                            General Scheme
-                          </span>
-                          <button
-                            onClick={() => {
-                              setReassignWorker(cust);
-                              setTargetProgramId('');
-                            }}
-                            className="block text-[10px] text-indigo-600 hover:underline mt-1 font-semibold"
-                          >
-                            + Assign Program
-                          </button>
-                        </div>
-                      )}
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReassignWorker(cust);
+                          setTargetProgramId(String(cust.program_id || ''));
+                        }}
+                        title="Click to change program"
+                        className="font-semibold text-slate-800 hover:text-indigo-600 transition-colors text-left cursor-pointer"
+                      >
+                        {cust.program_name || 'General Scheme'}
+                      </button>
                     </td>
 
                     {/* Employer Company */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <div className="font-semibold text-slate-800">
-                        {cust.company_id || cust.other_company_name || 'Direct / General'}
-                      </div>
-                      <div className="text-[11px] text-slate-400">
-                        {cust.country || 'Foreign Worker'}
+                        {cust.company_id || cust.other_company_name || '-'}
                       </div>
                     </td>
 
                     {/* Agent */}
-                    <td className="py-4 px-4 align-top">
-                      {cust.agent_name ? (
-                        <div>
-                          <div className="font-medium text-slate-800 flex items-center gap-1">
-                            <Briefcase size={12} className="text-slate-400" />
-                            <span>{cust.agent_name}</span>
-                          </div>
-                          <span className="text-[11px] text-slate-400">Recruitment Agent</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">Direct / No Agent</span>
-                      )}
-                    </td>
-
-                    {/* Passport & NID */}
-                    <td className="py-4 px-4 align-top">
-                      <div className="font-mono font-medium text-slate-800">
-                        {cust.passport_no || 'No Passport'}
-                      </div>
-                      <div className="font-mono text-[11px] text-slate-500 mt-0.5">
-                        NID: {cust.nid_no}
-                      </div>
-                    </td>
-
-                    {/* Sector & Salary */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <div className="font-medium text-slate-800">
-                        {cust.working_sector || 'General'}
+                        {cust.agent_name || '-'}
                       </div>
-                      <div className="font-mono text-[11px] font-semibold text-emerald-700 mt-0.5">
-                        {cust.basic_salary || 'RM 2,500'}
+                    </td>
+
+                    {/* Passport */}
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
+                      <div className="font-mono font-medium text-slate-800">
+                        {cust.passport_no || '-'}
+                      </div>
+                    </td>
+
+                    {/* Sector */}
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
+                      <div className="font-semibold text-slate-800">
+                        {cust.working_sector || 'General'}
                       </div>
                     </td>
 
                     {/* Status */}
-                    <td className="py-4 px-4 align-top">
+                    <td className="py-4 px-4 align-middle whitespace-nowrap">
                       {statusBadge(cust.status)}
                     </td>
 
                     {/* Actions */}
-                    <td className="py-4 px-4 align-top text-right">
+                    <td className="py-4 px-4 align-middle text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReassignWorker(cust);
+                            setTargetProgramId(String(cust.program_id || ''));
+                          }}
+                          title="Assign / Change Program"
+                          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <BookOpen size={15} />
+                        </button>
+
                         <Link
                           href={`/superadmin/customers/edit?id=${cust.id}&view=true`}
                           title="View Worker Details"
@@ -701,7 +646,7 @@ function ProgramCustomersContent() {
                   <option value="">No Program (General / Unassigned)</option>
                   {programs.map((p) => (
                     <option key={p.id} value={String(p.id)}>
-                      {p.name} {p.code ? `(${p.code})` : ''} - Fee: RM {p.fees || 0}
+                      {p.name}
                     </option>
                   ))}
                 </select>

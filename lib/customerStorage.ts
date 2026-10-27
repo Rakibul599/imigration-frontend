@@ -126,7 +126,8 @@ export async function fetchCustomers(
   companyId?: string,
   search?: string,
   sector?: string,
-  programId?: string
+  programId?: string,
+  agentId?: string
 ): Promise<CustomerRecord[]> {
   try {
     const params = new URLSearchParams();
@@ -134,6 +135,7 @@ export async function fetchCustomers(
     if (search) params.append('search', search);
     if (sector && sector !== 'ALL') params.append('sector', sector);
     if (programId && programId !== 'ALL') params.append('program_id', programId);
+    if (agentId && agentId !== 'ALL') params.append('agent_id', agentId);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -149,7 +151,7 @@ export async function fetchCustomers(
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        if (typeof window !== 'undefined' && !companyId && !search && !sector && !programId) {
+        if (typeof window !== 'undefined' && !companyId && !search && !sector && !programId && !agentId) {
           try {
             const sanitized = sanitizeForStorage(data);
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
@@ -173,6 +175,9 @@ export async function fetchCustomers(
         }
         if (programId && programId !== 'ALL') {
           list = list.filter((c) => String(c.program_id) === String(programId));
+        }
+        if (agentId && agentId !== 'ALL') {
+          list = list.filter((c) => String(c.agent_id) === String(agentId));
         }
         if (search) {
           const s = search.toLowerCase();

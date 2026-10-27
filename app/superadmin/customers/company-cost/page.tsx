@@ -4,27 +4,19 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
-  Briefcase,
   Building2,
-  Calendar,
   CheckCircle2,
-  DollarSign,
   Download,
   Edit2,
-  FileCheck,
   FileSpreadsheet,
   FileText,
-  Filter,
-  Layers,
   Paperclip,
   Plus,
-  Receipt,
   Search,
   Trash2,
   TrendingUp,
   Upload,
   Users,
-  Wallet,
   X,
 } from 'lucide-react';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
@@ -67,7 +59,6 @@ export default function CustomerCompanyCostPage() {
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
 
-  // Service cards for tagging uploaded documents (matching CustomerFormFullPage "kon card kon document jave")
   const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
     return typeof window !== 'undefined' ? getStoredServices() : [];
   });
@@ -87,7 +78,7 @@ export default function CustomerCompanyCostPage() {
   const [formStatus, setFormStatus] = useState<'Paid' | 'Incurred' | 'Reconciled'>('Paid');
   const [formRemarks, setFormRemarks] = useState('');
 
-  // Multiple Documents list (exact fields as Customer Create + Value (Amount) column)
+  // Multiple Documents list
   const [documents, setDocuments] = useState<CompanyCostDocument[]>([
     {
       id: `doc_1`,
@@ -144,13 +135,12 @@ export default function CustomerCompanyCostPage() {
     }));
   }, [customers]);
 
-  // Document rows management (matching CustomerFormFullPage)
   const handleAddDocumentRow = () => {
     setDocuments((prev) => [
       ...prev,
       {
         id: `doc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        name: `Document Attachment #${prev.length + 1}`,
+        name: '',
         service_id: '',
         service_name: '',
         service_category: 'General Document',
@@ -218,7 +208,6 @@ export default function CustomerCompanyCostPage() {
     setDocuments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Import existing documents from customer profile (with service cards pre-tagged)
   const handleImportCustomerDocuments = () => {
     if (!selectedCustomer?.documents || selectedCustomer.documents.length === 0) {
       showToast('info', 'This customer does not have any profile documents to import.');
@@ -245,11 +234,10 @@ export default function CustomerCompanyCostPage() {
     setDocuments(imported);
     showToast(
       'success',
-      `Imported ${imported.length} document(s) from "${selectedCustomer.full_name}". Please enter Value (Amount) for each.`
+      `Imported ${imported.length} document(s) from "${selectedCustomer.full_name}".`
     );
   };
 
-  // Total Company Cost calculated automatically as sum of all document value amounts
   const calculatedTotalCost = useMemo(() => {
     return documents.reduce((acc, doc) => acc + (Number(doc.value) || 0), 0);
   }, [documents]);
@@ -290,11 +278,10 @@ export default function CustomerCompanyCostPage() {
     showToast(
       'success',
       editingId
-        ? `Company cost record for "${selectedCustomer.full_name}" updated in database!`
-        : `Company cost of RM ${calculatedTotalCost.toLocaleString()} saved to database with files in storage!`
+        ? `Cost record for "${selectedCustomer.full_name}" updated successfully.`
+        : `Cost record saved successfully.`
     );
 
-    // Reset
     setEditingId(null);
     setFormRefNo(`COST-${Date.now().toString().slice(-6)}`);
     setFormRemarks('');
@@ -322,13 +309,13 @@ export default function CustomerCompanyCostPage() {
     setFormStatus(r.status);
     setFormRemarks(r.remarks || '');
     setDocuments(Array.isArray(r.documents) && r.documents.length > 0 ? r.documents : []);
-    window.scrollTo({ top: 300, behavior: 'smooth' });
+    window.scrollTo({ top: 200, behavior: 'smooth' });
   };
 
   const handleDelete = async (id: string | number) => {
     await deleteCompanyCost(id);
     setDeleteConfirmId(null);
-    showToast('info', 'Company cost record removed from database.');
+    showToast('info', 'Cost record removed successfully.');
   };
 
   const filteredRecords = useMemo(() => {
@@ -350,7 +337,7 @@ export default function CustomerCompanyCostPage() {
 
   return (
     <div className="space-y-6 max-w-full min-w-0">
-      {/* Toast */}
+      {/* Toast Notification */}
       {notification && (
         <div
           className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl shadow-xl border flex items-center gap-3 text-xs animate-in slide-in-from-bottom-5 duration-200 ${
@@ -370,23 +357,20 @@ export default function CustomerCompanyCostPage() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Clean Header */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100 flex items-center gap-1.5">
-                <FileSpreadsheet size={12} className="text-indigo-600" />
-                Customer Finance Hub
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+                Customer Finance
               </span>
-              <span className="text-xs text-slate-400">•</span>
-              <span className="text-xs text-slate-500 font-semibold">Corporate Cost &amp; Document Ledger</span>
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight m-0">
-              Company Cost Amount Management
+              Customer Cost Amount
             </h1>
-            <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed m-0">
-              Attach company expense documents, Levi receipts, and fee vouchers per worker with document values (amount) breakdown.
+            <p className="text-xs text-slate-500 mt-1 m-0">
+              Record and track company expenses and document costs per customer.
             </p>
           </div>
 
@@ -402,7 +386,7 @@ export default function CustomerCompanyCostPage() {
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors no-underline"
             >
               <Users size={14} />
-              <span>Customer Directory</span>
+              <span>Customer List</span>
             </Link>
           </div>
         </div>
@@ -416,12 +400,12 @@ export default function CustomerCompanyCostPage() {
           </div>
           <div>
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Total Company Cost
+              Total Cost Amount
             </span>
             <div className="text-2xl font-black text-indigo-900 mt-0.5 font-mono">
-              RM {grandTotalCost.toLocaleString()}
+              RM {grandTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
-            <div className="text-[10px] text-indigo-600 font-semibold">{records.length} cost records</div>
+            <div className="text-[10px] text-indigo-600 font-semibold">{records.length} records</div>
           </div>
         </div>
 
@@ -431,12 +415,12 @@ export default function CustomerCompanyCostPage() {
           </div>
           <div>
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Attached Documents
+              Total Documents
             </span>
             <div className="text-2xl font-black text-slate-900 mt-0.5 font-mono">
               {totalDocumentsCount}
             </div>
-            <div className="text-[10px] text-blue-600 font-medium">Verified vouchers &amp; slips</div>
+            <div className="text-[10px] text-blue-600 font-medium">Attached files</div>
           </div>
         </div>
 
@@ -446,12 +430,12 @@ export default function CustomerCompanyCostPage() {
           </div>
           <div>
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Paid &amp; Cleared Costs
+              Paid Records
             </span>
             <div className="text-2xl font-black text-emerald-700 mt-0.5 font-mono">
               {paidCount}
             </div>
-            <div className="text-[10px] text-emerald-600 font-medium">Disbursed from treasury</div>
+            <div className="text-[10px] text-emerald-600 font-medium">Settled payments</div>
           </div>
         </div>
 
@@ -461,29 +445,29 @@ export default function CustomerCompanyCostPage() {
           </div>
           <div>
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Avg Cost / Worker
+              Average Cost
             </span>
             <div className="text-2xl font-black text-purple-700 mt-0.5 font-mono">
               RM {records.length > 0 ? Math.round(grandTotalCost / records.length).toLocaleString() : '0'}
             </div>
-            <div className="text-[10px] text-slate-400 font-medium">Per foreign worker</div>
+            <div className="text-[10px] text-slate-400 font-medium">Avg per record</div>
           </div>
         </div>
       </div>
 
-      {/* FORM: Record Company Cost Amount with Document Upload & Value Column */}
+      {/* FORM: Record Cost Amount with Clean Document Table */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
               <Plus size={16} />
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 m-0">
-                {editingId ? 'Edit Company Cost Record' : 'Record Company Cost with Document Dossier'}
+                {editingId ? 'Edit Cost Record' : 'Add Customer Cost Record'}
               </h2>
               <p className="text-xs text-slate-500 m-0">
-                Select customer, upload expense documents with <strong>Value (Amount in RM)</strong> per document.
+                Select customer, fill expense details, and attach cost documents.
               </p>
             </div>
           </div>
@@ -503,11 +487,12 @@ export default function CustomerCompanyCostPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Customer Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+          {/* General Information Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Customer Select */}
+            <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Select Customer / Worker <span className="text-red-500">*</span>
+                Select Customer <span className="text-red-500">*</span>
               </label>
               <Select2Search
                 options={customerOptions}
@@ -515,38 +500,16 @@ export default function CustomerCompanyCostPage() {
                 onChange={(val) => setSelectedCustomerId(val)}
                 placeholder="Search by customer name, passport number, NID..."
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1.5">
-                Customer Snapshot
-              </label>
-              {selectedCustomer ? (
-                <div className="p-3 rounded-xl bg-indigo-50/60 border border-indigo-200/80 flex items-center justify-between gap-3 text-xs">
-                  <div>
-                    <span className="font-bold text-indigo-950 text-sm block">
-                      {selectedCustomer.full_name}
-                    </span>
-                    <div className="flex items-center gap-2 text-slate-600 text-[11px] mt-0.5 font-mono">
-                      <span>Passport: {selectedCustomer.passport_no || 'N/A'}</span>
-                      <span>•</span>
-                      <span>Employer: {selectedCustomer.company_id || 'Direct'}</span>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                    {selectedCustomer.status}
-                  </span>
-                </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-400 italic">
-                  Select a customer to attribute these company cost documents.
+              {selectedCustomer && (
+                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-slate-500 font-medium">
+                  <span>Passport: <strong className="text-slate-700 font-mono">{selectedCustomer.passport_no || 'N/A'}</strong></span>
+                  <span>•</span>
+                  <span>Employer: <strong className="text-slate-700">{selectedCustomer.company_id || 'Individual'}</strong></span>
                 </div>
               )}
             </div>
-          </div>
 
-          {/* General Expense Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Cost Category */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Cost Category
@@ -554,7 +517,7 @@ export default function CustomerCompanyCostPage() {
               <select
                 value={formCategory}
                 onChange={(e) => setFormCategory(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
               >
                 {EXPENSE_CATEGORIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -562,19 +525,35 @@ export default function CustomerCompanyCostPage() {
               </select>
             </div>
 
+            {/* Expense Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Expense Incurred Date <span className="text-red-500">*</span>
+                Expense Date <span className="text-red-500">*</span>
               </label>
               <input
                 type="date"
                 required
                 value={formDate}
                 onChange={(e) => setFormDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-mono"
               />
             </div>
 
+            {/* Reference No */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Reference No
+              </label>
+              <input
+                type="text"
+                value={formRefNo}
+                onChange={(e) => setFormRefNo(e.target.value)}
+                placeholder="e.g. COST-123456"
+                className="w-full h-[38px] px-3 text-xs font-mono border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
+              />
+            </div>
+
+            {/* Payment Source */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Payment Source
@@ -583,56 +562,61 @@ export default function CustomerCompanyCostPage() {
                 type="text"
                 value={formSource}
                 onChange={(e) => setFormSource(e.target.value)}
-                placeholder="e.g. Company Treasury / Corporate Debit"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
+                placeholder="e.g. Company Treasury"
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
               />
             </div>
 
+            {/* Status */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Reference / Claim ID
+                Status
+              </label>
+              <select
+                value={formStatus}
+                onChange={(e) => setFormStatus(e.target.value as any)}
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-semibold"
+              >
+                <option value="Paid">Paid</option>
+                <option value="Incurred">Incurred</option>
+                <option value="Reconciled">Reconciled</option>
+              </select>
+            </div>
+
+            {/* Remarks */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Remarks
               </label>
               <input
                 type="text"
-                value={formRefNo}
-                onChange={(e) => setFormRefNo(e.target.value)}
-                placeholder="COST-123456"
-                className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
+                value={formRemarks}
+                onChange={(e) => setFormRemarks(e.target.value)}
+                placeholder="Optional notes or gateway details"
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
               />
             </div>
           </div>
 
-          {/* ========================================================================= */}
-          {/* Card 5: Multiple Upload Documents with Value (Amount) Column */}
-          {/* (Exact fields & layout from Customer Create + Value (Amount) Column!) */}
-          {/* ========================================================================= */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          {/* Document Section: Compact Spreadsheet Table */}
+          <div className="space-y-3 pt-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 m-0 flex items-center gap-2">
                   <FileText size={15} className="text-[#0b4da2]" />
-                  <span>Upload Documents with Value (Amount) Column</span>
-                </div>
+                  <span>Cost Documents &amp; Receipts</span>
+                </h3>
                 <p className="text-[11px] text-slate-500 m-0 mt-0.5">
-                  Attach customer records with document name, assigned service card, <strong>Value (Amount in RM)</strong>, date of issue, date of expire, and file attachment.
+                  Itemize individual documents with their amount values.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
-                {/* Total Calculated Amount Highlight */}
-                <div className="bg-indigo-50/70 border border-indigo-200 px-3.5 py-1.5 rounded-xl text-right shadow-2xs shrink-0">
-                  <div className="text-[9px] font-bold uppercase text-slate-500">Total Calculated Cost</div>
-                  <div className="text-sm font-black font-mono text-indigo-900">
-                    RM {calculatedTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-
+              <div className="flex items-center gap-2">
                 {selectedCustomer?.documents && selectedCustomer.documents.length > 0 && (
                   <button
                     type="button"
                     onClick={handleImportCustomerDocuments}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-xl border border-indigo-200 transition-colors cursor-pointer"
-                    title="Import documents previously uploaded in Customer Profile"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
                   >
                     <ArrowRight size={13} />
                     <span>Import Profile Docs ({selectedCustomer.documents.length})</span>
@@ -642,225 +626,194 @@ export default function CustomerCompanyCostPage() {
                 <button
                   type="button"
                   onClick={handleAddDocumentRow}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl border border-blue-200 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer"
                 >
-                  <Plus size={14} />
-                  <span>Add Document Attachment</span>
+                  <Plus size={13} />
+                  <span>Add Document</span>
                 </button>
               </div>
             </div>
 
             {documents.length === 0 ? (
-              <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 bg-slate-50/50">
-                <FileText size={32} className="mx-auto text-slate-300 mb-2" />
+              <div className="border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-400 bg-slate-50/50">
                 <p className="text-xs font-semibold text-slate-600 m-0">No document attachments added yet.</p>
-                <p className="text-[11px] text-slate-400 mt-1 mb-3">
-                  Upload passport copy, national ID, visa, work permit, medical reports, or certificates with value (amount).
-                </p>
                 <button
                   type="button"
                   onClick={handleAddDocumentRow}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] px-3.5 py-1.5 rounded-lg border-0 transition-colors cursor-pointer shadow-xs"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] px-3 py-1.5 rounded-lg border-0 transition-colors cursor-pointer shadow-xs"
                 >
                   <Plus size={13} />
                   <span>Add First Document</span>
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {documents.map((doc, idx) => (
-                  <div
-                    key={doc.id || idx}
-                    className="bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl p-4 transition-all"
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3 min-w-[200px]">Document Name <span className="text-red-500">*</span></th>
+                        <th className="py-2.5 px-3 min-w-[180px]">Service Tag</th>
+                        <th className="py-2.5 px-3 min-w-[130px]">Amount (RM) <span className="text-red-500">*</span></th>
+                        <th className="py-2.5 px-3 min-w-[130px]">Issue Date</th>
+                        <th className="py-2.5 px-3 min-w-[130px]">Expire Date</th>
+                        <th className="py-2.5 px-3 min-w-[200px]">File Attachment</th>
+                        <th className="py-2.5 px-3 w-12 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {documents.map((doc, idx) => (
+                        <tr key={doc.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2 px-3">
+                            <input
+                              type="text"
+                              required
+                              value={doc.name}
+                              onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
+                              placeholder="e.g. Levi Voucher, Medical"
+                              className="w-full h-8 px-2.5 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-hidden font-medium text-slate-800"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <select
+                              value={doc.service_id || ''}
+                              onChange={(e) => handleDocumentServiceChange(idx, e.target.value)}
+                              className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-hidden font-medium text-slate-700"
+                            >
+                              <option value="">General Document</option>
+                              {selectableServices.map((svc) => (
+                                <option key={svc.id} value={svc.id}>
+                                  {svc.title}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">
+                                RM
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                required
+                                value={doc.value !== undefined ? doc.value : ''}
+                                onChange={(e) =>
+                                  handleDocumentFieldChange(
+                                    idx,
+                                    'value',
+                                    e.target.value === '' ? 0 : Number(e.target.value)
+                                  )
+                                }
+                                placeholder="0.00"
+                                className="w-full h-8 pl-8 pr-2 text-xs font-bold font-mono text-indigo-950 bg-white border border-indigo-200 rounded-lg focus:border-indigo-600 focus:outline-hidden"
+                              />
+                            </div>
+                          </td>
+                          <td className="py-2 px-3">
+                            <input
+                              type="date"
+                              value={doc.issue_date || ''}
+                              onChange={(e) => handleDocumentFieldChange(idx, 'issue_date', e.target.value)}
+                              className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-hidden text-slate-700 font-mono"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <input
+                              type="date"
+                              value={doc.expire_date || ''}
+                              onChange={(e) => handleDocumentFieldChange(idx, 'expire_date', e.target.value)}
+                              className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-hidden text-slate-700 font-mono"
+                            />
+                          </td>
+                          <td className="py-2 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <label className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[11px] font-medium rounded-md transition-colors cursor-pointer shrink-0">
+                                <Upload size={11} />
+                                <span>{doc.url || doc.dataUrl || doc.fileUrl ? 'Replace' : 'Upload'}</span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept="image/*,.pdf,.doc,.docx"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleDocumentFileChange(idx, f);
+                                  }}
+                                />
+                              </label>
+
+                              {doc.url || doc.dataUrl || doc.fileUrl ? (
+                                <div
+                                  className="flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 truncate max-w-[120px]"
+                                  title={doc.fileName || 'Attached'}
+                                >
+                                  <CheckCircle2 size={11} className="shrink-0 text-emerald-600" />
+                                  <span className="truncate">{doc.fileName || 'File'}</span>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">No file</span>
+                              )}
+
+                              {(doc.url || doc.dataUrl || doc.fileUrl) && (
+                                <a
+                                  href={getFileUrl(doc.fileUrl || doc.dataUrl || doc.url)}
+                                  download={doc.fileName || `${doc.name}.pdf`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 p-1"
+                                  title="Preview / Download"
+                                >
+                                  <Download size={13} />
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDocumentRow(idx)}
+                              className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors cursor-pointer border-0 bg-transparent"
+                              title="Remove row"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="p-3 bg-slate-50/80 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAddDocumentRow}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer shadow-2xs"
                   >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end">
-                      {/* 1. Document Name */}
-                      <div className="lg:col-span-3">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 h-5 flex items-center">
-                          Document Name #{idx + 1}
-                        </label>
-                        <input
-                          type="text"
-                          value={doc.name}
-                          onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
-                          placeholder="e.g. Passport, NID, Medical, Levi"
-                          className="w-full h-[38px] bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
-                        />
-                      </div>
+                    <Plus size={13} />
+                    <span>Add Row</span>
+                  </button>
 
-                      {/* 2. Select Service Card ("kon card kon document jave") */}
-                      <div className="lg:col-span-3">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 h-5 flex items-center justify-between">
-                          <span>Select Service Card</span>
-                          <span className="text-[10px] text-blue-600 font-semibold">Service Tag</span>
-                        </label>
-                        <select
-                          value={doc.service_id || ''}
-                          onChange={(e) => handleDocumentServiceChange(idx, e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
-                        >
-                          <option value="">-- General Document (None) --</option>
-                          {selectableServices.map((svc) => (
-                            <option key={svc.id} value={svc.id}>
-                              {svc.title} {svc.tag ? `[${svc.tag}]` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* 3. VALUE (AMOUNT) COLUMN */}
-                      <div className="lg:col-span-2">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-indigo-700 mb-1 h-5 flex items-center justify-between">
-                          <span>Value (Amount)</span>
-                          <span className="text-[10px] font-black text-indigo-600 font-mono">RM</span>
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none select-none">
-                            RM
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            required
-                            value={doc.value !== undefined ? doc.value : ''}
-                            onChange={(e) =>
-                              handleDocumentFieldChange(
-                                idx,
-                                'value',
-                                e.target.value === '' ? 0 : Number(e.target.value)
-                              )
-                            }
-                            placeholder="0.00"
-                            className="w-full h-[38px] pl-9 pr-2.5 py-2 text-xs font-black font-mono text-indigo-950 bg-white border border-indigo-300 rounded-lg focus:outline-hidden focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
-                          />
-                        </div>
-                      </div>
-
-                      {/* 4. Date of Issue */}
-                      <div className="lg:col-span-2">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 h-5 flex items-center">
-                          Date of Issue
-                        </label>
-                        <input
-                          type="date"
-                          value={doc.issue_date || ''}
-                          onChange={(e) => handleDocumentFieldChange(idx, 'issue_date', e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
-                        />
-                      </div>
-
-                      {/* 5. Date of Expire */}
-                      <div className="lg:col-span-2">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 h-5 flex items-center">
-                          Date of Expire
-                        </label>
-                        <input
-                          type="date"
-                          value={doc.expire_date || ''}
-                          onChange={(e) => handleDocumentFieldChange(idx, 'expire_date', e.target.value)}
-                          className="w-full h-[38px] bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Attachment Row (matching CustomerFormFullPage) */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 mt-3 border-t border-slate-200/60">
-                      <div className="flex items-center gap-2">
-                        <label className="inline-flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-300 hover:border-[#0b4da2] text-slate-700 hover:text-[#0b4da2] text-xs font-semibold rounded-lg transition-colors cursor-pointer shrink-0 shadow-2xs">
-                          <Upload size={12} />
-                          <span>{doc.url || doc.dataUrl || doc.fileUrl ? 'Replace' : 'Upload'}</span>
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/*,.pdf,.doc,.docx"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) handleDocumentFileChange(idx, f);
-                            }}
-                          />
-                        </label>
-
-                        {doc.url || doc.dataUrl || doc.fileUrl ? (
-                          <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 truncate font-mono">
-                            <CheckCircle2 size={12} className="shrink-0 text-emerald-600" />
-                            <span className="truncate max-w-[200px]" title={doc.fileName || doc.size || 'Attached'}>
-                              {doc.fileName || doc.size || 'Attached'}
-                            </span>
-                            {(doc.fileSize || doc.size) && (
-                              <span className="text-[10px] text-emerald-600">({doc.fileSize || doc.size})</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">No file attached</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {(doc.url || doc.dataUrl || doc.fileUrl) && (
-                          <a
-                            href={getFileUrl(doc.fileUrl || doc.dataUrl || doc.url)}
-                            download={doc.fileName || `${doc.name}.pdf`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-semibold no-underline"
-                          >
-                            <Download size={13} />
-                            <span>Preview / Download</span>
-                          </a>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDocumentRow(idx)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
-                          title="Remove document row"
-                        >
-                          <Trash2 size={14} />
-                          <span>Remove</span>
-                        </button>
-                      </div>
-                    </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-500 font-medium">Calculated Cost:</span>
+                    <span className="font-mono font-black text-indigo-950 text-sm bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-200">
+                      RM {calculatedTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
-                ))}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Status & Remarks */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Cost Settlement Status
-              </label>
-              <select
-                value={formStatus}
-                onChange={(e) => setFormStatus(e.target.value as any)}
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-semibold"
-              >
-                <option value="Paid">Paid &amp; Settled</option>
-                <option value="Incurred">Incurred (Pending Reimbursement)</option>
-                <option value="Reconciled">Reconciled</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Remarks / Expense Allocation Notes
-              </label>
-              <input
-                type="text"
-                value={formRemarks}
-                onChange={(e) => setFormRemarks(e.target.value)}
-                placeholder="e.g. Paid directly via immigration gateway e-Services"
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          {/* Form Actions */}
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
             <div className="text-xs font-medium text-slate-500">
-              Total Cost: <strong className="text-indigo-900 font-mono text-sm">RM {calculatedTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> ({documents.length} documents)
+              Total Cost: <strong className="text-indigo-900 font-mono text-sm">RM {calculatedTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong> ({documents.length} item{documents.length !== 1 ? 's' : ''})
             </div>
 
             <button
@@ -868,21 +821,21 @@ export default function CustomerCompanyCostPage() {
               className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer border-0"
             >
               <CheckCircle2 size={15} />
-              <span>{editingId ? 'Update Company Cost Record' : 'Save Company Cost Record'}</span>
+              <span>{editingId ? 'Update Cost Record' : 'Save Cost Record'}</span>
             </button>
           </div>
         </form>
       </div>
 
-      {/* DATA TABLE */}
+      {/* DATA TABLE: Clean Single-Line Dedicated Columns */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h3 className="text-base font-bold text-slate-900 m-0">
-              Company Cost Records ({filteredRecords.length})
+              Cost Records ({filteredRecords.length})
             </h3>
             <p className="text-xs text-slate-500 m-0">
-              Corporate expense entries with itemized documents and value amounts.
+              All company cost entries and document expenses.
             </p>
           </div>
 
@@ -893,8 +846,8 @@ export default function CustomerCompanyCostPage() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search customer, ref..."
-                className="pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden w-48 sm:w-56"
+                placeholder="Search customer, passport, ref..."
+                className="pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden w-48 sm:w-60"
               />
             </div>
 
@@ -925,67 +878,99 @@ export default function CustomerCompanyCostPage() {
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
-                <th className="py-3 px-4">Customer</th>
-                <th className="py-3 px-4">Date &amp; Ref</th>
-                <th className="py-3 px-4">Expense Category</th>
-                <th className="py-3 px-4 text-center">Attached Documents</th>
-                <th className="py-3 px-4 text-right">Total Cost Amount</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
+                <th className="py-3 px-4 min-w-[180px]">Customer Name</th>
+                <th className="py-3 px-4 min-w-[130px]">Passport No</th>
+                <th className="py-3 px-4 min-w-[160px]">Company / Employer</th>
+                <th className="py-3 px-4 min-w-[170px]">Cost Category</th>
+                <th className="py-3 px-4 min-w-[120px]">Expense Date</th>
+                <th className="py-3 px-4 min-w-[130px]">Reference No</th>
+                <th className="py-3 px-4 min-w-[140px]">Payment Source</th>
+                <th className="py-3 px-4 min-w-[120px] text-center">Documents</th>
+                <th className="py-3 px-4 min-w-[140px] text-right">Total Cost</th>
+                <th className="py-3 px-4 min-w-[110px] text-center">Status</th>
+                <th className="py-3 px-4 min-w-[100px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400 italic">
-                    No company cost records logged yet.
+                  <td colSpan={11} className="py-8 text-center text-slate-400 italic">
+                    No cost records found.
                   </td>
                 </tr>
               ) : (
                 filteredRecords.map((r) => (
                   <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900">{r.customer_name}</div>
-                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                        {r.passport_no || 'No Passport'} • {r.company_id || 'Individual'}
-                      </div>
+                    {/* Customer Name only - no subtitles */}
+                    <td className="py-3.5 px-4 whitespace-nowrap font-bold text-slate-900">
+                      {r.customer_name}
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-800">{r.expense_date}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{r.reference_no || 'NO-REF'}</div>
+
+                    {/* Passport No */}
+                    <td className="py-3.5 px-4 whitespace-nowrap font-mono text-slate-700">
+                      {r.passport_no || '—'}
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="font-medium text-slate-700">{r.expense_category}</div>
-                      <div className="text-[10px] text-slate-400">{r.payment_source}</div>
+
+                    {/* Company / Employer */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-700">
+                      {r.company_id || 'Individual'}
                     </td>
-                    <td className="py-3 px-4 text-center">
+
+                    {/* Cost Category */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-700">
+                      {r.expense_category}
+                    </td>
+
+                    {/* Expense Date */}
+                    <td className="py-3.5 px-4 whitespace-nowrap font-mono text-slate-700">
+                      {r.expense_date}
+                    </td>
+
+                    {/* Reference No */}
+                    <td className="py-3.5 px-4 whitespace-nowrap font-mono text-slate-600">
+                      {r.reference_no || '—'}
+                    </td>
+
+                    {/* Payment Source */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">
+                      {r.payment_source || '—'}
+                    </td>
+
+                    {/* Documents pill button */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-center">
                       <button
                         type="button"
                         onClick={() => setPreviewRecord(r)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11px] border border-indigo-200 cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs border border-indigo-200 cursor-pointer"
                       >
                         <Paperclip size={12} />
-                        <span>{r.documents?.length || 0} Docs (View Values)</span>
+                        <span>{r.documents?.length || 0} Docs</span>
                       </button>
                     </td>
-                    <td className="py-3 px-4 text-right font-mono font-black text-indigo-950 text-sm">
+
+                    {/* Total Cost */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-right font-mono font-bold text-indigo-950 text-sm">
                       RM {r.total_cost_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-3 px-4 text-center">
+
+                    {/* Status */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-center">
                       <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
                           r.status === 'Paid'
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : r.status === 'Reconciled'
-                            ? 'bg-blue-100 text-[#0b4da2]'
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}
                       >
                         {r.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right">
+
+                    {/* Actions */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
@@ -1013,17 +998,17 @@ export default function CustomerCompanyCostPage() {
         </div>
       </div>
 
-      {/* MODAL: View Documents Breakdown with Values (Amount) */}
+      {/* MODAL: View Documents Breakdown */}
       {previewRecord && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900 m-0">
-                  Itemized Cost Documents — {previewRecord.customer_name}
+                  Cost Documents — {previewRecord.customer_name}
                 </h3>
-                <p className="text-xs text-slate-400 m-0 font-mono mt-0.5">
-                  Ref: {previewRecord.reference_no} • Total: RM {previewRecord.total_cost_amount.toLocaleString()}
+                <p className="text-xs text-slate-500 m-0 font-mono mt-0.5">
+                  Ref: {previewRecord.reference_no || 'N/A'} • Total: RM {previewRecord.total_cost_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <button
@@ -1041,8 +1026,8 @@ export default function CustomerCompanyCostPage() {
                   <tr className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px]">
                     <th className="py-2.5 px-3">#</th>
                     <th className="py-2.5 px-3">Document Name</th>
-                    <th className="py-2.5 px-3">Tagged Service Card</th>
-                    <th className="py-2.5 px-3 text-right">Value (Amount RM)</th>
+                    <th className="py-2.5 px-3">Service Tag</th>
+                    <th className="py-2.5 px-3 text-right">Amount (RM)</th>
                     <th className="py-2.5 px-3">Issue Date</th>
                     <th className="py-2.5 px-3">Expire Date</th>
                     <th className="py-2.5 px-3 text-center">Attachment</th>
@@ -1064,11 +1049,11 @@ export default function CustomerCompanyCostPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-black text-indigo-950">
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-950">
                         RM {(Number(d.value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">{d.issue_date || 'N/A'}</td>
-                      <td className="py-2.5 px-3 text-slate-500 font-mono text-[11px]">{d.expire_date || 'N/A'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">{d.issue_date || '—'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">{d.expire_date || '—'}</td>
                       <td className="py-2.5 px-3 text-center">
                         {d.fileUrl || d.dataUrl || d.url ? (
                           <a
@@ -1076,13 +1061,13 @@ export default function CustomerCompanyCostPage() {
                             download={d.fileName || `${d.name}.pdf`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200 no-underline"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 no-underline hover:bg-indigo-100"
                           >
                             <Download size={11} />
                             <span>Download</span>
                           </a>
                         ) : (
-                          <span className="text-slate-300 text-[10px]">None</span>
+                          <span className="text-slate-300 text-[11px]">None</span>
                         )}
                       </td>
                     </tr>
@@ -1108,9 +1093,9 @@ export default function CustomerCompanyCostPage() {
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center">
-            <h3 className="text-base font-bold text-slate-900 m-0 mb-1">Delete Company Cost Record?</h3>
+            <h3 className="text-base font-bold text-slate-900 m-0 mb-1">Delete Cost Record?</h3>
             <p className="text-xs text-slate-500 mb-5">
-              This action will delete the expense record and its attached documents.
+              This action will remove the cost record and its document attachments.
             </p>
             <div className="flex items-center justify-center gap-3">
               <button

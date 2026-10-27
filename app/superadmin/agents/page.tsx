@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import {
   AlertCircle,
+  Camera,
   Check,
   CheckCircle2,
   Copy,
@@ -16,6 +18,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  Upload,
   User,
   Users,
   X,
@@ -35,6 +38,7 @@ import {
   updateAgent,
   deleteAgent,
 } from '@/lib/agentStorage';
+import { getFileUrl } from '@/lib/customerStorage';
 
 const DEFAULT_AGENT_CARDS: PageStatCardConfig[] = [
   { id: 'total_agents', title: 'Total Agents', subtitle: 'All registered recruitment agents', icon: 'Users', order_num: 1 },
@@ -61,11 +65,15 @@ export default function SuperAdminAgentManagementPage() {
   // Copied phone tooltip state
   const [copiedPhoneId, setCopiedPhoneId] = useState<number | null>(null);
 
-  // Form State (strictly Name, Phone, Note)
+  // Photo upload ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Form State (Name, Phone, Note, Image)
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     notes: '',
+    image: '',
   });
 
   // Load cards layout and data
@@ -144,6 +152,7 @@ export default function SuperAdminAgentManagementPage() {
       name: '',
       phone: '',
       notes: '',
+      image: '',
     });
     setIsAddEditModalOpen(true);
   };
@@ -155,8 +164,25 @@ export default function SuperAdminAgentManagementPage() {
       name: agent.name || '',
       phone: agent.phone || '',
       notes: agent.notes || '',
+      image: agent.image || '',
     });
     setIsAddEditModalOpen(true);
+  };
+
+  // Image Upload Handler
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('error', 'Image size must be less than 2MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFormData((prev) => ({ ...prev, image: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Handle Save (Create or Update)
@@ -178,6 +204,7 @@ export default function SuperAdminAgentManagementPage() {
           name: formData.name.trim(),
           phone: formData.phone.trim(),
           notes: formData.notes.trim() || undefined,
+          image: formData.image || undefined,
         });
         setAgents((prev) => prev.map((a) => (a.id === editingAgent.id ? updated : a)));
         showToast('success', `Agent "${updated.name}" updated successfully`);
@@ -186,6 +213,7 @@ export default function SuperAdminAgentManagementPage() {
           name: formData.name.trim(),
           phone: formData.phone.trim(),
           notes: formData.notes.trim() || undefined,
+          image: formData.image || undefined,
         });
         setAgents((prev) => [created, ...prev]);
         showToast('success', `Agent "${created.name}" created successfully`);
@@ -247,7 +275,7 @@ export default function SuperAdminAgentManagementPage() {
         </div>
       )}
 
-      {/* Header Banner - Standard Super Admin UI Structure */}
+      {/* Header Banner */}
       <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white rounded-2xl p-6 sm:p-7 shadow-sm relative overflow-hidden">
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -259,18 +287,26 @@ export default function SuperAdminAgentManagementPage() {
               Agent Management Directory
             </h1>
             <p className="text-xs text-blue-100/90 mt-1 max-w-xl leading-relaxed m-0">
-              Centralized administrative directory for recruitment agents, direct phone contact, and internal notes.
+              Centralized administrative directory for recruitment agents, direct phone contact, worker rosters, and internal notes.
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+            <Link
+              href="/superadmin/agents/customers"
+              className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all no-underline whitespace-nowrap"
+            >
+              <Users size={14} />
+              <span>Agent Wise Customer</span>
+            </Link>
+
             <button
               type="button"
               onClick={() => setIsCardModalOpen(true)}
               className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
             >
               <SlidersHorizontal size={14} />
-              <span>Manage Cards &amp; Priority</span>
+              <span>Manage Cards</span>
             </button>
 
             <button
@@ -282,18 +318,18 @@ export default function SuperAdminAgentManagementPage() {
               <span className="hidden sm:inline">Refresh</span>
             </button>
 
-            <button
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer border-0 no-underline whitespace-nowrap"
+            <Link
+              href="/superadmin/agents/create"
+              className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all no-underline whitespace-nowrap"
             >
               <Plus size={16} />
               <span>Create Agent</span>
-            </button>
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* KPI Stats Cards - Standard Super Admin UI Structure */}
+      {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((card) => {
           let value: number | string = 0;
@@ -319,63 +355,89 @@ export default function SuperAdminAgentManagementPage() {
               key={card.id}
               className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
             >
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
-                  {card.title}
-                </span>
-                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
-                  <DynamicCardIcon icon={card.icon} size={16} />
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider m-0">
+                    {card.title}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5 m-0">{card.subtitle}</p>
+                </div>
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconBg} transition-transform group-hover:scale-105`}
+                >
+                  <DynamicCardIcon icon={card.icon} size={18} />
                 </div>
               </div>
-              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
-                {value}
+
+              <div className="mt-4 flex items-baseline justify-between">
+                <span className={`text-2xl font-black font-mono tracking-tight ${themeColor}`}>
+                  {value}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">Recorded</span>
               </div>
-              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
             </div>
           );
         })}
       </div>
 
-      {/* Main Table Card - Standard Super Admin UI Structure */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        {/* Filter bar */}
-        <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex-1 relative max-w-md">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by agent name, phone number, or notes..."
-              className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100"
-            />
+      {/* Table Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Table Toolbar */}
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="relative w-full sm:w-72">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                placeholder="Search by name, phone or notes..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white"
+              />
+            </div>
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="text-xs text-slate-500 hover:text-slate-800 underline bg-transparent border-0 cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-medium">
-              Showing <strong className="text-slate-800">{filteredAgents.length}</strong> of {agents.length} agents
+          <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+            <span>Showing</span>
+            <span className="font-bold text-slate-800 font-mono">
+              {filteredAgents.length}
             </span>
+            <span>of</span>
+            <span className="font-bold text-slate-800 font-mono">{agents.length}</span>
+            <span>agents</span>
           </div>
         </div>
 
-        {/* Table */}
+        {/* Agents Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700 border-collapse">
+          <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4 w-12 text-center">#</th>
-                <th className="py-3 px-4 min-w-[220px]">Agent Name</th>
-                <th className="py-3 px-4 min-w-[200px]">Phone Number</th>
-                <th className="py-3 px-4 min-w-[320px]">Note / Remarks</th>
-                <th className="py-3 px-4 w-28 text-right">Actions</th>
+                <th className="py-3 px-4">Agent Profile</th>
+                <th className="py-3 px-4">Phone / WhatsApp</th>
+                <th className="py-3 px-4">Notes / Remarks</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-slate-400">
-                    <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-[#0b4da2]" />
-                    <p className="text-xs text-slate-500 m-0">Loading agent directory...</p>
+                    <RefreshCw size={24} className="animate-spin mx-auto text-[#0b4da2] mb-2" />
+                    <p className="text-xs font-semibold m-0">Loading agent directory...</p>
                   </td>
                 </tr>
               ) : filteredAgents.length === 0 ? (
@@ -391,14 +453,13 @@ export default function SuperAdminAgentManagementPage() {
                         : 'No recruitment agents registered yet.'}
                     </p>
                     {!searchTerm && (
-                      <button
-                        type="button"
-                        onClick={handleOpenAdd}
-                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22a34a] hover:bg-[#1b843c] text-white text-xs font-bold transition-colors cursor-pointer border-0"
+                      <Link
+                        href="/superadmin/agents/create"
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22a34a] hover:bg-[#1b843c] text-white text-xs font-bold transition-colors no-underline"
                       >
                         <Plus size={14} />
                         <span>Create Agent</span>
-                      </button>
+                      </Link>
                     )}
                   </td>
                 </tr>
@@ -415,17 +476,27 @@ export default function SuperAdminAgentManagementPage() {
                         {index + 1}
                       </td>
 
-                      {/* Agent Name */}
+                      {/* Agent Profile & Photo */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] border border-blue-200 font-bold flex items-center justify-center text-xs shrink-0">
-                            {agent.name ? agent.name.charAt(0).toUpperCase() : 'A'}
+                          <div className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center shadow-2xs">
+                            {agent.image ? (
+                              <img
+                                src={getFileUrl(agent.image)}
+                                alt={agent.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-blue-50 text-[#0b4da2] font-bold flex items-center justify-center text-xs">
+                                {agent.name ? agent.name.charAt(0).toUpperCase() : 'A'}
+                              </div>
+                            )}
                           </div>
                           <div>
-                            <span className="font-bold text-slate-900 block leading-tight">
+                            <span className="font-bold text-slate-900 block leading-tight text-xs">
                               {agent.name}
                             </span>
-                            <span className="text-[10px] text-slate-400">
+                            <span className="text-[10px] text-slate-400 font-mono">
                               Agent ID #{agent.id}
                             </span>
                           </div>
@@ -485,6 +556,14 @@ export default function SuperAdminAgentManagementPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/superadmin/agents/customers?agent_id=${agent.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition-all cursor-pointer bg-white no-underline"
+                            title="View Agent Wise Customers"
+                          >
+                            <Users size={12} />
+                            <span>Customers</span>
+                          </Link>
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(agent)}
@@ -514,7 +593,7 @@ export default function SuperAdminAgentManagementPage() {
         </div>
       </div>
 
-      {/* Modal: Create / Edit Agent (Strictly Name, Phone, Note) */}
+      {/* Modal: Create / Edit Agent */}
       {isAddEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
@@ -530,7 +609,7 @@ export default function SuperAdminAgentManagementPage() {
                   </h3>
                   <p className="text-[11px] text-blue-100 m-0">
                     {editingAgent
-                      ? 'Update agent name, phone, and notes'
+                      ? 'Update agent photo, contact info, and notes'
                       : 'Register a new recruitment agent in the registry'}
                   </p>
                 </div>
@@ -546,6 +625,72 @@ export default function SuperAdminAgentManagementPage() {
 
             {/* Modal Body */}
             <form onSubmit={handleSaveAgent} className="p-6 space-y-4">
+              {/* Agent Photo Upload in Modal */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Agent Profile Photo
+                </label>
+                <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="relative group shrink-0">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-14 h-14 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center overflow-hidden cursor-pointer hover:border-[#0b4da2] transition-colors"
+                      title="Click to Upload Photo"
+                    >
+                      {formData.image ? (
+                        <img
+                          src={getFileUrl(formData.image)}
+                          alt="Agent"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-blue-50 text-[#0b4da2] font-black text-lg flex items-center justify-center">
+                          {formData.name ? formData.name.charAt(0).toUpperCase() : <User size={20} />}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#0b4da2] hover:bg-[#083a7c] text-white flex items-center justify-center shadow-xs border border-white cursor-pointer"
+                    >
+                      <Camera size={10} />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 space-y-1.5">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1 rounded-lg bg-[#0b4da2] hover:bg-[#083a7c] text-white text-[11px] font-bold transition-all cursor-pointer border-0"
+                      >
+                        {formData.image ? 'Change Photo' : 'Upload Photo'}
+                      </button>
+                      {formData.image && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData((p) => ({ ...p, image: '' }))}
+                          className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 block">
+                      JPG, PNG or WebP (max 2MB)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
                   Agent Name <span className="text-red-500">*</span>

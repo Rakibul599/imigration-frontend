@@ -23,6 +23,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  PlusCircle,
   Shield,
   ShieldAlert,
   ShieldCheck,
@@ -117,7 +118,7 @@ export default function EmployeeLayout({
     calculatePermitted();
     fetchCompaniesFromBackend()
       .then(() => calculatePermitted())
-      .catch(() => {});
+      .catch(() => { });
 
     const unsub = subscribeToCompanyChanges(calculatePermitted);
     return unsub;
@@ -142,7 +143,7 @@ export default function EmployeeLayout({
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [pathname]);
 
   const handleLogout = () => {
@@ -185,49 +186,49 @@ export default function EmployeeLayout({
       title: string;
       items: EmployeeNavItem[];
     }> = [
-      {
-        title: 'Overview',
-        items: [
-          {
-            name: 'Dashboard Overview',
-            href: '/employee',
-            icon: LayoutDashboard,
-            badge: 'Desk',
-          },
-        ],
-      },
-      {
-        title: 'Attendance & Applications',
-        items: [
-          {
-            name: 'Attendance & Face Punch',
-            href: '/employee/attendance',
-            icon: Camera,
-            badge: 'Bio-Clock',
-          },
-          {
-            name: 'Apply Holiday',
-            href: '/employee/attendance/apply-holiday',
-            icon: Calendar,
-          },
-          {
-            name: 'Apply Annual Leave',
-            href: '/employee/attendance/apply-leave',
-            icon: Award,
-          },
-          {
-            name: 'Resignation Notice',
-            href: '/employee/attendance/apply-resignation',
-            icon: FileText,
-          },
-          {
-            name: 'My Documents & Logs',
-            href: '/employee/attendance/details',
-            icon: FileCheck,
-          },
-        ],
-      },
-    ];
+        {
+          title: 'Overview',
+          items: [
+            {
+              name: 'Dashboard Overview',
+              href: '/employee',
+              icon: LayoutDashboard,
+              badge: 'Desk',
+            },
+          ],
+        },
+        {
+          title: 'Attendance & Applications',
+          items: [
+            {
+              name: 'Attendance & Face Punch',
+              href: '/employee/attendance',
+              icon: Camera,
+              badge: 'Bio-Clock',
+            },
+            {
+              name: 'Apply Holiday',
+              href: '/employee/attendance/apply-holiday',
+              icon: Calendar,
+            },
+            {
+              name: 'Apply Annual Leave',
+              href: '/employee/attendance/apply-leave',
+              icon: Award,
+            },
+            {
+              name: 'Resignation Notice',
+              href: '/employee/attendance/apply-resignation',
+              icon: FileText,
+            },
+            {
+              name: 'My Documents & Logs',
+              href: '/employee/attendance/details',
+              icon: FileCheck,
+            },
+          ],
+        },
+      ];
 
     if (perms?.companies?.view !== false) {
       sections.push({
@@ -247,6 +248,11 @@ export default function EmployeeLayout({
       const customerChildren: EmployeeNavChild[] = [
         {
           name: 'Create Customer',
+          href: '/employee/customers/create',
+          icon: PlusCircle,
+        },
+        {
+          name: 'Customer List',
           href: '/employee/customers',
           icon: Users,
           badge: customerCount > 0 ? `${customerCount}` : undefined,
@@ -255,7 +261,7 @@ export default function EmployeeLayout({
 
       if (perms?.customers?.target_amount !== false) {
         customerChildren.push({
-          name: 'Target Amount',
+          name: 'Customer Target Amount',
           href: '/employee/customers/target-amount',
           icon: Target,
         });
@@ -263,7 +269,7 @@ export default function EmployeeLayout({
 
       if (perms?.customers?.deposit_amount !== false) {
         customerChildren.push({
-          name: 'Deposit Amount',
+          name: 'Customer Deposit Amount',
           href: '/employee/customers/deposit-amount',
           icon: DollarSign,
         });
@@ -271,7 +277,7 @@ export default function EmployeeLayout({
 
       if (perms?.customers?.pending_amount !== false) {
         customerChildren.push({
-          name: 'Pending Amount',
+          name: 'Customer Pending Amount',
           href: '/employee/customers/pending-amount',
           icon: Clock,
         });
@@ -279,7 +285,7 @@ export default function EmployeeLayout({
 
       if (perms?.customers?.company_cost !== false) {
         customerChildren.push({
-          name: 'Company Cost Amount',
+          name: 'Customer Cost Amount',
           href: '/employee/customers/company-cost',
           icon: FileSpreadsheet,
         });
@@ -365,9 +371,8 @@ export default function EmployeeLayout({
       <div className="flex flex-1 relative">
         {/* DESKTOP SIDEBAR */}
         <aside
-          className={`hidden md:flex flex-col border-r border-slate-200 bg-white transition-all duration-300 z-30 shrink-0 sticky top-0 h-[calc(100vh-36px)] ${
-            sidebarOpen ? 'w-64' : 'w-20'
-          }`}
+          className={`hidden md:flex flex-col border-r border-slate-200 bg-white transition-all duration-300 z-30 shrink-0 sticky top-0 h-[calc(100vh-36px)] ${sidebarOpen ? 'w-64' : 'w-20'
+            }`}
         >
           {/* Sidebar Header */}
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -453,11 +458,10 @@ export default function EmployeeLayout({
                               if (!sidebarOpen) setSidebarOpen(true);
                               setCustomerMenuOpen(!customerMenuOpen);
                             }}
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 text-left ${
-                              isChildActive
-                                ? 'bg-blue-50 text-[#0b4da2]'
-                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                            }`}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border-0 text-left ${isChildActive
+                              ? 'bg-blue-50 text-[#0b4da2]'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                              }`}
                             title={!sidebarOpen ? item.name : undefined}
                           >
                             <Icon size={17} className="shrink-0" />
@@ -472,9 +476,8 @@ export default function EmployeeLayout({
                                   )}
                                   <ChevronDown
                                     size={14}
-                                    className={`transition-transform duration-200 ${
-                                      customerMenuOpen ? 'rotate-0' : '-rotate-90'
-                                    }`}
+                                    className={`transition-transform duration-200 ${customerMenuOpen ? 'rotate-0' : '-rotate-90'
+                                      }`}
                                   />
                                 </div>
                               </div>
@@ -489,30 +492,29 @@ export default function EmployeeLayout({
                                 const isChildItemActive =
                                   child.href === '/employee/customers'
                                     ? pathname === '/employee/customers' ||
-                                      pathname === '/employee/customers/create' ||
-                                      pathname.startsWith('/employee/customers/edit') ||
-                                      pathname.startsWith('/employee/customers/view')
-                                    : pathname === child.href || pathname.startsWith(child.href + '/');
+                                    pathname.startsWith('/employee/customers/edit') ||
+                                    pathname.startsWith('/employee/customers/view')
+                                    : child.href === '/employee/customers/create'
+                                      ? pathname === '/employee/customers/create'
+                                      : pathname === child.href || pathname.startsWith(child.href + '/');
 
                                 return (
                                   <Link
                                     key={child.href}
                                     href={child.href}
-                                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline ${
-                                      isChildItemActive
-                                        ? 'bg-[#0b4da2] text-white shadow-2xs'
-                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                                    }`}
+                                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline ${isChildItemActive
+                                      ? 'bg-[#0b4da2] text-white shadow-2xs'
+                                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                                      }`}
                                   >
                                     <ChildIcon size={14} className="shrink-0" />
                                     <span className="truncate flex-1">{child.name}</span>
                                     {child.badge && (
                                       <span
-                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                                          isChildItemActive
-                                            ? 'bg-white/20 text-white'
-                                            : 'bg-blue-50 text-[#0b4da2]'
-                                        }`}
+                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${isChildItemActive
+                                          ? 'bg-white/20 text-white'
+                                          : 'bg-blue-50 text-[#0b4da2]'
+                                          }`}
                                       >
                                         {child.badge}
                                       </span>
@@ -530,18 +532,17 @@ export default function EmployeeLayout({
                       item.href === '/employee'
                         ? pathname === '/employee'
                         : item.href === '/employee/attendance'
-                        ? pathname === '/employee/attendance'
-                        : Boolean(item.href && (pathname === item.href || pathname.startsWith(item.href + '/')));
+                          ? pathname === '/employee/attendance'
+                          : Boolean(item.href && (pathname === item.href || pathname.startsWith(item.href + '/')));
 
                     return (
                       <Link
                         key={item.name}
                         href={item.href || '#'}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all no-underline ${
-                          isActive
-                            ? 'bg-[#0b4da2] text-white shadow-sm shadow-blue-500/20'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                        }`}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all no-underline ${isActive
+                          ? 'bg-[#0b4da2] text-white shadow-sm shadow-blue-500/20'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                          }`}
                         title={!sidebarOpen ? item.name : undefined}
                       >
                         <Icon size={17} className="shrink-0" />
@@ -550,11 +551,10 @@ export default function EmployeeLayout({
                             <span className="truncate">{item.name}</span>
                             {item.badge && (
                               <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                                  isActive
-                                    ? 'bg-white/20 text-white'
-                                    : 'bg-blue-50 text-[#0b4da2] border border-blue-100'
-                                }`}
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${isActive
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-blue-50 text-[#0b4da2] border border-blue-100'
+                                  }`}
                               >
                                 {item.badge}
                               </span>
@@ -573,9 +573,8 @@ export default function EmployeeLayout({
           <div className="p-3 border-t border-slate-100">
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 transition-colors border-0 bg-transparent cursor-pointer ${
-                !sidebarOpen && 'justify-center'
-              }`}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 transition-colors border-0 bg-transparent cursor-pointer ${!sidebarOpen && 'justify-center'
+                }`}
               title="Sign Out"
             >
               <LogOut size={16} className="shrink-0" />
@@ -624,8 +623,8 @@ export default function EmployeeLayout({
                           const isChildItemActive =
                             child.href === '/employee/customers'
                               ? pathname === '/employee/customers' ||
-                                pathname === '/employee/customers/create' ||
-                                pathname.startsWith('/employee/customers/edit')
+                              pathname === '/employee/customers/create' ||
+                              pathname.startsWith('/employee/customers/edit')
                               : pathname === child.href || pathname.startsWith(child.href + '/');
 
                           return (
@@ -633,11 +632,10 @@ export default function EmployeeLayout({
                               key={child.href}
                               href={child.href}
                               onClick={() => setMobileMenuOpen(false)}
-                              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold no-underline ${
-                                isChildItemActive
-                                  ? 'bg-[#0b4da2] text-white'
-                                  : 'text-slate-700 hover:bg-slate-50'
-                              }`}
+                              className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold no-underline ${isChildItemActive
+                                ? 'bg-[#0b4da2] text-white'
+                                : 'text-slate-700 hover:bg-slate-50'
+                                }`}
                             >
                               <div className="flex items-center gap-2">
                                 <ChildIcon size={15} />
@@ -655,19 +653,18 @@ export default function EmployeeLayout({
                   item.href === '/employee'
                     ? pathname === '/employee'
                     : item.href === '/employee/attendance'
-                    ? pathname === '/employee/attendance'
-                    : Boolean(item.href && (pathname === item.href || pathname.startsWith(item.href + '/')));
+                      ? pathname === '/employee/attendance'
+                      : Boolean(item.href && (pathname === item.href || pathname.startsWith(item.href + '/')));
 
                 return (
                   <Link
                     key={item.name}
                     href={item.href || '#'}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold no-underline ${
-                      isActive
-                        ? 'bg-[#0b4da2] text-white'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold no-underline ${isActive
+                      ? 'bg-[#0b4da2] text-white'
+                      : 'text-slate-700 hover:bg-slate-50'
+                      }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <Icon size={16} />

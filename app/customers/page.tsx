@@ -354,26 +354,29 @@ function CustomersContent() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-[#22a34a] text-white text-xs font-bold">
-                    <th className="py-3 px-4 border-r border-green-600/60 w-[24%]">
-                      User Details
+                  <tr className="bg-[#22a34a] text-white text-xs font-bold uppercase tracking-wider">
+                    <th className="py-3.5 px-4 border-r border-green-600/60 whitespace-nowrap min-w-[200px]">
+                      Worker Name
                     </th>
-                    <th className="py-3 px-4 border-r border-green-600/60 w-[18%]">
-                      NID &amp; Passport
+                    <th className="py-3.5 px-4 border-r border-green-600/60 whitespace-nowrap min-w-[140px]">
+                      Passport No
                     </th>
-                    <th className="py-3 px-4 border-r border-green-600/60 w-[18%]">
-                      Contact Info
+                    <th className="py-3.5 px-4 border-r border-green-600/60 whitespace-nowrap min-w-[140px]">
+                      NID No
                     </th>
-                    <th className="py-3 px-4 border-r border-green-600/60 w-[18%]">
-                      Bank &amp; Total Payment
+                    <th className="py-3.5 px-4 border-r border-green-600/60 whitespace-nowrap min-w-[140px]">
+                      Contact
                     </th>
-                    <th className="py-3 px-3 border-r border-green-600/60 text-center w-[8%]">
+                    <th className="py-3.5 px-4 border-r border-green-600/60 whitespace-nowrap min-w-[170px]">
+                      Bank &amp; Payment
+                    </th>
+                    <th className="py-3.5 px-3 border-r border-green-600/60 text-center whitespace-nowrap min-w-[90px]">
                       Role
                     </th>
-                    <th className="py-3 px-3 border-r border-green-600/60 text-center w-[6%]">
+                    <th className="py-3.5 px-3 border-r border-green-600/60 text-center whitespace-nowrap min-w-[80px]">
                       Files
                     </th>
-                    <th className="py-3 px-4 text-center font-bold w-[6%]">
+                    <th className="py-3.5 px-4 text-center font-bold whitespace-nowrap min-w-[120px]">
                       Actions
                     </th>
                   </tr>
@@ -381,7 +384,7 @@ function CustomersContent() {
                 <tbody className="divide-y divide-slate-200 text-xs">
                   {loading && customers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                      <td colSpan={8} className="py-12 text-center text-slate-400 font-medium">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="w-7 h-7 border-2 border-[#22a34a] border-t-transparent rounded-full animate-spin" />
                           <span>Loading customer directory from MySQL database...</span>
@@ -390,7 +393,7 @@ function CustomersContent() {
                     </tr>
                   ) : filteredCustomers.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500 font-medium bg-slate-50/50">
+                      <td colSpan={8} className="py-12 text-center text-slate-500 font-medium bg-slate-50/50">
                         <div className="max-w-sm mx-auto flex flex-col items-center gap-2">
                           <Users size={32} className="text-slate-300" />
                           <p className="font-bold text-slate-700 m-0">No customers found</p>
@@ -408,12 +411,12 @@ function CustomersContent() {
                           key={cust.id}
                           className="hover:bg-blue-50/40 transition-colors group"
                         >
-                          {/* User Details */}
-                          <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
+                          {/* Worker Name */}
+                          <td className="py-4 px-4 border-r border-slate-200 align-middle whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <Link
                                 href={`/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}`}
-                                className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden text-slate-600 font-bold text-xs shadow-xs hover:ring-2 hover:ring-blue-400 transition-all no-underline"
+                                className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden text-slate-600 font-bold text-xs shadow-xs hover:ring-2 hover:ring-blue-400 transition-all no-underline"
                                 title="View Customer Dossier"
                               >
                                 {cust.profile_pic ? (
@@ -426,98 +429,52 @@ function CustomersContent() {
                                   cust.full_name.charAt(0).toUpperCase()
                                 )}
                               </Link>
-                              <div className="min-w-0">
+                              <div className="font-bold text-slate-900 text-xs">
                                 <Link
                                   href={`/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}`}
-                                  className="font-bold text-slate-900 text-xs block leading-tight truncate hover:text-blue-700 transition-colors no-underline"
+                                  className="text-slate-900 hover:text-blue-700 transition-colors no-underline"
                                   title="View Customer Dossier"
                                 >
                                   {cust.full_name}
                                 </Link>
-                                {cust.username && (
-                                  <span className="text-[11px] text-slate-400 font-mono block">
-                                    @{cust.username}
-                                  </span>
-                                )}
-                                {cust.leaving_address && (
-                                  <span className="text-[10px] text-slate-500 truncate block max-w-[200px]" title={cust.leaving_address}>
-                                    {cust.leaving_address}
-                                  </span>
-                                )}
                               </div>
                             </div>
                           </td>
 
-                          {/* NID & Passport */}
-                          <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                            <div className="space-y-1">
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                                  NID Number
-                                </span>
-                                <span className="font-mono text-xs font-bold text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200/70 inline-block">
-                                  {cust.nid_no}
-                                </span>
-                              </div>
-                              {cust.passport_no && (
-                                <div>
-                                  <span className="text-[10px] text-slate-400 uppercase tracking-wider mr-1">
-                                    Passport:
-                                  </span>
-                                  <span className="font-mono text-[11px] text-slate-700">
-                                    {cust.passport_no}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                          {/* Passport No */}
+                          <td className="py-4 px-4 border-r border-slate-200 align-middle whitespace-nowrap font-mono text-xs">
+                            <span className="font-semibold text-slate-800">
+                              {cust.passport_no || '—'}
+                            </span>
                           </td>
 
-                          {/* Contact Info */}
-                          <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                            <div className="space-y-0.5">
-                              {cust.worker_phone && (
-                                <div className="text-xs font-medium text-slate-800">
-                                  <span className="text-[10px] text-slate-400 mr-1">W:</span>
-                                  {cust.worker_phone}
-                                </div>
-                              )}
-                              {cust.guardian_phone && (
-                                <div className="text-[11px] text-slate-600">
-                                  <span className="text-[10px] text-slate-400 mr-1">G:</span>
-                                  {cust.guardian_phone}
-                                </div>
-                              )}
-                              <div className="text-[11px] text-blue-600 font-mono truncate max-w-[180px]">
-                                {cust.email}
-                              </div>
-                            </div>
+                          {/* NID No */}
+                          <td className="py-4 px-4 border-r border-slate-200 align-middle whitespace-nowrap font-mono text-xs">
+                            <span className="font-semibold text-slate-800">
+                              {cust.nid_no || '—'}
+                            </span>
                           </td>
 
-                          {/* Bank Details & Total Payment */}
-                          <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                            <div className="space-y-1">
-                              {cust.bank_account_number ? (
-                                <div>
-                                  <div className="text-xs font-semibold text-slate-800 flex items-center gap-1">
-                                    <Landmark size={12} className="text-emerald-600 shrink-0" />
-                                    <span className="truncate">{cust.bank_account_name || 'Bank Account'}</span>
-                                  </div>
-                                  <div className="font-mono text-[11px] text-slate-600">
-                                    {cust.bank_account_number}
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 text-xs">—</span>
-                              )}
-                              {cust.total_payment && (
-                                <div className="pt-0.5">
-                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[10px] font-bold px-1.5 py-0.5 rounded font-mono">
-                                    <span className="text-emerald-600 font-sans font-semibold">Total:</span>
-                                    <span>{cust.total_payment.startsWith('RM') ? cust.total_payment : `RM ${cust.total_payment}`}</span>
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                          {/* Contact */}
+                          <td className="py-4 px-4 border-r border-slate-200 align-middle whitespace-nowrap font-mono text-xs">
+                            <span className="text-slate-800">
+                              {cust.worker_phone || cust.phone || '—'}
+                            </span>
+                          </td>
+
+                          {/* Bank & Payment */}
+                          <td className="py-4 px-4 border-r border-slate-200 align-middle whitespace-nowrap font-mono text-xs">
+                            {cust.bank_account_number ? (
+                              <span className="text-slate-800 font-medium">
+                                {cust.bank_account_name ? `${cust.bank_account_name}: ` : ''}{cust.bank_account_number}
+                              </span>
+                            ) : cust.total_payment ? (
+                              <span className="text-emerald-700 font-semibold">
+                                {cust.total_payment.startsWith('RM') ? cust.total_payment : `RM ${cust.total_payment}`}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </td>
 
                           {/* Role Badge */}

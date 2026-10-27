@@ -55,12 +55,22 @@ import {
 } from '@/lib/pageCardStorage';
 
 const DEFAULT_CUSTOMER_CARDS: PageStatCardConfig[] = [
-  { id: 'total_customers', title: 'Total Customers', subtitle: 'Across all registered employers', icon: 'Users', order_num: 1 },
-  { id: 'active_permits', title: 'Active Permits', subtitle: 'Authorized worker status', icon: 'UserCheck', order_num: 2 },
-  { id: 'inactive_customers', title: 'Inactive Customers', subtitle: 'Suspended worker accounts', icon: 'UserX', order_num: 3 },
-  { id: 'absent_customers', title: 'Absent Customers', subtitle: 'Absent worker permits', icon: 'UserMinus', order_num: 4 },
-  { id: 'passport_verified', title: 'Passport Verified', subtitle: 'Valid biometric passports', icon: 'CheckCircle2', order_num: 5 },
-  { id: 'document_dossiers', title: 'Document Dossiers', subtitle: 'Total uploaded dossiers', icon: 'FolderOpen', order_num: 6 },
+  { id: 'total_customers', title: 'Total Customers', subtitle: 'Across all registered employers', icon: 'Users', order_num: 1, metric_type: 'total_customers' },
+  { id: 'active_permits', title: 'Active Permits', subtitle: 'Authorized worker status', icon: 'UserCheck', order_num: 2, metric_type: 'active_permits' },
+  { id: 'inactive_customers', title: 'Inactive Customers', subtitle: 'Suspended worker accounts', icon: 'UserX', order_num: 3, metric_type: 'inactive_customers' },
+  { id: 'absent_customers', title: 'Absent Customers', subtitle: 'Absent worker permits', icon: 'UserMinus', order_num: 4, metric_type: 'absent_customers' },
+  { id: 'passport_verified', title: 'Passport Verified', subtitle: 'Valid biometric passports', icon: 'CheckCircle2', order_num: 5, metric_type: 'passport_verified' },
+  { id: 'document_dossiers', title: 'Document Dossiers', subtitle: 'Total uploaded dossiers', icon: 'FolderOpen', order_num: 6, metric_type: 'document_dossiers' },
+];
+
+const CUSTOMER_METRIC_OPTIONS = [
+  { id: 'total_customers', label: 'Total Customers (Live Count)' },
+  { id: 'active_permits', label: 'Active Permits (Live Count)' },
+  { id: 'inactive_customers', label: 'Inactive Customers (Live Count)' },
+  { id: 'absent_customers', label: 'Absent Customers (Live Count)' },
+  { id: 'passport_verified', label: 'Passport Verified (Live Count)' },
+  { id: 'document_dossiers', label: 'Document Dossiers (Live Count)' },
+  { id: 'custom', label: 'Custom Value / Fixed Number' },
 ];
 
 export default function SuperAdminCustomersPage() {
@@ -71,6 +81,7 @@ export default function SuperAdminCustomersPage() {
 
   // Manage Cards Modal State
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [initialShowAdd, setInitialShowAdd] = useState(false);
   const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_CUSTOMER_CARDS);
 
   useEffect(() => {
@@ -180,6 +191,58 @@ export default function SuperAdminCustomersPage() {
   const passportCount = customers.filter((c) => Boolean(c.passport_no || c.passport_file)).length;
   const totalDocuments = customers.reduce((sum, c) => sum + (c.documents?.length || 0), 0);
 
+  const getCardValue = (card: PageStatCardConfig) => {
+    const metric = card.metric_type || card.id;
+    switch (metric) {
+      case 'total_customers':
+        return totalCustomers;
+      case 'active_permits':
+        return activeCount;
+      case 'inactive_customers':
+        return inactiveCount;
+      case 'absent_customers':
+        return absentCount;
+      case 'passport_verified':
+        return passportCount;
+      case 'document_dossiers':
+        return totalDocuments;
+      default:
+        return card.custom_value !== undefined && card.custom_value !== null && card.custom_value !== ''
+          ? card.custom_value
+          : 0;
+    }
+  };
+
+  const getCardTheme = (card: PageStatCardConfig, idx: number) => {
+    const metric = card.metric_type || card.id;
+    if (metric === 'total_customers') {
+      return { themeColor: 'text-slate-900', iconBg: 'bg-blue-50 text-[#0b4da2]' };
+    }
+    if (metric === 'active_permits') {
+      return { themeColor: 'text-emerald-600', iconBg: 'bg-emerald-50 text-emerald-600' };
+    }
+    if (metric === 'inactive_customers') {
+      return { themeColor: 'text-rose-600', iconBg: 'bg-rose-50 text-rose-600' };
+    }
+    if (metric === 'absent_customers') {
+      return { themeColor: 'text-purple-600', iconBg: 'bg-purple-50 text-purple-600' };
+    }
+    if (metric === 'passport_verified') {
+      return { themeColor: 'text-indigo-600', iconBg: 'bg-indigo-50 text-indigo-600' };
+    }
+    if (metric === 'document_dossiers') {
+      return { themeColor: 'text-amber-600', iconBg: 'bg-amber-50 text-amber-600' };
+    }
+    const customPalettes = [
+      { themeColor: 'text-indigo-600', iconBg: 'bg-indigo-50 text-indigo-600' },
+      { themeColor: 'text-teal-600', iconBg: 'bg-teal-50 text-teal-600' },
+      { themeColor: 'text-cyan-600', iconBg: 'bg-cyan-50 text-cyan-600' },
+      { themeColor: 'text-violet-600', iconBg: 'bg-violet-50 text-violet-600' },
+      { themeColor: 'text-orange-600', iconBg: 'bg-orange-50 text-orange-600' },
+    ];
+    return customPalettes[idx % customPalettes.length];
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -221,7 +284,22 @@ export default function SuperAdminCustomersPage() {
           <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
             <button
               type="button"
-              onClick={() => setIsCardModalOpen(true)}
+              onClick={() => {
+                setInitialShowAdd(true);
+                setIsCardModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Plus size={14} />
+              <span>Add Card</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setInitialShowAdd(false);
+                setIsCardModalOpen(true);
+              }}
               className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all cursor-pointer whitespace-nowrap"
             >
               <SlidersHorizontal size={14} />
@@ -250,57 +328,33 @@ export default function SuperAdminCustomersPage() {
 
       {/* KPI Stats Cards (Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map((card) => {
-          let value: number | string = 0;
-          let themeColor = 'text-slate-900';
-          let iconBg = 'bg-blue-50 text-[#0b4da2]';
+        {cards
+          .slice()
+          .sort((a, b) => (a.order_num || 0) - (b.order_num || 0))
+          .map((card, idx) => {
+            const value = getCardValue(card);
+            const { themeColor, iconBg } = getCardTheme(card, idx);
 
-          if (card.id === 'total_customers') {
-            value = totalCustomers;
-            themeColor = 'text-slate-900';
-            iconBg = 'bg-blue-50 text-[#0b4da2]';
-          } else if (card.id === 'active_permits') {
-            value = activeCount;
-            themeColor = 'text-emerald-600';
-            iconBg = 'bg-emerald-50 text-emerald-600';
-          } else if (card.id === 'inactive_customers') {
-            value = inactiveCount;
-            themeColor = 'text-rose-600';
-            iconBg = 'bg-rose-50 text-rose-600';
-          } else if (card.id === 'absent_customers') {
-            value = absentCount;
-            themeColor = 'text-purple-600';
-            iconBg = 'bg-purple-50 text-purple-600';
-          } else if (card.id === 'passport_verified') {
-            value = passportCount;
-            themeColor = 'text-[#0b4da2]';
-            iconBg = 'bg-blue-50 text-[#0b4da2]';
-          } else if (card.id === 'document_dossiers') {
-            value = totalDocuments;
-            themeColor = 'text-amber-600';
-            iconBg = 'bg-amber-50 text-amber-600';
-          }
-
-          return (
-            <div
-              key={card.id}
-              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
-            >
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
-                  {card.title}
-                </span>
-                <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
-                  <DynamicCardIcon icon={card.icon} size={16} />
+            return (
+              <div
+                key={card.id}
+                className="bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-indigo-600 transition-colors leading-tight truncate">
+                    {card.title}
+                  </span>
+                  <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+                    <DynamicCardIcon icon={card.icon} size={16} />
+                  </div>
                 </div>
+                <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
+                  {value}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
               </div>
-              <div className={`text-2xl font-bold tracking-tight font-mono my-0.5 ${themeColor}`}>
-                {value}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1 truncate">{card.subtitle}</div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
 
       {/* Main Table Card */}
@@ -366,18 +420,18 @@ export default function SuperAdminCustomersPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] border-b border-slate-200">
-                <th className="py-3 px-4">Customer / Worker</th>
-                <th className="py-3 px-4">Passport Details</th>
-                <th className="py-3 px-4">NID / IC No.</th>
-                <th className="py-3 px-4">Employer Company</th>
-                <th className="py-3 px-4">Working Sector</th>
-                <th className="py-3 px-4">Basic Salary</th>
-                <th className="py-3 px-4">OT(Over time)</th>
-                <th className="py-3 px-4">Contact</th>
-                <th className="py-3 px-4 text-center">Documents</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+              <tr className="bg-slate-50/80 text-slate-600 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[200px]">Worker Name</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[130px]">Passport</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[130px]">NID No</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[160px]">Company</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[140px]">Sector</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[110px]">Basic Salary</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[110px]">Overtime</th>
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[130px]">Contact</th>
+                <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[100px]">Documents</th>
+                <th className="py-3.5 px-4 text-center whitespace-nowrap min-w-[110px]">Status</th>
+                <th className="py-3.5 px-4 text-right whitespace-nowrap min-w-[110px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -411,162 +465,98 @@ export default function SuperAdminCustomersPage() {
 
                   return (
                     <tr key={cust.id} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Name & Origin */}
-                      <td className="py-3.5 px-4">
+                      {/* Worker Name */}
+                      <td className="py-4 px-4 align-middle whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           {cust.profile_pic || cust.profile_image ? (
                             <img
                               src={getFileUrl(cust.profile_pic || cust.profile_image)}
                               alt={cust.full_name}
-                              className="w-9 h-9 rounded-xl object-cover shadow-xs shrink-0 border border-slate-200"
+                              className="w-9 h-9 rounded-full object-cover shadow-xs shrink-0 border border-slate-200"
                             />
                           ) : (
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#072a6b] to-[#0c4da2] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+                            <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
                               {cust.full_name
                                 .split(' ')
                                 .map((n) => n[0])
                                 .slice(0, 2)
                                 .join('')
-                                .toUpperCase()}
+                                .toUpperCase() || 'CW'}
                             </div>
                           )}
-                          <div>
-                            <div className="font-bold text-slate-900 text-xs">
-                              {cust.full_name}
-                            </div>
-                            <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                              <Globe2 size={10} />
-                              <span>{cust.country || 'N/A'}</span>
-                              {cust.date_of_birth && <span>• DOB: {cust.date_of_birth}</span>}
-                            </div>
+                          <div className="font-bold text-slate-900 text-xs">
+                            {cust.full_name}
                           </div>
                         </div>
                       </td>
 
-                      {/* Passport Details & Upload */}
-                      <td className="py-3.5 px-4 font-mono text-xs">
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-slate-800">
-                            {cust.passport_no || 'NOT ISSUED'}
-                          </span>
-                          {cust.passport_file ? (
-                            <div>
-                              <a
-                                href={getFileUrl(cust.passport_file)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:underline font-sans"
-                              >
-                                <FileCheck2 size={11} />
-                                <span>View Passport</span>
-                              </a>
-                            </div>
-                          ) : (
-                            <div className="text-[10px] text-slate-400 italic">No file uploaded</div>
-                          )}
-                          {cust.passport_expire_date && (
-                            <div className="text-[10px] text-amber-700 font-sans">
-                              Exp: {cust.passport_expire_date}
-                            </div>
-                          )}
-                        </div>
+                      {/* Passport */}
+                      <td className="py-4 px-4 align-middle whitespace-nowrap font-mono text-xs">
+                        <span className="font-semibold text-slate-800">
+                          {cust.passport_no || '—'}
+                        </span>
                       </td>
 
-                      {/* NID / IC No & Upload */}
-                      <td className="py-3.5 px-4 font-mono text-xs">
-                        <div className="space-y-0.5">
-                          <span className="font-semibold text-slate-900">
-                            {cust.nid_no}
-                          </span>
-                          {cust.nid_file ? (
-                            <div>
-                              <a
-                                href={getFileUrl(cust.nid_file)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] text-emerald-600 hover:underline font-sans"
-                              >
-                                <FileCheck2 size={11} />
-                                <span>View NID</span>
-                              </a>
-                            </div>
-                          ) : (
-                            <div className="text-[10px] text-slate-400 italic">No file uploaded</div>
-                          )}
-                        </div>
+                      {/* NID No */}
+                      <td className="py-4 px-4 align-middle whitespace-nowrap font-mono text-xs">
+                        <span className="font-semibold text-slate-800">
+                          {cust.nid_no || '—'}
+                        </span>
                       </td>
 
                       {/* Employer Company */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 bg-blue-50 text-[#0b4da2] border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
-                          <Building2 size={10} />
-                          <span className="truncate max-w-[120px]">
-                            {compMatch ? compMatch.name : (cust.company_id || 'Unassigned')}
-                          </span>
+                      <td className="py-4 px-4 align-middle whitespace-nowrap">
+                        <span className="font-semibold text-slate-800">
+                          {compMatch ? compMatch.name : (cust.company_id || cust.other_company_name || '—')}
                         </span>
-                        {cust.agent_name && (
-                          <div className="text-[10px] text-amber-700 font-medium truncate max-w-[130px] mt-0.5">
-                            Agent: {cust.agent_name}
-                          </div>
-                        )}
                       </td>
 
                       {/* Working Sector */}
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[10px] font-semibold border border-slate-200">
-                          {cust.working_sector || 'General Sector'}
+                      <td className="py-4 px-4 align-middle whitespace-nowrap">
+                        <span className="font-medium text-slate-800">
+                          {cust.working_sector || 'General'}
                         </span>
-                        {cust.working_address && (
-                          <div className="text-[10px] text-slate-400 truncate max-w-[130px] mt-0.5">
-                            {cust.working_address}
-                          </div>
-                        )}
                       </td>
 
                       {/* Basic Salary */}
-                      <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
+                      <td className="py-4 px-4 align-middle whitespace-nowrap font-mono text-xs">
                         <span className="text-slate-800 font-semibold">
                           {cust.basic_salary || '—'}
                         </span>
                       </td>
 
-                      {/* OT(Over time) */}
-                      <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
+                      {/* Overtime */}
+                      <td className="py-4 px-4 align-middle whitespace-nowrap font-mono text-xs">
                         <span className="text-slate-700 font-medium">
                           {cust.overtime || '—'}
                         </span>
                       </td>
 
                       {/* Contact */}
-                      <td className="py-3.5 px-4 text-xs">
-                        <div className="text-slate-800 font-mono text-[11px]">
+                      <td className="py-4 px-4 align-middle whitespace-nowrap font-mono text-xs">
+                        <span className="text-slate-800">
                           {cust.phone || cust.worker_phone || '—'}
-                        </div>
-                        {cust.email && (
-                          <div className="text-[10px] text-blue-600 truncate max-w-[130px]">
-                            {cust.email}
-                          </div>
-                        )}
+                        </span>
                       </td>
 
                       {/* Documents */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-4 px-4 align-middle text-center whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                             docCount > 0
                               ? 'bg-amber-50 text-amber-800 border border-amber-200'
                               : 'bg-slate-100 text-slate-400'
                           }`}
                         >
-                          <FileText size={10} />
+                          <FileText size={11} />
                           <span>{docCount} files</span>
                         </span>
                       </td>
 
                       {/* Status */}
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-4 px-4 align-middle text-center whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                             cust.status === 'active'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : cust.status === 'pending'
@@ -592,7 +582,7 @@ export default function SuperAdminCustomersPage() {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-4 px-4 align-middle text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-1 justify-end">
                           <Link
                             href={`/superadmin/customers/view?id=${cust.id}`}
@@ -670,6 +660,8 @@ export default function SuperAdminCustomersPage() {
         onSave={handleSaveCards}
         onReset={handleResetCards}
         pageTitle="Customer & Worker Management"
+        availableMetrics={CUSTOMER_METRIC_OPTIONS}
+        initialShowAdd={initialShowAdd}
       />
     </div>
   );

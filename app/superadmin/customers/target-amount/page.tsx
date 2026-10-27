@@ -139,11 +139,11 @@ export default function SuperAdminCustomerTargetAmountPage() {
           nidNo: cust.nid_no || targetRec.nid_no,
           companyId: cust.company_id || targetRec.company_id,
           companyName: cust.company_id || targetRec.company_name,
-          targetAmount: Number(targetRec.target_amount) || 0,
+          targetAmount: bal.total_target > 0 ? bal.total_target : Number(targetRec.target_amount) || 0,
           targetCategory: targetRec.target_category || TARGET_CATEGORIES[0],
           targetDate: targetRec.target_date,
           paymentTerms: targetRec.payment_terms || PAYMENT_TERMS[0],
-          status: targetRec.status,
+          status: bal.total_target > 0 ? (bal.status === 'Settled' ? 'Achieved' : 'In Progress') : targetRec.status,
           remarks: targetRec.remarks,
           createdAt: targetRec.created_at,
           hasTarget: true,
@@ -174,6 +174,7 @@ export default function SuperAdminCustomerTargetAmountPage() {
       const rCId = String(r.customer_id);
       if (!processedCustIds.has(rCId)) {
         processedCustIds.add(rCId);
+        const bal = getCustomerFinanceBalance(r.customer_id);
         list.push({
           id: r.id,
           targetRecordId: r.id,
@@ -183,11 +184,11 @@ export default function SuperAdminCustomerTargetAmountPage() {
           nidNo: r.nid_no,
           companyId: r.company_id,
           companyName: r.company_name,
-          targetAmount: Number(r.target_amount) || 0,
+          targetAmount: bal.total_target > 0 ? bal.total_target : Number(r.target_amount) || 0,
           targetCategory: r.target_category || TARGET_CATEGORIES[0],
           targetDate: r.target_date,
           paymentTerms: r.payment_terms || PAYMENT_TERMS[0],
-          status: r.status,
+          status: bal.total_target > 0 ? (bal.status === 'Settled' ? 'Achieved' : 'In Progress') : r.status,
           remarks: r.remarks,
           createdAt: r.created_at,
           hasTarget: true,

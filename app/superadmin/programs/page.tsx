@@ -46,9 +46,8 @@ import {
 
 const DEFAULT_PROGRAM_CARDS: PageStatCardConfig[] = [
   { id: 'total_programs', title: 'Total Programs', subtitle: 'All recruitment & deployment schemes', icon: 'BookOpen', order_num: 1 },
-  { id: 'active_programs', title: 'Active Schemes', subtitle: 'Currently running programs', icon: 'Sparkles', order_num: 2 },
+  { id: 'total_sectors', title: 'Active Sectors', subtitle: 'Distinct industry sectors covered', icon: 'Sparkles', order_num: 2 },
   { id: 'assigned_workers', title: 'Enrolled Workers', subtitle: 'Foreign workers assigned to schemes', icon: 'Users', order_num: 3 },
-  { id: 'avg_program_fee', title: 'Avg Program Fee', subtitle: 'Average scheme package fee', icon: 'DollarSign', order_num: 4 },
 ];
 
 export default function SuperAdminProgramsListPage() {
@@ -68,11 +67,21 @@ export default function SuperAdminProgramsListPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load cards layout
+  // Load cards layout & purge unwanted cards
   useEffect(() => {
-    setCards(getStoredPageCards('programs', DEFAULT_PROGRAM_CARDS));
+    const stored = getStoredPageCards('programs', DEFAULT_PROGRAM_CARDS).filter(
+      (c) => c.id !== 'avg_program_fee' && c.id !== 'active_programs'
+    );
+    setCards(stored);
+    try {
+      localStorage.setItem('superadmin_cards_programs', JSON.stringify(stored));
+    } catch {}
+
     const handleCardsUpdate = (e: any) => {
-      setCards(e.detail || getStoredPageCards('programs', DEFAULT_PROGRAM_CARDS));
+      const updated = (e.detail || getStoredPageCards('programs', DEFAULT_PROGRAM_CARDS)).filter(
+        (c: PageStatCardConfig) => c.id !== 'avg_program_fee' && c.id !== 'active_programs'
+      );
+      setCards(updated);
     };
     window.addEventListener('superadmin_cards_update_programs', handleCardsUpdate);
     return () => window.removeEventListener('superadmin_cards_update_programs', handleCardsUpdate);
@@ -127,26 +136,21 @@ export default function SuperAdminProgramsListPage() {
       const matchesSearch =
         searchTerm === '' ||
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.code && p.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
       const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
 
-      return matchesSearch && matchesStatus && matchesCategory;
+      return matchesSearch && matchesCategory;
     });
-  }, [programs, searchTerm, statusFilter, categoryFilter]);
+  }, [programs, searchTerm, categoryFilter]);
 
-  // Metrics
+  // Metrics (Cleaned: only total, sectors, workers)
   const metrics = useMemo(() => {
     const total = programs.length;
-    const active = programs.filter((p) => p.status === 'active').length;
+    const uniqueSectors = new Set(programs.map((p) => p.category?.trim()).filter(Boolean)).size;
     const enrolledWorkers = programs.reduce((acc, p) => acc + (p.customers_count || 0), 0);
-    const validFees = programs.map((p) => Number(p.fees) || 0).filter((f) => f > 0);
-    const avgFee = validFees.length > 0 ? validFees.reduce((a, b) => a + b, 0) / validFees.length : 0;
 
-    return { total, active, enrolledWorkers, avgFee };
+    return { total, uniqueSectors, enrolledWorkers };
   }, [programs]);
 
   const handleDelete = async (id: number) => {
@@ -172,12 +176,10 @@ export default function SuperAdminProgramsListPage() {
     switch (cardId) {
       case 'total_programs':
         return metrics.total;
-      case 'active_programs':
-        return metrics.active;
+      case 'total_sectors':
+        return metrics.uniqueSectors;
       case 'assigned_workers':
         return metrics.enrolledWorkers;
-      case 'avg_program_fee':
-        return `RM ${metrics.avgFee.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
       default:
         return 0;
     }
@@ -283,7 +285,8 @@ export default function SuperAdminProgramsListPage() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {cards
           .slice()
           .sort((a, b) => (a.order_num || 0) - (b.order_num || 0))
@@ -315,16 +318,16 @@ export default function SuperAdminProgramsListPage() {
       </div>
 
       {/* Search, Filter, and Controls Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by program name, code, category, or keywords..."
+            placeholder="Search by program name or sector..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full h-10 pl-10 pr-9 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+            className="w-full h-10 pl-10 pr-9 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 font-medium"
           />
           {searchTerm && (
             <button
@@ -336,33 +339,16 @@ export default function SuperAdminProgramsListPage() {
           )}
         </div>
 
-        {/* Filter Tabs & Controls */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-          {/* Status Select */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl h-10">
-            {(['all', 'active', 'upcoming', 'inactive', 'closed'] as const).map((st) => (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`h-8 px-3 rounded-lg text-xs font-semibold capitalize transition-all inline-flex items-center justify-center ${
-                  statusFilter === st
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
-          </div>
-
-          {/* Category Dropdown */}
+        {/* Filter Controls */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {/* Sector Filter Dropdown */}
           {categories.length > 0 && (
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-10 px-3 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+              className="h-10 px-3.5 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
             >
-              <option value="all">All Categories</option>
+              <option value="all">All Sectors</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -396,8 +382,8 @@ export default function SuperAdminProgramsListPage() {
             </div>
             <h3 className="text-base font-bold text-slate-800">No Programs Found</h3>
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              {searchTerm || statusFilter !== 'all' || categoryFilter !== 'all'
-                ? 'No programs match the specified filter criteria. Try adjusting search or filters.'
+              {searchTerm || categoryFilter !== 'all'
+                ? 'No programs match the specified filter criteria. Try adjusting search or sector filter.'
                 : 'Get started by creating your first workforce recruitment and deployment program.'}
             </p>
             <div className="mt-5">
@@ -415,10 +401,8 @@ export default function SuperAdminProgramsListPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-3.5 px-4">Program &amp; Code</th>
-                  <th className="py-3.5 px-4">Category &amp; Sector</th>
-                  <th className="py-3.5 px-4">Duration</th>
-                  <th className="py-3.5 px-4">Program Fee</th>
+                  <th className="py-3.5 px-4">Program Name</th>
+                  <th className="py-3.5 px-4">Sector</th>
                   <th className="py-3.5 px-4">Enrolled Workers</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -430,52 +414,18 @@ export default function SuperAdminProgramsListPage() {
                     key={program.id}
                     className="hover:bg-slate-50/70 transition-colors group"
                   >
-                    {/* Program Name & Code */}
+                    {/* Program Name */}
                     <td className="py-4 px-4 align-middle">
                       <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
                         {program.name}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        {program.code ? (
-                          <span className="font-mono text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded-md">
-                            {program.code}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-slate-400">No code</span>
-                        )}
-                      </div>
-                      {program.description && (
-                        <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 max-w-sm">
-                          {program.description}
-                        </p>
-                      )}
                     </td>
 
-                    {/* Category */}
+                    {/* Sector */}
                     <td className="py-4 px-4 align-middle whitespace-nowrap">
-                      <div className="font-medium text-slate-800">
-                        {program.category || 'General Workforce'}
+                      <div className="font-semibold text-slate-800">
+                        {program.category || 'General'}
                       </div>
-                      <span className="text-[11px] text-slate-400">Recruitment Scheme</span>
-                    </td>
-
-                    {/* Duration */}
-                    <td className="py-4 px-4 align-middle whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 font-medium text-slate-800">
-                        <Clock size={13} className="text-slate-400 shrink-0" />
-                        <span>{program.duration || 'Not specified'}</span>
-                      </div>
-                    </td>
-
-                    {/* Fees */}
-                    <td className="py-4 px-4 align-middle font-medium text-slate-900 whitespace-nowrap">
-                      {program.fees && Number(program.fees) > 0 ? (
-                        <span className="font-mono font-semibold text-emerald-700">
-                          RM {Number(program.fees).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">Free / No Fee</span>
-                      )}
                     </td>
 
                     {/* Enrolled Workers */}

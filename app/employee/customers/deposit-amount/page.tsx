@@ -362,7 +362,7 @@ export default function EmployeeCustomerDepositAmountPage() {
     setFormPurpose(rec.purpose);
     setFormReceiptUrl(rec.receipt_url || null);
     setFormReceiptFilename(rec.receipt_filename || '');
-    setFormStatus(rec.verification_status);
+    setFormStatus(rec.verification_status as any);
     setFormRemarks(rec.remarks || '');
     setIsFormOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });

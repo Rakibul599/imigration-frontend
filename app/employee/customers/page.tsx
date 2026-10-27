@@ -77,16 +77,31 @@ export default function EmployeeCustomersPage() {
   }, [currentUser]);
 
   const perms = useMemo(() => {
+    if (!currentUser) return null;
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') {
+      return {
+        customers: { view: true, create: true, edit: true, delete: true },
+      };
+    }
+    const empCanEdit = currentUser.permissions?.can_edit !== false;
+    const empCanCreate = currentUser.permissions?.can_create !== false;
+    const empCanDelete = Boolean(currentUser.permissions?.can_delete);
+
     return (
-      currentUser?.module_permissions || {
-        customers: { view: true, create: false, edit: false, delete: false },
+      currentUser.module_permissions || {
+        customers: {
+          view: true,
+          create: empCanCreate,
+          edit: empCanEdit,
+          delete: empCanDelete,
+        },
       }
     );
   }, [currentUser]);
 
-  const canCreate = Boolean(perms?.customers?.create);
-  const canEdit = Boolean(perms?.customers?.edit);
-  const canDelete = Boolean(perms?.customers?.delete);
+  const canCreate = perms?.customers?.create ?? currentUser?.permissions?.can_create ?? true;
+  const canEdit = perms?.customers?.edit ?? currentUser?.permissions?.can_edit ?? true;
+  const canDelete = perms?.customers?.delete ?? currentUser?.permissions?.can_delete ?? false;
 
   const showToast = (type: 'success' | 'info' | 'error', message: string) => {
     setNotification({ type, message });

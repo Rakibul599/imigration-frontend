@@ -22,6 +22,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  PlusCircle,
   Settings,
   Shield,
   ShieldAlert,
@@ -83,7 +84,7 @@ export default function MasterAdminLayout({
         setSiteSettings(data);
         applySidebarStyling(data);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     const unsub = subscribeToSettingsChanges((newSettings) => {
       setSiteSettings(newSettings);
@@ -144,7 +145,7 @@ export default function MasterAdminLayout({
     calculatePermitted();
     fetchCompaniesFromBackend().then(() => {
       calculatePermitted();
-    }).catch(() => {});
+    }).catch(() => { });
 
     const unsub = subscribeToCompanyChanges(calculatePermitted);
     return unsub;
@@ -167,7 +168,7 @@ export default function MasterAdminLayout({
           setEmployeeCount(inScope.length);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     // Fetch customers count in scope
     fetch(`${apiBase}/customers`)
@@ -183,7 +184,7 @@ export default function MasterAdminLayout({
           setCustomerCount(inScope.length);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     // Fetch leaves & resignations count
     const fetchRequestsCounts = () => {
@@ -195,7 +196,7 @@ export default function MasterAdminLayout({
             setPendingLeaveCount(pending);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
 
       fetch(`${apiBase}/employee-resignations`)
         .then((r) => r.json())
@@ -205,7 +206,7 @@ export default function MasterAdminLayout({
             setPendingResignationCount(pending);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
     fetchRequestsCounts();
@@ -268,124 +269,129 @@ export default function MasterAdminLayout({
       }>;
     }>;
   }> = [
-    {
-      title: 'Company  employe and worker management',
-      items: [
-        {
-          name: 'Dashboard Overview',
-          href: '/masteradmin',
-          icon: LayoutDashboard,
-          badge: 'Live',
-        },
-        {
-          name: 'Companies Management',
-          href: '/masteradmin/companies',
-          icon: Building2,
-          badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
-        },
-        {
-          name: 'Employee Management',
-          icon: Users,
-          badge: employeeCount > 0 ? `${employeeCount}` : undefined,
-          isGroup: true,
-          children: [
-            {
-              name: 'Employees & Permissions',
-              href: '/masteradmin/employees',
-              icon: UserCheck,
-              badge: employeeCount > 0 ? `${employeeCount}` : undefined,
-            },
-            {
-              name: 'Resignations & Clearances',
-              href: '/masteradmin/employees/resignations',
-              icon: FileText,
-              badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,
-            },
-          ],
-        },
-        {
-          name: 'Customer Management',
-          icon: UserCheck,
-          badge: customerCount > 0 ? `${customerCount}` : undefined,
-          isGroup: true,
-          children: [
-            {
-              name: 'Create Customer',
-              href: '/masteradmin/customers',
-              icon: Users,
-              badge: customerCount > 0 ? `${customerCount}` : undefined,
-            },
-            {
-              name: 'Target Amount',
-              href: '/masteradmin/customers/target-amount',
-              icon: Target,
-            },
-            {
-              name: 'Deposit Amount',
-              href: '/masteradmin/customers/deposit-amount',
-              icon: DollarSign,
-            },
-            {
-              name: 'Pending Amount',
-              href: '/masteradmin/customers/pending-amount',
-              icon: Clock,
-            },
-            {
-              name: 'Company Cost Amount',
-              href: '/masteradmin/customers/company-cost',
-              icon: FileSpreadsheet,
-            },
-          ],
-        },
-        {
-          name: 'Services Portal',
-          href: '/companies',
-          icon: Sparkles,
-          badge: 'Cards',
-        },
-      ],
-    },
-    {
-      title: 'Attendance Management',
-      items: [
-        {
-          name: 'Attendance Management',
-          icon: Clock,
-          isGroup: true,
-          children: [
-            {
-              name: 'Face & Attendance',
-              href: '/masteradmin/attendance',
-              icon: Camera,
-              badge: 'AI Bio',
-            },
-            {
-              name: 'Leaves & Holiday Requests',
-              href: '/masteradmin/attendance/leaves',
-              icon: Calendar,
-              badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
-            },
-            {
-              name: 'Settings',
-              href: '/masteradmin/attendance/settings',
-              icon: Settings,
-            },
-          ],
-        },
-      ],
-    },
-    {
-      title: 'Settings',
-      items: [
-        {
-          name: 'Change Password',
-          href: '/masteradmin/change-password',
-          icon: KeyRound,
-          badge: 'Account',
-        },
-      ],
-    },
-  ];
+      {
+        title: 'Company  employe and worker management',
+        items: [
+          {
+            name: 'Dashboard Overview',
+            href: '/masteradmin',
+            icon: LayoutDashboard,
+            badge: 'Live',
+          },
+          {
+            name: 'Companies Management',
+            href: '/masteradmin/companies',
+            icon: Building2,
+            badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
+          },
+          {
+            name: 'Employee Management',
+            icon: Users,
+            badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+            isGroup: true,
+            children: [
+              {
+                name: 'Employees & Permissions',
+                href: '/masteradmin/employees',
+                icon: UserCheck,
+                badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+              },
+              {
+                name: 'Resignations & Clearances',
+                href: '/masteradmin/employees/resignations',
+                icon: FileText,
+                badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,
+              },
+            ],
+          },
+          {
+            name: 'Customer Management',
+            icon: UserCheck,
+            badge: customerCount > 0 ? `${customerCount}` : undefined,
+            isGroup: true,
+            children: [
+              {
+                name: 'Create Customer',
+                href: '/masteradmin/customers/create',
+                icon: PlusCircle,
+              },
+              {
+                name: 'Customer List',
+                href: '/masteradmin/customers',
+                icon: Users,
+                badge: customerCount > 0 ? `${customerCount}` : undefined,
+              },
+              {
+                name: 'Customer Target Amount',
+                href: '/masteradmin/customers/target-amount',
+                icon: Target,
+              },
+              {
+                name: 'Customer Deposit Amount',
+                href: '/masteradmin/customers/deposit-amount',
+                icon: DollarSign,
+              },
+              {
+                name: 'Customer Pending Amount',
+                href: '/masteradmin/customers/pending-amount',
+                icon: Clock,
+              },
+              {
+                name: 'Customer Cost Amount',
+                href: '/masteradmin/customers/company-cost',
+                icon: FileSpreadsheet,
+              },
+            ],
+          },
+          {
+            name: 'Services Portal',
+            href: '/companies',
+            icon: Sparkles,
+            badge: 'Cards',
+          },
+        ],
+      },
+      {
+        title: 'Attendance Management',
+        items: [
+          {
+            name: 'Attendance Management',
+            icon: Clock,
+            isGroup: true,
+            children: [
+              {
+                name: 'Face & Attendance',
+                href: '/masteradmin/attendance',
+                icon: Camera,
+                badge: 'AI Bio',
+              },
+              {
+                name: 'Leaves & Holiday Requests',
+                href: '/masteradmin/attendance/leaves',
+                icon: Calendar,
+                badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
+              },
+              {
+                name: 'Settings',
+                href: '/masteradmin/attendance/settings',
+                icon: Settings,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        title: 'Settings',
+        items: [
+          {
+            name: 'Change Password',
+            href: '/masteradmin/change-password',
+            icon: KeyRound,
+            badge: 'Account',
+          },
+        ],
+      },
+    ];
 
   const assignedList = currentUser?.assigned_companies || [];
 
@@ -435,13 +441,11 @@ export default function MasterAdminLayout({
             backgroundColor: sidebarBg,
             borderColor: sidebarBorder,
           }}
-          className={`fixed top-[32px] bottom-0 left-0 z-50 flex flex-col border-r transition-all duration-300 shadow-sm ${
-            sidebarOpen ? 'w-64' : 'w-20'
-          } ${
-            mobileMenuOpen
+          className={`fixed top-[32px] bottom-0 left-0 z-50 flex flex-col border-r transition-all duration-300 shadow-sm ${sidebarOpen ? 'w-64' : 'w-20'
+            } ${mobileMenuOpen
               ? 'translate-x-0 w-64'
               : '-translate-x-full lg:translate-x-0'
-          }`}
+            }`}
         >
           {/* Sidebar Top Header */}
           <div
@@ -511,205 +515,204 @@ export default function MasterAdminLayout({
                 )}
                 <nav className="space-y-1">
                   {section.items.map((link) => {
-                  const Icon = link.icon;
+                    const Icon = link.icon;
 
-                  if (link.isGroup) {
-                    const isChildActive = link.children?.some(
-                      (child) => pathname === child.href || pathname.startsWith(child.href)
-                    );
-                    const isGroupOpen =
-                      link.name === 'Customer Management'
-                        ? customerMenuOpen
-                        : link.name === 'Attendance Management'
-                        ? attendanceMenuOpen
-                        : employeeMenuOpen;
-                    const toggleGroup = () => {
-                      if (!sidebarOpen) setSidebarOpen(true);
-                      if (link.name === 'Customer Management') {
-                        setCustomerMenuOpen(!customerMenuOpen);
-                      } else if (link.name === 'Attendance Management') {
-                        setAttendanceMenuOpen(!attendanceMenuOpen);
-                      } else {
-                        setEmployeeMenuOpen(!employeeMenuOpen);
-                      }
-                    };
+                    if (link.isGroup) {
+                      const isChildActive = link.children?.some(
+                        (child) => pathname === child.href || pathname.startsWith(child.href)
+                      );
+                      const isGroupOpen =
+                        link.name === 'Customer Management'
+                          ? customerMenuOpen
+                          : link.name === 'Attendance Management'
+                            ? attendanceMenuOpen
+                            : employeeMenuOpen;
+                      const toggleGroup = () => {
+                        if (!sidebarOpen) setSidebarOpen(true);
+                        if (link.name === 'Customer Management') {
+                          setCustomerMenuOpen(!customerMenuOpen);
+                        } else if (link.name === 'Attendance Management') {
+                          setAttendanceMenuOpen(!attendanceMenuOpen);
+                        } else {
+                          setEmployeeMenuOpen(!employeeMenuOpen);
+                        }
+                      };
 
-                    return (
-                      <div key={link.name} className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={toggleGroup}
-                          title={!sidebarOpen ? link.name : undefined}
-                          style={{
-                            backgroundColor: isChildActive
-                              ? isDarkSidebar
-                                ? 'rgba(255,255,255,0.08)'
-                                : 'rgba(0,0,0,0.05)'
-                              : 'transparent',
-                            color: isChildActive
-                              ? isDarkSidebar
-                                ? '#ffffff'
-                                : sidebarActiveText
-                              : sidebarText,
-                            borderLeftColor: isChildActive ? sidebarActiveText : 'transparent',
-                          }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border-l-4 shadow-2xs hover:opacity-90 border-0 text-left"
-                        >
-                          <Icon
-                            size={18}
-                            style={{ color: isChildActive ? sidebarActiveText : sidebarText }}
-                            className="shrink-0"
-                          />
-                          {sidebarOpen && (
-                            <div className="flex-1 flex items-center justify-between truncate">
-                              <span className="truncate">{link.name}</span>
-                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                {link.badge && (
-                                  <span
-                                    style={{
-                                      backgroundColor: isDarkSidebar
-                                        ? 'rgba(255,255,255,0.12)'
-                                        : 'rgba(0,0,0,0.06)',
-                                      color: isDarkSidebar ? '#ffffff' : sidebarText,
-                                    }}
-                                    className="text-[10px] px-2 py-0.5 rounded-full font-bold"
-                                  >
-                                    {link.badge}
-                                  </span>
-                                )}
-                                <ChevronDown
-                                  size={14}
-                                  style={{ color: sidebarText }}
-                                  className={`transition-transform duration-200 shrink-0 ${
-                                    isGroupOpen ? 'rotate-0' : '-rotate-90'
-                                  }`}
-                                />
+                      return (
+                        <div key={link.name} className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={toggleGroup}
+                            title={!sidebarOpen ? link.name : undefined}
+                            style={{
+                              backgroundColor: isChildActive
+                                ? isDarkSidebar
+                                  ? 'rgba(255,255,255,0.08)'
+                                  : 'rgba(0,0,0,0.05)'
+                                : 'transparent',
+                              color: isChildActive
+                                ? isDarkSidebar
+                                  ? '#ffffff'
+                                  : sidebarActiveText
+                                : sidebarText,
+                              borderLeftColor: isChildActive ? sidebarActiveText : 'transparent',
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border-l-4 shadow-2xs hover:opacity-90 border-0 text-left"
+                          >
+                            <Icon
+                              size={18}
+                              style={{ color: isChildActive ? sidebarActiveText : sidebarText }}
+                              className="shrink-0"
+                            />
+                            {sidebarOpen && (
+                              <div className="flex-1 flex items-center justify-between truncate">
+                                <span className="truncate">{link.name}</span>
+                                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                  {link.badge && (
+                                    <span
+                                      style={{
+                                        backgroundColor: isDarkSidebar
+                                          ? 'rgba(255,255,255,0.12)'
+                                          : 'rgba(0,0,0,0.06)',
+                                        color: isDarkSidebar ? '#ffffff' : sidebarText,
+                                      }}
+                                      className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                                    >
+                                      {link.badge}
+                                    </span>
+                                  )}
+                                  <ChevronDown
+                                    size={14}
+                                    style={{ color: sidebarText }}
+                                    className={`transition-transform duration-200 shrink-0 ${isGroupOpen ? 'rotate-0' : '-rotate-90'
+                                      }`}
+                                  />
+                                </div>
                               </div>
+                            )}
+                          </button>
+
+                          {/* Collapsible Submenu */}
+                          {sidebarOpen && isGroupOpen && (
+                            <div className="pl-3.5 pr-1 py-1 space-y-1 ml-2 border-l border-slate-700/30">
+                              {link.children?.map((child) => {
+                                const ChildIcon = child.icon;
+                                const isChildItemActive =
+                                  child.href === '/masteradmin/customers'
+                                    ? pathname === '/masteradmin/customers' ||
+                                    pathname.startsWith('/masteradmin/customers/edit') || pathname.startsWith('/masteradmin/customers/view')
+                                    : child.href === '/masteradmin/customers/create'
+                                      ? pathname === '/masteradmin/customers/create'
+                                      : child.href === '/masteradmin/employees'
+                                        ? pathname === '/masteradmin/employees' ||
+                                        pathname.startsWith('/masteradmin/employees/')
+                                        : child.href === '/masteradmin/attendance'
+                                          ? pathname === '/masteradmin/attendance' || pathname.startsWith('/masteradmin/attendance/list')
+                                          : child.href === '/masteradmin/attendance/settings'
+                                            ? pathname === '/masteradmin/attendance/settings' || pathname.startsWith('/masteradmin/attendance/settings/')
+                                            : pathname === child.href || pathname.startsWith(child.href + '/');
+
+                                return (
+                                  <Link
+                                    key={child.href}
+                                    href={child.href}
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    style={{
+                                      backgroundColor: isChildItemActive
+                                        ? (isDarkSidebar ? 'rgba(255,255,255,0.1)' : sidebarActiveBg)
+                                        : 'transparent',
+                                      color: isChildItemActive
+                                        ? (isDarkSidebar ? '#ffffff' : sidebarActiveText)
+                                        : (isDarkSidebar ? 'rgba(255,255,255,0.7)' : sidebarText),
+                                    }}
+                                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${isChildItemActive ? 'font-bold' : ''
+                                      }`}
+                                  >
+                                    <ChildIcon
+                                      size={15}
+                                      style={{
+                                        color: isChildItemActive ? sidebarActiveText : sidebarText,
+                                      }}
+                                      className="shrink-0"
+                                    />
+                                    <div className="flex-1 flex items-center justify-between truncate">
+                                      <span className="truncate">{child.name}</span>
+                                      {child.badge && (
+                                        <span
+                                          style={{
+                                            backgroundColor: isChildItemActive
+                                              ? sidebarActiveText
+                                              : isDarkSidebar
+                                                ? 'rgba(255,255,255,0.12)'
+                                                : 'rgba(0,0,0,0.06)',
+                                            color: isChildItemActive ? '#ffffff' : sidebarText,
+                                          }}
+                                          className="text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5"
+                                        >
+                                          {child.badge}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </Link>
+                                );
+                              })}
                             </div>
                           )}
-                        </button>
+                        </div>
+                      );
+                    }
 
-                        {/* Collapsible Submenu */}
-                        {sidebarOpen && isGroupOpen && (
-                          <div className="pl-3.5 pr-1 py-1 space-y-1 ml-2 border-l border-slate-700/30">
-                            {link.children?.map((child) => {
-                              const ChildIcon = child.icon;
-                              const isChildItemActive =
-                                child.href === '/masteradmin/customers'
-                                  ? pathname === '/masteradmin/customers' ||
-                                    pathname === '/masteradmin/customers/create' ||
-                                    pathname.startsWith('/masteradmin/customers/edit') || pathname.startsWith('/masteradmin/customers/view')
-                                  : child.href === '/masteradmin/employees'
-                                  ? pathname === '/masteradmin/employees' ||
-                                    pathname.startsWith('/masteradmin/employees/')
-                                  : child.href === '/masteradmin/attendance'
-                                  ? pathname === '/masteradmin/attendance' || pathname.startsWith('/masteradmin/attendance/list')
-                                  : child.href === '/masteradmin/attendance/settings'
-                                  ? pathname === '/masteradmin/attendance/settings' || pathname.startsWith('/masteradmin/attendance/settings/')
-                                  : pathname === child.href || pathname.startsWith(child.href + '/');
+                    const isActive =
+                      pathname === link.href ||
+                      (link.href === '/masteradmin/companies' &&
+                        pathname.startsWith('/masteradmin/companies')) ||
+                      (link.href !== '/masteradmin' &&
+                        Boolean(link.href && pathname.startsWith(link.href)));
 
-                              return (
-                                <Link
-                                  key={child.href}
-                                  href={child.href}
-                                  onClick={() => setMobileMenuOpen(false)}
-                                  style={{
-                                    backgroundColor: isChildItemActive
-                                      ? (isDarkSidebar ? 'rgba(255,255,255,0.1)' : sidebarActiveBg)
-                                      : 'transparent',
-                                    color: isChildItemActive
-                                      ? (isDarkSidebar ? '#ffffff' : sidebarActiveText)
-                                      : (isDarkSidebar ? 'rgba(255,255,255,0.7)' : sidebarText),
-                                  }}
-                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[11px] font-semibold transition-all no-underline shadow-2xs hover:opacity-90 ${
-                                    isChildItemActive ? 'font-bold' : ''
-                                  }`}
-                                >
-                                  <ChildIcon
-                                    size={15}
-                                    style={{
-                                      color: isChildItemActive ? sidebarActiveText : sidebarText,
-                                    }}
-                                    className="shrink-0"
-                                  />
-                                  <div className="flex-1 flex items-center justify-between truncate">
-                                    <span className="truncate">{child.name}</span>
-                                    {child.badge && (
-                                      <span
-                                        style={{
-                                          backgroundColor: isChildItemActive
-                                            ? sidebarActiveText
-                                            : isDarkSidebar
-                                            ? 'rgba(255,255,255,0.12)'
-                                            : 'rgba(0,0,0,0.06)',
-                                          color: isChildItemActive ? '#ffffff' : sidebarText,
-                                        }}
-                                        className="text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5"
-                                      >
-                                        {child.badge}
-                                      </span>
-                                    )}
-                                  </div>
-                                </Link>
-                              );
-                            })}
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href!}
+                        onClick={() => setMobileMenuOpen(false)}
+                        title={!sidebarOpen ? link.name : undefined}
+                        style={{
+                          backgroundColor: isActive ? sidebarActiveBg : 'transparent',
+                          color: isActive ? sidebarActiveText : sidebarText,
+                          borderLeftColor: isActive ? sidebarActiveText : 'transparent',
+                        }}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all no-underline border-l-4 shadow-2xs hover:opacity-90`}
+                      >
+                        <Icon
+                          size={18}
+                          style={{ color: isActive ? sidebarActiveText : sidebarText }}
+                          className="shrink-0"
+                        />
+                        {sidebarOpen && (
+                          <div className="flex-1 flex items-center justify-between truncate">
+                            <span className="truncate">{link.name}</span>
+                            {link.badge && (
+                              <span
+                                style={{
+                                  backgroundColor: isActive
+                                    ? sidebarActiveText
+                                    : isDarkSidebar
+                                      ? 'rgba(255,255,255,0.12)'
+                                      : 'rgba(0,0,0,0.06)',
+                                  color: isActive ? '#ffffff' : sidebarText,
+                                }}
+                                className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                              >
+                                {link.badge}
+                              </span>
+                            )}
                           </div>
                         )}
-                      </div>
+                      </Link>
                     );
-                  }
-
-                  const isActive =
-                    pathname === link.href ||
-                    (link.href === '/masteradmin/companies' &&
-                      pathname.startsWith('/masteradmin/companies')) ||
-                    (link.href !== '/masteradmin' &&
-                      Boolean(link.href && pathname.startsWith(link.href)));
-
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href!}
-                      onClick={() => setMobileMenuOpen(false)}
-                      title={!sidebarOpen ? link.name : undefined}
-                      style={{
-                        backgroundColor: isActive ? sidebarActiveBg : 'transparent',
-                        color: isActive ? sidebarActiveText : sidebarText,
-                        borderLeftColor: isActive ? sidebarActiveText : 'transparent',
-                      }}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all no-underline border-l-4 shadow-2xs hover:opacity-90`}
-                    >
-                      <Icon
-                        size={18}
-                        style={{ color: isActive ? sidebarActiveText : sidebarText }}
-                        className="shrink-0"
-                      />
-                      {sidebarOpen && (
-                        <div className="flex-1 flex items-center justify-between truncate">
-                          <span className="truncate">{link.name}</span>
-                          {link.badge && (
-                            <span
-                              style={{
-                                backgroundColor: isActive
-                                  ? sidebarActiveText
-                                  : isDarkSidebar
-                                  ? 'rgba(255,255,255,0.12)'
-                                  : 'rgba(0,0,0,0.06)',
-                                color: isActive ? '#ffffff' : sidebarText,
-                              }}
-                              className="text-[10px] px-2 py-0.5 rounded-full font-bold"
-                            >
-                              {link.badge}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </div>
-          ))}
+                  })}
+                </nav>
+              </div>
+            ))}
 
             {/* Public Portals Link matching Super Admin */}
             <div>
@@ -789,9 +792,8 @@ export default function MasterAdminLayout({
                 backgroundColor: isDarkSidebar ? 'rgba(255,255,255,0.06)' : '#ffffff',
                 borderColor: sidebarBorder,
               }}
-              className={`flex items-center gap-3 p-2 rounded-xl border shadow-xs ${
-                !sidebarOpen ? 'justify-center' : ''
-              }`}
+              className={`flex items-center gap-3 p-2 rounded-xl border shadow-xs ${!sidebarOpen ? 'justify-center' : ''
+                }`}
             >
               <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#0b4da2] flex items-center justify-center font-bold text-xs shrink-0">
                 MA
@@ -821,9 +823,8 @@ export default function MasterAdminLayout({
 
             <button
               onClick={handleLogout}
-              className={`mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border border-transparent transition-all cursor-pointer ${
-                !sidebarOpen ? 'justify-center' : ''
-              }`}
+              className={`mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border border-transparent transition-all cursor-pointer ${!sidebarOpen ? 'justify-center' : ''
+                }`}
             >
               <LogOut size={15} className="shrink-0" />
               {sidebarOpen && <span>Sign Out</span>}
@@ -833,9 +834,8 @@ export default function MasterAdminLayout({
 
         {/* Main Content Area */}
         <div
-          className={`flex-1 flex flex-col min-h-[calc(100vh-32px)] min-w-0 max-w-full overflow-x-hidden transition-all duration-300 ${
-            sidebarOpen ? 'lg:pl-64' : 'lg:pl-20'
-          }`}
+          className={`flex-1 flex flex-col min-h-[calc(100vh-32px)] min-w-0 max-w-full overflow-x-hidden transition-all duration-300 ${sidebarOpen ? 'lg:pl-64' : 'lg:pl-20'
+            }`}
         >
           {/* Header Bar */}
           <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-8 flex items-center justify-between sticky top-[32px] z-30 shadow-xs">

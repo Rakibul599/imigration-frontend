@@ -5,12 +5,17 @@ export interface PageStatCardConfig {
   icon: string;
   order_num: number;
   visible?: boolean;
+  custom_value?: number | string;
+  metric_type?: string;
+  is_custom?: boolean;
 }
 
 export const STAT_ICON_OPTIONS = [
   { label: 'Building', icon: 'Building2' },
   { label: 'Users', icon: 'Users' },
   { label: 'User Check', icon: 'UserCheck' },
+  { label: 'User X', icon: 'UserX' },
+  { label: 'User Minus', icon: 'UserMinus' },
   { label: 'Shield Check', icon: 'ShieldCheck' },
   { label: 'Shield Alert', icon: 'ShieldAlert' },
   { label: 'Briefcase', icon: 'Briefcase' },
@@ -28,6 +33,8 @@ export const STAT_ICON_OPTIONS = [
   { label: 'Clock', icon: 'Clock' },
   { label: 'Receipt', icon: 'Receipt' },
   { label: 'Sparkles', icon: 'Sparkles' },
+  { label: 'Target', icon: 'Target' },
+  { label: 'Dollar', icon: 'DollarSign' },
 ];
 
 export function getStoredPageCards(pageKey: string, defaultCards: PageStatCardConfig[]): PageStatCardConfig[] {
@@ -48,9 +55,16 @@ export function getStoredPageCards(pageKey: string, defaultCards: PageStatCardCo
           ...def,
           ...c,
           title: c.title || def.title,
+          subtitle: c.subtitle !== undefined ? c.subtitle : def.subtitle,
           icon: c.icon || def.icon,
           order_num: typeof c.order_num === 'number' ? c.order_num : def.order_num,
+          visible: c.visible !== undefined ? c.visible : def.visible,
+          custom_value: c.custom_value !== undefined ? c.custom_value : def.custom_value,
+          metric_type: c.metric_type !== undefined ? c.metric_type : def.metric_type,
         });
+      } else {
+        // Keep custom user-created cards!
+        merged.push(c);
       }
     });
 

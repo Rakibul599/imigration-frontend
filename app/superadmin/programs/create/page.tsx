@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,58 +8,104 @@ import {
   ArrowLeft,
   BookOpen,
   Briefcase,
-  Building2,
-  Calendar,
-  Check,
   CheckCircle2,
-  Clock,
-  Coins,
-  DollarSign,
-  FileText,
-  HelpCircle,
-  Layers,
+  FolderPlus,
   Plus,
   RefreshCw,
   Save,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { createProgram } from '@/lib/programStorage';
-
-const COMMON_CATEGORIES = [
-  'Construction & Infrastructure',
-  'Manufacturing & Factories',
-  'Agriculture & Plantation',
-  'Hospitality & Tourism',
-  'Cleaning & Facility Management',
-  'Security & Safety Services',
-  'Logistics & Warehousing',
-  'Healthcare & Elderly Care',
-  'IT & Technical Services',
-];
-
-const DURATION_PRESETS = [
-  '6 Months',
-  '1 Year',
-  '2 Years',
-  '3 Years',
-  '5 Years',
-  'Permanent / Indefinite',
-];
+import { WorkingSector, fetchAllWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
 
 export default function CreateProgramPage() {
   const router = useRouter();
 
+  // ONLY 2 fields required by user: name and sector
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [category, setCategory] = useState('Construction & Infrastructure');
-  const [customCategory, setCustomCategory] = useState('');
-  const [duration, setDuration] = useState('2 Years');
-  const [fees, setFees] = useState('3500.00');
-  const [status, setStatus] = useState<'active' | 'inactive' | 'upcoming' | 'closed'>('active');
-  const [description, setDescription] = useState('');
+  const [sector, setSector] = useState('');
 
+  // Working Sectors state
+  const [sectors, setSectors] = useState<WorkingSector[]>([]);
+  const [loadingSectors, setLoadingSectors] = useState(true);
+
+  // Inline Add New Sector state
+  const [isAddingSector, setIsAddingSector] = useState(false);
+  const [newSectorName, setNewSectorName] = useState('');
+  const [isSavingSector, setIsSavingSector] = useState(false);
+
+  // Form submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Load existing working sectors
+  useEffect(() => {
+    let mounted = true;
+    async function loadSectors() {
+      setLoadingSectors(true);
+      try {
+        const data = await fetchAllWorkingSectors();
+        if (mounted && Array.isArray(data)) {
+          setSectors(data);
+          if (data.length > 0 && !sector) {
+            setSector(data[0].name);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load working sectors:', err);
+      } finally {
+        if (mounted) setLoadingSectors(false);
+      }
+    }
+    loadSectors();
+
+    const handleSectorsUpdated = () => {
+      loadSectors();
+    };
+    window.addEventListener('working_sectors_updated', handleSectorsUpdated);
+    return () => {
+      mounted = false;
+      window.removeEventListener('working_sectors_updated', handleSectorsUpdated);
+    };
+  }, []);
+
+  // Handle adding new sector inline
+  const handleSaveSector = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newSectorName.trim();
+    if (!trimmed) {
+      setFeedback({ type: 'error', message: 'Please enter a sector name.' });
+      return;
+    }
+
+    setIsSavingSector(true);
+    try {
+      const created = await createWorkingSector(trimmed);
+      const createdName = created.name || trimmed;
+
+      setSectors((prev) => {
+        const exists = prev.some((s) => s.name.toLowerCase() === createdName.toLowerCase());
+        if (exists) return prev;
+        return [...prev, created];
+      });
+
+      setSector(createdName);
+      setNewSectorName('');
+      setIsAddingSector(false);
+      setFeedback({
+        type: 'success',
+        message: `New sector "${createdName}" created and selected successfully!`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Failed to create sector. Please try again.',
+      });
+    } finally {
+      setIsSavingSector(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,20 +115,19 @@ export default function CreateProgramPage() {
       return;
     }
 
+    if (!sector.trim()) {
+      setFeedback({ type: 'error', message: 'Sector is required. Please select or add a sector.' });
+      return;
+    }
+
     setIsSubmitting(true);
     setFeedback(null);
-
-    const effectiveCategory = category === 'custom' ? customCategory.trim() : category;
 
     try {
       const result = await createProgram({
         name: name.trim(),
-        code: code.trim() || undefined,
-        category: effectiveCategory || undefined,
-        duration: duration.trim() || undefined,
-        fees: fees ? parseFloat(fees) : 0,
-        status,
-        description: description.trim() || undefined,
+        category: sector.trim(),
+        status: 'active',
       });
 
       if (result) {
@@ -90,7 +135,7 @@ export default function CreateProgramPage() {
         window.dispatchEvent(new CustomEvent('superadmin_programs_updated'));
         setTimeout(() => {
           router.push('/superadmin/programs');
-        }, 800);
+        }, 700);
       } else {
         setFeedback({ type: 'error', message: 'Failed to create program. Please try again.' });
       }
@@ -102,7 +147,7 @@ export default function CreateProgramPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
+    <div className="max-w-3xl mx-auto space-y-6 pb-20">
       {/* Top Breadcrumb & Action bar */}
       <div className="flex items-center justify-between gap-4">
         <Link
@@ -113,7 +158,7 @@ export default function CreateProgramPage() {
           <span>Back to Programs List</span>
         </Link>
         <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-full">
-          New Scheme Setup
+          Program Management
         </span>
       </div>
 
@@ -124,13 +169,13 @@ export default function CreateProgramPage() {
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
               <BookOpen size={14} />
-              <span>Program Setup &amp; Definition</span>
+              <span>Program Setup</span>
             </div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight">
               Create New Program
             </h1>
             <p className="text-slate-500 text-xs mt-0.5">
-              Establish a new recruitment, deployment, or government workforce scheme.
+              Enter the program name and select or add its sector.
             </p>
           </div>
 
@@ -153,15 +198,22 @@ export default function CreateProgramPage() {
             ) : (
               <AlertCircle size={16} className="text-rose-600 shrink-0" />
             )}
-            <span>{feedback.message}</span>
+            <span className="flex-1">{feedback.message}</span>
+            <button
+              type="button"
+              onClick={() => setFeedback(null)}
+              className="text-slate-400 hover:text-slate-700 p-1"
+            >
+              <X size={14} />
+            </button>
           </div>
         )}
 
-        {/* Form */}
+        {/* Form - Only 2 Fields: Name & Sector */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Program Name */}
-            <div className="sm:col-span-2">
+          <div className="space-y-5">
+            {/* Field 1: Program Name */}
+            <div>
               <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 Program Name <span className="text-rose-500">*</span>
               </label>
@@ -171,145 +223,115 @@ export default function CreateProgramPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. General Construction Workforce Program 2026"
-                className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                className="w-full px-4 py-3 text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium placeholder:text-slate-400"
+                autoFocus
               />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Official name of the foreign worker scheme, bilateral recruitment project, or agency initiative.
+              <p className="text-[11px] text-slate-400 mt-1.5">
+                Official name of the recruitment scheme, project, or workforce program.
               </p>
             </div>
 
-            {/* Program Code */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
-                <span>Program Code</span>
-                <span className="text-[11px] font-normal text-slate-400">Optional (Auto-generated)</span>
-              </label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. PROG-CONST-2026"
-                className="w-full px-3.5 py-2.5 text-xs font-mono font-semibold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Unique identifier for contracts and worker records. Leave blank to auto-generate.
-              </p>
-            </div>
+            {/* Field 2: Sector (with + Add Sector capability) */}
+            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-xs font-bold text-slate-800">
+                  Sector <span className="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddingSector(!isAddingSector);
+                    setNewSectorName('');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-all cursor-pointer"
+                >
+                  {isAddingSector ? (
+                    <>
+                      <X size={13} />
+                      <span>Cancel</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={13} />
+                      <span>Add Sector</span>
+                    </>
+                  )}
+                </button>
+              </div>
 
-            {/* Program Status */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Initial Status
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              >
-                <option value="active">Active (Available for customer selection)</option>
-                <option value="upcoming">Upcoming (Planned scheme)</option>
-                <option value="inactive">Inactive (Temporarily suspended)</option>
-                <option value="closed">Closed (Quota completed)</option>
-              </select>
-            </div>
-
-            {/* Program Category */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Sector / Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
-              >
-                {COMMON_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-                <option value="custom">+ Other / Custom Sector</option>
-              </select>
-
-              {category === 'custom' && (
-                <input
-                  type="text"
-                  value={customCategory}
-                  onChange={(e) => setCustomCategory(e.target.value)}
-                  placeholder="Enter custom sector name..."
-                  className="w-full mt-2 px-3.5 py-2 text-xs text-slate-900 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                />
+              {/* Inline Add Sector Box */}
+              {isAddingSector && (
+                <div className="p-3 bg-white border border-indigo-200 rounded-xl shadow-xs space-y-2 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+                    <FolderPlus size={14} className="text-indigo-600" />
+                    <span>Add New Working Sector</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newSectorName}
+                      onChange={(e) => setNewSectorName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveSector();
+                        }
+                      }}
+                      placeholder="Enter new sector name (e.g. Oil & Gas, Aviation)..."
+                      className="flex-1 px-3 py-2 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={isSavingSector || !newSectorName.trim()}
+                      onClick={() => handleSaveSector()}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+                    >
+                      {isSavingSector ? (
+                        <>
+                          <RefreshCw size={13} className="animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save size={13} />
+                          <span>Save Sector</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               )}
-            </div>
 
-            {/* Duration */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Scheme Duration / Contract Period
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  placeholder="e.g. 2 Years, 18 Months"
-                  className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                />
-              </div>
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                {DURATION_PRESETS.map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDuration(d)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
-                      duration === d
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Program Fees */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Program Fee / Package Rate (MYR)
-              </label>
+              {/* Sector Dropdown */}
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                  RM
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={fees}
-                  onChange={(e) => setFees(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full pl-11 pr-3.5 py-2.5 text-xs font-mono font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
+                <select
+                  value={sector}
+                  onChange={(e) => {
+                    if (e.target.value === '__add_new__') {
+                      setIsAddingSector(true);
+                    } else {
+                      setSector(e.target.value);
+                    }
+                  }}
+                  disabled={loadingSectors}
+                  className="w-full px-4 py-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer disabled:opacity-60 transition-all"
+                >
+                  <option value="">-- Select a Sector --</option>
+                  {sectors.map((s) => (
+                    <option key={s.id || s.name} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                  <option value="__add_new__" className="text-indigo-600 font-bold">
+                    + Add New Sector...
+                  </option>
+                </select>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Standard levy, processing, or agency placement fee per worker.
-              </p>
-            </div>
 
-            {/* Description */}
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Program Description, Eligibility &amp; Objectives
-              </label>
-              <textarea
-                rows={4}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Provide a comprehensive summary of this program, including government approval references, quota details, visa requirements, and medical examination criteria..."
-                className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              />
+              <p className="text-[11px] text-slate-400">
+                Choose an existing working sector from the dropdown or click <span className="font-semibold text-indigo-600">+ Add Sector</span> to add a new one.
+              </p>
             </div>
           </div>
 
@@ -317,7 +339,7 @@ export default function CreateProgramPage() {
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             <Link
               href="/superadmin/programs"
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
             >
               Cancel
             </Link>
@@ -325,7 +347,7 @@ export default function CreateProgramPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -335,7 +357,7 @@ export default function CreateProgramPage() {
               ) : (
                 <>
                   <Save size={14} />
-                  <span>Save &amp; Publish Program</span>
+                  <span>Save Program</span>
                 </>
               )}
             </button>

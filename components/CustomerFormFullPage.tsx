@@ -38,7 +38,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { Company } from '@/lib/companies';
+import { Company, resolveFileUrl } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend, updateStoredCompany } from '@/lib/companyStorage';
 import { AgentRecord, fetchAgents, getStoredAgents } from '@/lib/agentStorage';
 import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
@@ -63,12 +63,16 @@ import { getMasterAdminUser, getCurrentUser, getSuperAdminUser, AuthUser } from 
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 import {
   CustomerFinanceBalance,
+  CustomerTargetAmountRecord,
+  CustomerDepositAmountRecord,
   TARGET_CATEGORIES,
   PAYMENT_TERMS,
   getStoredCustomerTargets,
+  getStoredCustomerDeposits,
   fetchCustomerTargets,
   fetchCustomerDeposits,
   saveCustomerTarget,
+  deleteCustomerTarget,
   getCustomerFinanceBalance,
 } from '@/lib/customerFinanceStorage';
 
@@ -188,17 +192,21 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
   const [status, setStatus] = useState<'active' | 'pending' | 'inactive' | 'absent'>('active');
 
-  // Target Amount states
-  const [targetAmount, setTargetAmount] = useState<number | ''>('');
-  const [targetCategory, setTargetCategory] = useState<string>(TARGET_CATEGORIES[0]);
-  const [targetDate, setTargetDate] = useState<string>(
-    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  // Target Amount states (Year-based targets)
+  const currentTargetYear = useMemo(() => new Date().getFullYear(), []);
+  const availableTargetYears = useMemo(
+    () => Array.from({ length: 15 }, (_, i) => currentTargetYear - 3 + i),
+    [currentTargetYear]
   );
-  const [targetTerms, setTargetTerms] = useState<string>(PAYMENT_TERMS[0]);
-  const [targetStatus, setTargetStatus] = useState<'In Progress' | 'Achieved' | 'On Hold' | 'Cancelled'>('In Progress');
-  const [targetRemarks, setTargetRemarks] = useState<string>('');
-  const [existingTargetId, setExistingTargetId] = useState<string | number | null>(null);
-  const [existingTargetCreatedAt, setExistingTargetCreatedAt] = useState<string | null>(null);
+
+  const [yearTargets, setYearTargets] = useState<{
+    id?: string | number;
+    year: number;
+    target_amount: number | '';
+    created_at?: string;
+  }[]>([{ year: currentTargetYear, target_amount: '' }]);
+  const [deletedTargetIds, setDeletedTargetIds] = useState<(string | number)[]>([]);
+  const [customerDepositsList, setCustomerDepositsList] = useState<CustomerDepositAmountRecord[]>([]);
   const [customerBalance, setCustomerBalance] = useState<CustomerFinanceBalance | null>(null);
 
   // Service cards for tagging uploaded documents & foreign worker portal clearance
@@ -257,10 +265,45 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     );
   }, [availableServices]);
 
-  // Sector management states
-  const [isAddingNewSector, setIsAddingNewSector] = useState(false);
-  const [newSectorName, setNewSectorName] = useState('');
-  const [isSavingSector, setIsSavingSector] = useState(false);
+  // Available company sectors for the dropdown (merges selected company sectors, all company sectors registry, and all registered companies)
+  const availableCompanySectors = useMemo(() => {
+    const list: string[] = [];
+    const addSector = (name?: string) => {
+      const trimmed = name?.trim();
+      if (trimmed && !list.includes(trimmed)) {
+        list.push(trimmed);
+      }
+    };
+
+    // 1. If an employer company is selected, add its sectors first
+    const selectedComp = companies.find((c) => c.id.toLowerCase() === (companyId || '').toLowerCase());
+    if (selectedComp?.sectors && Array.isArray(selectedComp.sectors)) {
+      selectedComp.sectors.forEach(addSector);
+    }
+    if (selectedComp?.sector) {
+      selectedComp.sector.split(',').forEach(addSector);
+    }
+
+    // 2. Add all configured company sectors from registry
+    sectors.forEach((sec) => addSector(sec.name));
+
+    // 3. Add sectors from any other registered companies
+    companies.forEach((comp) => {
+      if (comp.sectors && Array.isArray(comp.sectors)) {
+        comp.sectors.forEach(addSector);
+      }
+      if (comp.sector) {
+        comp.sector.split(',').forEach(addSector);
+      }
+    });
+
+    // 4. Ensure current workingSector is present in the list if already set
+    if (workingSector) {
+      addSector(workingSector);
+    }
+
+    return list;
+  }, [companies, companyId, sectors, workingSector]);
 
   // UI feedback states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -285,28 +328,46 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     if (portalType !== 'employee') return true;
     if (!currentUser) return true;
     if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
-    return currentUser.module_permissions?.customers?.view !== false;
+    if (currentUser.module_permissions?.customers?.view !== undefined) {
+      return currentUser.module_permissions.customers.view !== false;
+    }
+    return true;
   }, [portalType, currentUser]);
 
   const canEdit = useMemo(() => {
     if (portalType !== 'employee') return true;
     if (!currentUser) return true;
     if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
-    return Boolean(currentUser.module_permissions?.customers?.edit);
+    if (currentUser.module_permissions?.customers?.edit !== undefined) {
+      return Boolean(currentUser.module_permissions.customers.edit);
+    }
+    if (currentUser.permissions?.can_edit !== undefined) {
+      return Boolean(currentUser.permissions.can_edit);
+    }
+    return true;
   }, [portalType, currentUser]);
 
   const canCreate = useMemo(() => {
     if (portalType !== 'employee') return true;
     if (!currentUser) return true;
     if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
-    return Boolean(currentUser.module_permissions?.customers?.create);
+    if (currentUser.module_permissions?.customers?.create !== undefined) {
+      return Boolean(currentUser.module_permissions.customers.create);
+    }
+    if (currentUser.permissions?.can_create !== undefined) {
+      return Boolean(currentUser.permissions.can_create);
+    }
+    return true;
   }, [portalType, currentUser]);
 
   const canManageTarget = useMemo(() => {
     if (portalType !== 'employee') return true;
     if (!currentUser) return true;
     if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'Admin' || currentUser.role === 'MasterAdmin') return true;
-    return currentUser.module_permissions?.customers?.target_amount !== false;
+    if (currentUser.module_permissions?.customers?.target_amount !== undefined) {
+      return currentUser.module_permissions.customers.target_amount !== false;
+    }
+    return true;
   }, [portalType, currentUser]);
 
   const effectiveIsViewMode = isViewMode || (portalType === 'employee' && isEditing && !canEdit);
@@ -439,54 +500,74 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       });
   }, [editId]);
 
-  // Load customer target amount and ledger balance if editing
+  // Load customer target amounts and ledger balance if editing
   useEffect(() => {
     if (!editId) return;
 
-    const refreshBalance = () => {
+    const refreshBalanceAndData = () => {
       const bal = getCustomerFinanceBalance(editId);
       if (bal) setCustomerBalance(bal);
+
+      const localDeposits = getStoredCustomerDeposits().filter(
+        (d) => String(d.customer_id) === String(editId)
+      );
+      setCustomerDepositsList(localDeposits);
+
+      const localTargets = getStoredCustomerTargets().filter(
+        (t) => String(t.customer_id) === String(editId)
+      );
+      if (localTargets.length > 0) {
+        setYearTargets(
+          localTargets.map((t) => ({
+            id: t.id,
+            year: t.target_year
+              ? Number(t.target_year)
+              : t.created_at
+              ? new Date(t.created_at).getFullYear()
+              : currentTargetYear,
+            target_amount: t.target_amount,
+            created_at: t.created_at,
+          }))
+        );
+      }
     };
 
     try {
-      const localTargets = getStoredCustomerTargets();
-      const foundLocal = localTargets.find((t) => String(t.customer_id) === String(editId));
-      if (foundLocal) {
-        setExistingTargetId(foundLocal.id);
-        setTargetAmount(foundLocal.target_amount);
-        if (foundLocal.target_category) setTargetCategory(foundLocal.target_category);
-        if (foundLocal.target_date) setTargetDate(foundLocal.target_date);
-        if (foundLocal.payment_terms) setTargetTerms(foundLocal.payment_terms);
-        if (foundLocal.status) setTargetStatus(foundLocal.status);
-        if (foundLocal.remarks) setTargetRemarks(foundLocal.remarks);
-        if (foundLocal.created_at) setExistingTargetCreatedAt(foundLocal.created_at);
-      }
-      refreshBalance();
+      refreshBalanceAndData();
     } catch {}
 
     Promise.all([
       fetchCustomerTargets().catch(() => []),
       fetchCustomerDeposits().catch(() => []),
     ])
-      .then(([targetList]) => {
+      .then(([targetList, depositList]) => {
         if (Array.isArray(targetList)) {
-          const found = targetList.find((t) => String(t.customer_id) === String(editId));
-          if (found) {
-            setExistingTargetId(found.id);
-            setTargetAmount(found.target_amount);
-            if (found.target_category) setTargetCategory(found.target_category);
-            if (found.target_date) setTargetDate(found.target_date);
-            if (found.payment_terms) setTargetTerms(found.payment_terms);
-            if (found.status) setTargetStatus(found.status);
-            if (found.remarks) setTargetRemarks(found.remarks);
-            if (found.created_at) setExistingTargetCreatedAt(found.created_at);
+          const userTargets = targetList.filter((t) => String(t.customer_id) === String(editId));
+          if (userTargets.length > 0) {
+            setYearTargets(
+              userTargets.map((t) => ({
+                id: t.id,
+                year: t.target_year
+                  ? Number(t.target_year)
+                  : t.created_at
+                  ? new Date(t.created_at).getFullYear()
+                  : currentTargetYear,
+                target_amount: t.target_amount,
+                created_at: t.created_at,
+              }))
+            );
           }
         }
-        refreshBalance();
+        if (Array.isArray(depositList)) {
+          const userDeposits = depositList.filter((d) => String(d.customer_id) === String(editId));
+          setCustomerDepositsList(userDeposits);
+        }
+        const bal = getCustomerFinanceBalance(editId);
+        if (bal) setCustomerBalance(bal);
       })
       .catch(() => {});
 
-    const updateListener = () => refreshBalance();
+    const updateListener = () => refreshBalanceAndData();
     window.addEventListener('customerTargetsUpdated', updateListener);
     window.addEventListener('customerDepositsUpdated', updateListener);
     window.addEventListener('customerPendingsUpdated', updateListener);
@@ -495,44 +576,116 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       window.removeEventListener('customerDepositsUpdated', updateListener);
       window.removeEventListener('customerPendingsUpdated', updateListener);
     };
-  }, [editId]);
+  }, [editId, currentTargetYear]);
+
+  // Year target handlers
+  const handleYearChange = (index: number, newYear: number) => {
+    setYearTargets((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], year: newYear };
+      return next;
+    });
+  };
+
+  const handleTargetAmountChange = (index: number, val: string) => {
+    setYearTargets((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        target_amount: val === '' ? '' : Math.max(0, Number(val)),
+      };
+      return next;
+    });
+  };
+
+  const handleAddYearTarget = () => {
+    setYearTargets((prev) => {
+      const highestYear =
+        prev.length > 0 ? Math.max(...prev.map((r) => r.year)) : currentTargetYear;
+      return [...prev, { year: highestYear + 1, target_amount: '' }];
+    });
+  };
+
+  const handleRemoveYearTarget = (index: number) => {
+    setYearTargets((prev) => {
+      const targetToRemove = prev[index];
+      if (targetToRemove?.id) {
+        setDeletedTargetIds((del) => [...del, targetToRemove.id!]);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   // Dynamic live financial calculation for Target Amount
   const liveFinancialCalculation = useMemo(() => {
-    const inputTarget = targetAmount === '' ? 0 : Number(targetAmount) || 0;
-    const totalDeposited = customerBalance ? Number(customerBalance.total_deposited) || 0 : 0;
+    const totalAllDeposits = customerDepositsList.reduce(
+      (sum, d) => sum + (Number(d.deposit_amount) || 0),
+      0
+    );
 
-    // In case this customer has other targets established
-    const existingTargetObj = existingTargetId
-      ? getStoredCustomerTargets().find((t) => String(t.id) === String(existingTargetId))
-      : null;
-    const oldTargetAmt = existingTargetObj ? Number(existingTargetObj.target_amount) || 0 : 0;
-    const otherTargetsTotal = Math.max(0, (customerBalance?.total_target || 0) - oldTargetAmt);
+    const rows = yearTargets.map((row) => {
+      const numericTarget =
+        row.target_amount === '' ? 0 : Math.max(0, Number(row.target_amount) || 0);
 
-    const calculatedTotalTarget = otherTargetsTotal + inputTarget;
-    const calculatedPending = Math.max(0, calculatedTotalTarget - totalDeposited);
+      // Filter deposits matching this specific target year
+      let depositForYear = customerDepositsList
+        .filter((d) => {
+          if (!d.deposit_date) return false;
+          const y = new Date(d.deposit_date).getFullYear();
+          return y === Number(row.year);
+        })
+        .reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+
+      // If single row and general deposits exist
+      if (yearTargets.length === 1 && depositForYear === 0 && totalAllDeposits > 0) {
+        depositForYear = totalAllDeposits;
+      }
+
+      const remainingAmount = Math.max(0, numericTarget - depositForYear);
+
+      return {
+        ...row,
+        numericTarget,
+        depositAmount: depositForYear,
+        remainingAmount,
+      };
+    });
+
+    const calculatedTotalTarget = rows.reduce((acc, r) => acc + r.numericTarget, 0);
+    const calculatedTotalDeposited = rows.reduce((acc, r) => acc + r.depositAmount, 0);
+    const calculatedPending = Math.max(0, calculatedTotalTarget - calculatedTotalDeposited);
     const progressPercent =
       calculatedTotalTarget > 0
-        ? Math.min(100, Math.round((totalDeposited / calculatedTotalTarget) * 100))
+        ? Math.min(100, Math.round((calculatedTotalDeposited / calculatedTotalTarget) * 100))
         : 0;
 
     let status: 'Pending' | 'Partially Paid' | 'Settled' = 'Pending';
-    if (calculatedTotalTarget > 0 && totalDeposited >= calculatedTotalTarget) {
+    if (calculatedTotalTarget > 0 && calculatedTotalDeposited >= calculatedTotalTarget) {
       status = 'Settled';
-    } else if (totalDeposited > 0) {
+    } else if (calculatedTotalDeposited > 0) {
       status = 'Partially Paid';
     }
 
     return {
-      inputTarget,
-      totalDeposited,
+      rows,
       calculatedTotalTarget,
+      totalDeposited: calculatedTotalDeposited,
       calculatedPending,
       progressPercent,
       status,
-      hasFinancialData: calculatedTotalTarget > 0 || totalDeposited > 0,
+      hasFinancialData: calculatedTotalTarget > 0 || calculatedTotalDeposited > 0,
     };
-  }, [targetAmount, customerBalance, existingTargetId]);
+  }, [yearTargets, customerDepositsList]);
+
+  // Selected company object for header preview
+  const selectedCompanyHeader = useMemo(() => {
+    if (!companyId) return null;
+    return (
+      companies.find(
+        (c) => String(c.id) === String(companyId) || String(c.name) === String(companyId)
+      ) || null
+    );
+  }, [companyId, companies]);
 
   // Select2 options for employer companies
   const companyOptions: Select2Option[] = useMemo(() => {
@@ -599,6 +752,10 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       setProfilePicName(file.name);
     } catch {
       setFeedback({ type: 'error', message: 'Failed to process profile image.' });
+    } finally {
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -674,40 +831,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     setDocuments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Add new working sector to backend & selected company
-  const handleAddNewSector = async () => {
-    if (!newSectorName.trim()) return;
-    setIsSavingSector(true);
-    try {
-      const created = await createWorkingSector(newSectorName.trim());
-      setSectors((prev) => [...prev, created]);
-      const addedName = created.name;
-
-      if (companyId) {
-        const comp = companies.find((c) => c.id.toLowerCase() === companyId.toLowerCase());
-        if (comp) {
-          const currentSectors = comp.sectors && Array.isArray(comp.sectors)
-            ? [...comp.sectors]
-            : (comp.sector ? comp.sector.split(',').map((s) => s.trim()).filter(Boolean) : []);
-          if (!currentSectors.includes(addedName)) {
-            currentSectors.push(addedName);
-            comp.sectors = currentSectors;
-            comp.sector = currentSectors.join(', ');
-            updateStoredCompany(comp).catch(() => {});
-          }
-        }
-      }
-
-      setWorkingSector(addedName);
-      setNewSectorName('');
-      setIsAddingNewSector(false);
-      setFeedback({ type: 'success', message: `New sector "${addedName}" created and assigned to selected company!` });
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to create sector.' });
-    } finally {
-      setIsSavingSector(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -770,55 +893,66 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     try {
       if (isEditing && editId) {
         await updateCustomer(editId, payload);
-        if (canManageTarget && targetAmount !== '' && Number(targetAmount) >= 0) {
-          try {
-            await saveCustomerTarget({
-              id: existingTargetId || `target_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              customer_id: editId,
-              customer_name: fullName.trim(),
-              passport_no: passportNo.trim(),
-              nid_no: nidNo.trim(),
-              company_id: companyId || undefined,
-              company_name: companies.find((c) => c.id === companyId)?.name || companyId || undefined,
-              target_amount: Number(targetAmount),
-              target_category: targetCategory,
-              target_date: targetDate || undefined,
-              quota_workers_count: 1,
-              payment_terms: targetTerms,
-              status: targetStatus,
-              remarks: targetRemarks.trim(),
-              created_at: existingTargetCreatedAt || new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-          } catch (tErr) {
-            console.warn('Failed to update target amount:', tErr);
+        if (canManageTarget) {
+          // Delete any removed targets
+          for (const delId of deletedTargetIds) {
+            try {
+              await deleteCustomerTarget(delId);
+            } catch {}
+          }
+          // Save each year target
+          for (const row of yearTargets) {
+            if (row.target_amount !== '' && Number(row.target_amount) >= 0) {
+              try {
+                await saveCustomerTarget({
+                  id: row.id || `target_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  customer_id: editId,
+                  customer_name: fullName.trim(),
+                  passport_no: passportNo.trim(),
+                  nid_no: nidNo.trim(),
+                  company_id: companyId || undefined,
+                  company_name: companies.find((c) => c.id === companyId)?.name || companyId || undefined,
+                  target_amount: Number(row.target_amount),
+                  target_year: row.year,
+                  target_category: 'Annual Target',
+                  quota_workers_count: 1,
+                  status: 'In Progress',
+                  created_at: row.created_at || new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+              } catch (tErr) {
+                console.warn('Failed to update target amount:', tErr);
+              }
+            }
           }
         }
         setFeedback({ type: 'success', message: 'Customer record updated successfully!' });
       } else {
         const created = await createCustomer(payload);
-        if (created && created.id && canManageTarget && targetAmount !== '' && Number(targetAmount) > 0) {
-          try {
-            await saveCustomerTarget({
-              id: `target_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-              customer_id: created.id,
-              customer_name: created.full_name || fullName.trim(),
-              passport_no: created.passport_no || passportNo.trim(),
-              nid_no: created.nid_no || nidNo.trim(),
-              company_id: created.company_id || companyId || undefined,
-              company_name: companies.find((c) => c.id === companyId)?.name || created.company_id || undefined,
-              target_amount: Number(targetAmount),
-              target_category: targetCategory,
-              target_date: targetDate || undefined,
-              quota_workers_count: 1,
-              payment_terms: targetTerms,
-              status: targetStatus,
-              remarks: targetRemarks.trim(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-          } catch (tErr) {
-            console.warn('Failed to save initial target amount:', tErr);
+        if (created && created.id && canManageTarget) {
+          for (const row of yearTargets) {
+            if (row.target_amount !== '' && Number(row.target_amount) > 0) {
+              try {
+                await saveCustomerTarget({
+                  id: `target_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  customer_id: created.id,
+                  customer_name: created.full_name || fullName.trim(),
+                  passport_no: created.passport_no || passportNo.trim(),
+                  nid_no: created.nid_no || nidNo.trim(),
+                  company_id: created.company_id || companyId || undefined,
+                  company_name: companies.find((c) => c.id === companyId)?.name || created.company_id || undefined,
+                  target_amount: Number(row.target_amount),
+                  target_year: row.year,
+                  target_category: 'Annual Target',
+                  quota_workers_count: 1,
+                  status: 'In Progress',
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+              } catch (tErr) {
+                console.warn('Failed to save initial target amount:', tErr);
+              }
+            }
           }
         }
         setFeedback({ type: 'success', message: 'Customer profile registered successfully!' });
@@ -911,47 +1045,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
         </span>
       </div>
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white rounded-2xl p-6 sm:p-7 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase mb-2">
-              {effectiveIsViewMode ? (
-                <>
-                  <Eye size={12} className="text-yellow-400" />
-                  <span>Customer Profile Dossier (View Mode)</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck size={12} className="text-yellow-400" />
-                  <span>Full Page Registry Form</span>
-                </>
-              )}
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-white m-0">
-              {effectiveIsViewMode
-                ? `Customer Dossier: ${fullName || 'Worker Profile'}`
-                : isEditing
-                ? `Edit Customer Profile: ${fullName}`
-                : 'Register New Customer Profile'}
-            </h1>
-            <p className="text-xs text-blue-100/90 mt-1 max-w-xl leading-relaxed m-0">
-              {effectiveIsViewMode
-                ? 'Read-only detailed overview of foreign worker credentials, passport and NID records, sponsor details, working sector, and uploaded document dossiers.'
-                : 'Complete foreign worker biometrics, passport documentation, NID records, living address, working sectors, and multi-file document dossiers.'}
-            </p>
-          </div>
-          {effectiveIsViewMode && canEdit && editId && (
-            <Link
-              href={`${editBaseUrl}?id=${editId}`}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white text-[#0b4da2] hover:bg-blue-50 text-xs font-bold transition-all shadow-sm no-underline shrink-0 self-start sm:self-auto"
-            >
-              <Edit2 size={15} />
-              <span>Edit Profile</span>
-            </Link>
-          )}
-        </div>
-      </div>
 
       {/* Feedback Alert */}
       {feedback && (
@@ -982,6 +1075,93 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
 
       {/* Main Full Page Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Hidden shared file input for profile picture uploads */}
+        <input
+          type="file"
+          ref={profilePicInputRef}
+          accept="image/*"
+          onChange={handleProfilePicUpload}
+          className="hidden"
+        />
+
+        {/* Main Header Preview Card (When Editing / Viewing Customer) */}
+        {(isEditing || editId) && (
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={16} className="text-[#0b4da2]" />
+                <span>Customer & Employer Overview</span>
+              </div>
+              <span className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full font-semibold">
+                {effectiveIsViewMode ? 'Profile Preview' : 'Edit Profile'}
+              </span>
+            </div>
+
+            <div className="p-4 sm:p-6 rounded-xl bg-gradient-to-r from-slate-50/90 via-white to-blue-50/30 border border-slate-200/90 flex flex-col sm:flex-row items-center justify-around gap-6 shadow-2xs">
+              {/* Left Side: Company Logo on Top, Name Underneath */}
+              <div className="flex flex-col items-center text-center max-w-[260px] w-full sm:w-auto">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center p-2 overflow-hidden transition-all hover:shadow-xs">
+                  {selectedCompanyHeader?.logo ? (
+                    <img
+                      src={resolveFileUrl(selectedCompanyHeader.logo)}
+                      alt={selectedCompanyHeader.name || 'Company'}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <Building2 size={32} className="text-indigo-600" />
+                  )}
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2 block">
+                  Employer / Company
+                </span>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 m-0 mt-0.5 leading-snug">
+                  {selectedCompanyHeader?.name || companyId || otherCompanyName || 'Direct Employer'}
+                </h3>
+                <div className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full mt-1">
+                  {selectedCompanyHeader?.sector || workingSector || 'Corporate'}
+                </div>
+              </div>
+
+              {/* Divider in between on larger screens */}
+              <div className="hidden sm:block h-20 w-px bg-slate-200" />
+
+              {/* Right Side: Customer Pic on Top, Name & Phone Underneath (Pure Preview Only) */}
+              <div className="flex flex-col items-center text-center max-w-[260px] w-full sm:w-auto">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white border-2 border-blue-500/30 shadow-2xs flex items-center justify-center p-0.5 overflow-hidden">
+                  {profilePic ? (
+                    <img
+                      src={getFileUrl(profilePic)}
+                      alt={fullName || 'Customer'}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-lg bg-gradient-to-br from-[#0b4da2] to-blue-800 text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-inner">
+                      {fullName ? fullName.charAt(0).toUpperCase() : <User size={28} />}
+                    </div>
+                  )}
+                </div>
+
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2 block">
+                  Customer / Worker
+                </span>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 m-0 mt-0.5 leading-snug">
+                  {fullName || 'Customer'}
+                </h3>
+                {phone ? (
+                  <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                    <Phone size={11} className="text-emerald-600" />
+                    <span>{phone}</span>
+                  </div>
+                ) : (
+                  <div className="mt-1 font-mono text-[11px] text-slate-400 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
+                    No Phone
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Profile Image Upload Card */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -991,7 +1171,13 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
 
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="relative group shrink-0">
-              <div className="w-28 h-28 rounded-2xl overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-xs flex items-center justify-center relative">
+              <div
+                onClick={!effectiveIsViewMode ? () => profilePicInputRef.current?.click() : undefined}
+                className={`w-28 h-28 rounded-2xl overflow-hidden bg-slate-100 border-2 border-slate-200 shadow-xs flex items-center justify-center relative transition-all ${
+                  !effectiveIsViewMode ? 'cursor-pointer hover:border-[#0b4da2]' : ''
+                }`}
+                title={!effectiveIsViewMode ? (profilePic ? 'Click to Change Profile Photo' : 'Click to Upload Profile Photo') : undefined}
+              >
                 {profilePic ? (
                   <img
                     src={getFileUrl(profilePic)}
@@ -1025,13 +1211,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                 {!effectiveIsViewMode && (
                   <>
-                    <input
-                      type="file"
-                      ref={profilePicInputRef}
-                      accept="image/*"
-                      onChange={handleProfilePicUpload}
-                      className="hidden"
-                    />
                     <button
                       type="button"
                       onClick={() => profilePicInputRef.current?.click()}
@@ -1058,16 +1237,29 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   </>
                 )}
 
-                {effectiveIsViewMode && profilePic && (
-                  <a
-                    href={getFileUrl(profilePic)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-[#0b4da2] hover:underline font-bold px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 no-underline"
-                  >
-                    <Eye size={13} />
-                    <span>View Full Photograph</span>
-                  </a>
+                {effectiveIsViewMode && (
+                  <>
+                    {profilePic && (
+                      <a
+                        href={getFileUrl(profilePic)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-[#0b4da2] hover:underline font-bold px-3.5 py-2 rounded-xl bg-blue-50 border border-blue-200 no-underline"
+                      >
+                        <Eye size={13} />
+                        <span>View Full Photograph</span>
+                      </a>
+                    )}
+                    {editId && (
+                      <Link
+                        href={`${editBaseUrl}?id=${editId}`}
+                        className="inline-flex items-center gap-1.5 text-xs text-white bg-[#0b4da2] hover:bg-[#083a7c] font-bold px-3.5 py-2 rounded-xl shadow-xs transition-colors no-underline"
+                      >
+                        <Edit2 size={13} />
+                        <span>Switch to Edit Mode to Update Photo</span>
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1367,83 +1559,39 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
             <span className="text-[11px] text-blue-600 font-semibold">Admin Panel Manageable Sectors</span>
           </div>
 
-          {/* Working Sector (with admin panel ability to add new sector) */}
+          {/* Working Sector */}
           <div className="bg-blue-50/50 border border-blue-200/80 rounded-xl p-4 space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-800">
                 Working Sector <span className="text-red-500">*</span>
               </label>
-              {!effectiveIsViewMode && portalType !== 'employee' && (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingNewSector(!isAddingNewSector)}
-                  className="text-xs font-bold text-[#0b4da2] hover:text-[#072a6b] hover:underline inline-flex items-center gap-1 bg-transparent border-0 cursor-pointer"
-                >
-                  <Plus size={13} />
-                  <span>{isAddingNewSector ? 'Cancel' : '+ Add New Sector'}</span>
-                </button>
-              )}
+              <span className="text-[11px] text-slate-500 font-normal">
+                Company Business Sector
+              </span>
             </div>
-
-            {/* Inline Add New Sector Form */}
-            {isAddingNewSector && !effectiveIsViewMode && (
-              <div className="flex items-center gap-2 p-2.5 bg-white rounded-lg border border-blue-300 animate-in fade-in duration-150">
-                <input
-                  type="text"
-                  value={newSectorName}
-                  onChange={(e) => setNewSectorName(e.target.value)}
-                  placeholder="Enter new sector name (e.g. Oil & Gas, Security Services)..."
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-md px-3 py-1.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
-                />
-                <button
-                  type="button"
-                  disabled={isSavingSector || !newSectorName.trim()}
-                  onClick={handleAddNewSector}
-                  className="px-3.5 py-1.5 bg-[#0b4da2] text-white rounded-md text-xs font-bold cursor-pointer border-0 disabled:opacity-50"
-                >
-                  {isSavingSector ? 'Saving...' : 'Save Sector'}
-                </button>
-              </div>
-            )}
 
             <select
               value={workingSector}
               disabled={effectiveIsViewMode}
               onChange={(e) => setWorkingSector(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
             >
-              {(() => {
-                const selectedComp = companies.find((c) => c.id.toLowerCase() === (companyId || '').toLowerCase());
-                const compSectors: string[] = [];
-                if (selectedComp?.sectors && Array.isArray(selectedComp.sectors)) {
-                  selectedComp.sectors.forEach((s) => {
-                    const trimmed = s.trim();
-                    if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
-                  });
-                }
-                if (selectedComp?.sector) {
-                  selectedComp.sector.split(',').forEach((s) => {
-                    const trimmed = s.trim();
-                    if (trimmed && !compSectors.includes(trimmed)) compSectors.push(trimmed);
-                  });
-                }
+              <option value="">-- Select Company Working Sector --</option>
+              {availableCompanySectors.map((sectorName) => {
+                const selectedComp = companies.find(
+                  (c) => c.id.toLowerCase() === (companyId || '').toLowerCase()
+                );
+                const isCompanySector =
+                  selectedComp &&
+                  ((selectedComp.sectors && selectedComp.sectors.includes(sectorName)) ||
+                    (selectedComp.sector && selectedComp.sector.toLowerCase().includes(sectorName.toLowerCase())));
 
-                if (compSectors.length === 0) {
-                  return (
-                    <option value="">
-                      {selectedComp
-                        ? `-- No sector assigned to ${selectedComp.name} (Use "+ Add New Sector" above) --`
-                        : '-- Please select an employer company first --'}
-                    </option>
-                  );
-                }
-
-                return compSectors.map((s) => (
-                  <option key={s} value={s}>
-                    {s} ({selectedComp?.name})
+                return (
+                  <option key={sectorName} value={sectorName}>
+                    {sectorName} {isCompanySector ? `• (${selectedComp.name})` : ''}
                   </option>
-                ));
-              })()}
+                );
+              })}
             </select>
           </div>
 
@@ -1517,7 +1665,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
             </div>
 
             <p className="text-[11px] text-slate-500 m-0">
-              Establish financial target milestone, service package value, payment terms, and collection schedule for this worker.
+              Set target amount by year for this customer. Deposit amount is auto-calculated from payments, and multiple year targets can be established.
             </p>
 
             {/* Live Financial Ledger Balance Overview */}
@@ -1529,7 +1677,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                       Live Financial Balance Calculation
                     </span>
                     <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-                      (Target − Deposited = Pending)
+                      (Target − Deposited = Remaining Due)
                     </span>
                   </div>
                   <span
@@ -1568,7 +1716,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                         ? 'text-emerald-700'
                         : 'text-amber-700'
                     }`}>
-                      Remaining Pending
+                      Remaining Due
                     </span>
                     <span className={`font-black text-xs sm:text-sm ${
                       liveFinancialCalculation.calculatedPending === 0 && liveFinancialCalculation.calculatedTotalTarget > 0
@@ -1602,129 +1750,140 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
               </div>
             ) : (
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <span>Enter a target amount below to automatically calculate financial dues and ledger balances.</span>
-                <span className="text-[10px] font-bold text-slate-400 font-mono uppercase shrink-0">Formula: Target − Deposit = Pending</span>
+                <span>Enter target year and amount below to calculate financial dues and ledger balances.</span>
+                <span className="text-[10px] font-bold text-slate-400 font-mono uppercase shrink-0">Formula: Target − Deposit = Remaining</span>
               </div>
             )}
 
-            {/* Inputs Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Target Amount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Target Amount (RM)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                    RM
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    disabled={effectiveIsViewMode}
-                    value={targetAmount}
-                    onChange={(e) => setTargetAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="e.g. 3500.00"
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-11 pr-3 py-2.5 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
-                  />
-                </div>
-              </div>
-
-              {/* Target Category */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Target Category
-                </label>
-                <select
-                  disabled={effectiveIsViewMode}
-                  value={targetCategory}
-                  onChange={(e) => setTargetCategory(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
+            {/* Target Year Rows */}
+            <div className="space-y-3">
+              {liveFinancialCalculation.rows.map((row, idx) => (
+                <div
+                  key={row.id ? `target_${row.id}` : `row_${idx}`}
+                  className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 transition-colors"
                 >
-                  {TARGET_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                    {/* 1. Target Year */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Target Year
+                      </label>
+                      <select
+                        disabled={effectiveIsViewMode}
+                        value={row.year}
+                        onChange={(e) => handleYearChange(idx, Number(e.target.value))}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100"
+                      >
+                        {availableTargetYears.map((yr) => (
+                          <option key={yr} value={yr}>
+                            {yr}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              {/* Target Completion Date */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Target Due Date
-                </label>
-                <div className="relative">
-                  <Calendar size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="date"
-                    disabled={effectiveIsViewMode}
-                    value={targetDate}
-                    onChange={(e) => setTargetDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
-                  />
+                    {/* 2. Target Amount */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Target Amount (RM)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          RM
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          disabled={effectiveIsViewMode}
+                          value={row.target_amount}
+                          onChange={(e) => handleTargetAmountChange(idx, e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 3. Deposit Amount (Read-only, cannot be edited) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                        <span>Deposit Amount (RM)</span>
+                        <span className="text-[10px] text-slate-400 font-normal">View Only</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          RM
+                        </span>
+                        <input
+                          type="text"
+                          readOnly
+                          disabled
+                          value={row.depositAmount.toFixed(2)}
+                          title="Deposit amount is automatically recorded from customer payments and cannot be edited directly."
+                          className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-10 pr-3 py-2 text-xs font-mono font-bold text-slate-700 cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 4. Remaining Amount (Read-only) + Delete Action */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-800">
+                          Remaining Amount (RM)
+                        </label>
+                        {!effectiveIsViewMode && liveFinancialCalculation.rows.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveYearTarget(idx)}
+                            title="Remove this year target"
+                            className="text-rose-500 hover:text-rose-700 p-0.5 rounded transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          RM
+                        </span>
+                        <input
+                          type="text"
+                          readOnly
+                          disabled
+                          value={row.remainingAmount.toFixed(2)}
+                          className={`w-full border rounded-xl pl-10 pr-3 py-2 text-xs font-mono font-bold cursor-not-allowed ${
+                            row.remainingAmount === 0 && row.numericTarget > 0
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-slate-100 text-amber-800 border-slate-200'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* Target Status */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Target Status
-                </label>
-                <select
-                  disabled={effectiveIsViewMode}
-                  value={targetStatus}
-                  onChange={(e) => setTargetStatus(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
-                >
-                  <option value="In Progress">In Progress</option>
-                  <option value="Achieved">Achieved</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </div>
+              ))}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Payment Terms */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Payment Terms
-                </label>
-                <select
-                  disabled={effectiveIsViewMode}
-                  value={targetTerms}
-                  onChange={(e) => setTargetTerms(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70 bg-white"
+            {/* Bottom: Add Year Target Button */}
+            {!effectiveIsViewMode && (
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={handleAddYearTarget}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-dashed border-[#0b4da2]/50 text-[#0b4da2] hover:bg-blue-50/80 text-xs font-bold transition-all shadow-2xs"
                 >
-                  {PAYMENT_TERMS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                  <Plus size={15} />
+                  <span>Add Another Year Target</span>
+                </button>
+                <span className="text-[11px] text-slate-400">
+                  Multiple targets can be configured per worker across different calendar years
+                </span>
               </div>
-
-              {/* Remarks / Case Notes */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Remarks / Financial Notes
-                </label>
-                <input
-                  type="text"
-                  disabled={effectiveIsViewMode}
-                  value={targetRemarks}
-                  onChange={(e) => setTargetRemarks(e.target.value)}
-                  placeholder="Additional terms or package notes for this worker..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
-                />
-              </div>
-            </div>
+            )}
           </div>
         )}
 
-        {/* Card: Others Company Information */}
+        {/* Card: Working Company Info */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
             <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
@@ -1732,10 +1891,10 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
             </div>
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 m-0">
-                Others Company Information
+                Working Company Info
               </h3>
               <p className="text-[11px] text-slate-500 m-0">
-                Secondary employer or external subcontracting firm details for this foreign worker.
+                Working company, subcontractor, or active placement site details for this foreign worker.
               </p>
             </div>
           </div>
@@ -1759,10 +1918,10 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
               </div>
             </div>
 
-            {/* Boss Phone No */}
+            {/* Project Manager Phone No */}
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
-                Boss Phone No
+                Project Manager Phone No
               </label>
               <div className="relative">
                 <Phone size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -1789,7 +1948,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   disabled={effectiveIsViewMode}
                   value={otherCompanyAddress}
                   onChange={(e) => setOtherCompanyAddress(e.target.value)}
-                  placeholder="Enter other company premises or office address..."
+                  placeholder="Enter working company premises, project site or office address..."
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
