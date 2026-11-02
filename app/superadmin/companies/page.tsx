@@ -82,6 +82,7 @@ import {
 } from '@/lib/companyStatCards';
 import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
 import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -130,6 +131,8 @@ const STAT_ICON_PRESETS = [
 ];
 
 export default function SuperAdminCompaniesPage() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [companies, setCompanies] = useState<Company[]>([]);
   const [statCards, setStatCards] = useState<CompanyStatCard[]>(DEFAULT_COMPANY_STAT_CARDS);
   const [searchTerm, setSearchTerm] = useState('');
@@ -982,15 +985,25 @@ export default function SuperAdminCompaniesPage() {
             const metrics = getCardMetrics(card);
             const isCurrency = metrics.value.startsWith('RM');
 
-            const cardClasses = `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
-              metrics.isLink && metrics.link
-                ? 'cursor-pointer hover:border-[#0b4da2] hover:ring-2 hover:ring-blue-100 active:scale-[0.99]'
-                : ''
-            } ${
-              card.card_key === 'total_profit'
-                ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
-                : 'border-slate-200 hover:border-blue-400'
-            }`;
+            const cardClasses = isGlass
+              ? `dashboard-card-glass rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+                  metrics.isLink && metrics.link
+                    ? 'cursor-pointer active:scale-[0.99]'
+                    : ''
+                } ${
+                  card.card_key === 'total_profit'
+                    ? 'ring-1 ring-emerald-300/60'
+                    : ''
+                }`
+              : `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+                  metrics.isLink && metrics.link
+                    ? 'cursor-pointer hover:border-[#0b4da2] hover:ring-2 hover:ring-blue-100 active:scale-[0.99]'
+                    : ''
+                } ${
+                  card.card_key === 'total_profit'
+                    ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
+                    : 'border-slate-200 hover:border-blue-400'
+                }`;
 
             const isCompanyEntity = metrics.isCompanyEntity && selectedSingleCompany;
 

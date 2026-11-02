@@ -156,14 +156,20 @@ export default function FreeTrialDropdownButton({
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                          <span className="text-emerald-600 font-bold">
-                            {pkg.trial_days || 3}-Day Free Trial
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-emerald-800 font-extrabold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            <Sparkles size={10} className="text-amber-500" />
+                            <span>
+                              {pkg.trial_days === 30 || Number(pkg.trial_days) === 30
+                                ? '1 Month Free Trial'
+                                : `${pkg.trial_days || 3}-Day Free Trial`}
+                            </span>
+                            <span className="bg-emerald-600 text-white text-[8px] font-black uppercase px-1 rounded">FREE</span>
                           </span>
                           {pkg.savings_text && (
                             <>
-                              <span>•</span>
-                              <span>{pkg.savings_text}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-500 font-medium">{pkg.savings_text}</span>
                             </>
                           )}
                         </div>
@@ -222,10 +228,14 @@ export default function FreeTrialDropdownButton({
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
-                          <span className="text-emerald-600 font-bold">3-Day Free Trial</span>
-                          <span>•</span>
-                          <span>{pkg.savings}</span>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-emerald-800 font-extrabold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            <Sparkles size={10} className="text-amber-500" />
+                            <span>{pkg.key === '1_month' ? '1 Month Free Trial' : '3-Day Free Trial'}</span>
+                            <span className="bg-emerald-600 text-white text-[8px] font-black uppercase px-1 rounded">FREE</span>
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-500 font-medium">{pkg.savings}</span>
                         </div>
                       </div>
                     </div>

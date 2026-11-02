@@ -71,9 +71,20 @@ export interface CompanyTrialApplication {
   company_name: string;
   roc?: string;
   sector?: string;
+  sectors?: string[];
   email: string;
   phone: string;
   address?: string;
+  logo?: string;
+  currency?: string;
+  language?: string;
+  bank_name?: string;
+  bank_account_name?: string;
+  bank_account_no?: string;
+  tag?: string;
+  total_workers?: number;
+  description?: string;
+  directors?: any[];
   plan_package: PlanPackageKey;
   package_duration_days: number;
   package_price?: number;
@@ -197,9 +208,20 @@ export async function submitTrialApplication(data: {
   company_name: string;
   roc?: string;
   sector?: string;
+  sectors?: string[];
   email: string;
   phone: string;
   address?: string;
+  logo?: string;
+  currency?: string;
+  language?: string;
+  bank_name?: string;
+  bank_account_name?: string;
+  bank_account_no?: string;
+  tag?: string;
+  total_workers?: number;
+  description?: string;
+  directors?: any[];
   plan_package: PlanPackageKey;
   applicant_name: string;
   master_admin_username: string;
@@ -506,4 +528,71 @@ export async function deleteSubscriptionPlan(id: number): Promise<boolean> {
   if (!res.ok) throw new Error(result.message || 'Failed to delete plan');
   return true;
 }
+
+// -------------------------------------------------------------
+// COMPANY SUBSCRIPTION TRACKING API
+// -------------------------------------------------------------
+
+export interface CompanySubscriptionRecord {
+  id: string;
+  db_id?: number;
+  name: string;
+  roc: string;
+  sector: string;
+  sectors: string[];
+  description: string;
+  logo: string;
+  tag: string;
+  totalWorkers: number;
+  address: string;
+  phone: string;
+  email: string;
+  currency: string;
+  status: string;
+  subscription_plan_key?: string | null;
+  subscription_starts_at?: string | null;
+  subscription_expires_at?: string | null;
+  subscription_status?: string | null;
+  subscription_trial_days?: number;
+  subscription_notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function fetchCompaniesWithSubscriptions(): Promise<CompanySubscriptionRecord[]> {
+  try {
+    const res = await fetch(`${API_BASE}/companies`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error('Failed to fetch companies');
+    return await res.json();
+  } catch (err) {
+    console.error('fetchCompaniesWithSubscriptions error:', err);
+    return [];
+  }
+}
+
+export async function updateCompanySubscription(
+  companyId: string,
+  data: {
+    subscription_plan_key?: string | null;
+    subscription_starts_at?: string | null;
+    subscription_expires_at?: string | null;
+    subscription_status?: string;
+    subscription_trial_days?: number;
+    subscription_notes?: string;
+    extra_days?: number;
+  }
+): Promise<{ success: boolean; message: string; company?: CompanySubscriptionRecord }> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/subscription`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await res.json();
+  if (!res.ok) throw new Error(result.message || 'Failed to update company subscription');
+  return result;
+}
+
 

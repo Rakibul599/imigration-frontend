@@ -29,6 +29,7 @@ import {
   saveStoredPageCards,
   resetStoredPageCards,
 } from '@/lib/pageCardStorage';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 import SuperAdminCompaniesPage from './companies/page';
 
 const DEFAULT_DASHBOARD_CARDS: PageStatCardConfig[] = [
@@ -49,6 +50,8 @@ export interface DashboardTabItem {
 }
 
 export default function SuperAdminDashboard() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [activeTab, setActiveTab] = useState<DashboardTabId>('companies');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -221,7 +224,7 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
 
-          {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
+          {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config & Theme) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {cards.map((card) => {
               if (card.id === 'reg_companies') {
@@ -231,7 +234,11 @@ export default function SuperAdminDashboard() {
                     type="button"
                     onClick={() => setActiveTab('companies')}
                     title="Switch to Company Management Tab"
-                    className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer"
+                    className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer active:scale-[0.99] ${
+                      isGlass
+                        ? 'dashboard-card-glass rounded-2xl'
+                        : 'bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl shadow-xs'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-2 w-full">
                       <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">
@@ -256,7 +263,11 @@ export default function SuperAdminDashboard() {
                 return (
                   <div
                     key={card.id}
-                    className="bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+                    className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] ${
+                      isGlass
+                        ? 'dashboard-card-glass rounded-2xl'
+                        : 'bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl shadow-xs'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-emerald-700 transition-colors leading-tight truncate">
@@ -278,7 +289,11 @@ export default function SuperAdminDashboard() {
                 return (
                   <div
                     key={card.id}
-                    className="bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+                    className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] ${
+                      isGlass
+                        ? 'dashboard-card-glass rounded-2xl'
+                        : 'bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md rounded-xl shadow-xs'
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-indigo-700 transition-colors leading-tight truncate">
@@ -299,7 +314,11 @@ export default function SuperAdminDashboard() {
               return (
                 <div
                   key={card.id}
-                  className="bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+                  className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] ${
+                    isGlass
+                      ? 'dashboard-card-glass rounded-2xl'
+                      : 'bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl shadow-xs'
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-amber-700 transition-colors leading-tight truncate">

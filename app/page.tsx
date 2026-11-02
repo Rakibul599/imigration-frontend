@@ -35,6 +35,7 @@ async function getInitialThemeSettings(): Promise<ThemeSettings> {
             typeof data.service_cards_stagger === 'number'
               ? data.service_cards_stagger
               : 120,
+          dashboard_card_design: data.dashboard_card_design || 'default',
           theme1_data: {
             ...DEFAULT_THEME1_DATA,
             ...(typeof data.theme1_data === 'string'

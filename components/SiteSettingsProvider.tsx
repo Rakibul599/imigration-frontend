@@ -7,14 +7,35 @@ import {
   applySiteFavicon,
   subscribeToSettingsChanges,
 } from '@/lib/settingsStorage';
+import {
+  getStoredThemeSettings,
+  fetchThemeSettings,
+  subscribeToThemeChanges,
+  DashboardCardDesignType,
+} from '@/lib/themeSettings';
 
 export default function SiteSettingsProvider() {
   useEffect(() => {
+    const applyCardDesignTheme = (design?: DashboardCardDesignType) => {
+      if (typeof document === 'undefined') return;
+      if (design === 'glassmorphism') {
+        document.documentElement.setAttribute('data-card-design', 'glassmorphism');
+        document.body.classList.add('card-theme-glass');
+      } else {
+        document.documentElement.removeAttribute('data-card-design');
+        document.body.classList.remove('card-theme-glass');
+      }
+    };
+
     const initial = getStoredSettings();
     applySiteFavicon(initial.site_favicon);
     if (initial.site_name && typeof document !== 'undefined') {
       document.title = initial.site_name;
     }
+
+    // Apply active card theme immediately
+    const initialTheme = getStoredThemeSettings();
+    applyCardDesignTheme(initialTheme.dashboard_card_design);
 
     fetchSiteSettings()
       .then((data) => {
@@ -25,11 +46,21 @@ export default function SiteSettingsProvider() {
       })
       .catch(() => {});
 
+    fetchThemeSettings()
+      .then((themeData) => {
+        applyCardDesignTheme(themeData.dashboard_card_design);
+      })
+      .catch(() => {});
+
     const unsub = subscribeToSettingsChanges((newSettings) => {
       applySiteFavicon(newSettings.site_favicon);
       if (newSettings.site_name && typeof document !== 'undefined') {
         document.title = newSettings.site_name;
       }
+    });
+
+    const unsubTheme = subscribeToThemeChanges((newTheme) => {
+      applyCardDesignTheme(newTheme.dashboard_card_design);
     });
 
     const handleChunkError = (event: ErrorEvent | PromiseRejectionEvent) => {
@@ -54,6 +85,7 @@ export default function SiteSettingsProvider() {
 
     return () => {
       unsub();
+      unsubTheme();
       window.removeEventListener('error', handleChunkError);
       window.removeEventListener('unhandledrejection', handleChunkError);
     };

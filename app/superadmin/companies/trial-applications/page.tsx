@@ -39,6 +39,7 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  User,
   UserCheck,
   Users,
   Wallet,
@@ -849,17 +850,34 @@ export default function TrialApplicationsPage() {
       {/* Comprehensive Application Details Modal */}
       {viewingApp && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#0b4da2] border border-blue-100 flex items-center justify-center">
-                  <Building2 size={18} />
-                </div>
+              <div className="flex items-center gap-3">
+                {viewingApp.logo ? (
+                  <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                    <img
+                      src={viewingApp.logo}
+                      alt={viewingApp.company_name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] border border-blue-100 flex items-center justify-center shrink-0">
+                    <Building2 size={20} />
+                  </div>
+                )}
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 m-0">
-                    {viewingApp.company_name}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 m-0">
+                      {viewingApp.company_name}
+                    </h3>
+                    {viewingApp.tag && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#0b4da2] border border-blue-200">
+                        {viewingApp.tag}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                     <span>Application #{viewingApp.id}</span>
                     <span>•</span>
@@ -906,8 +924,27 @@ export default function TrialApplicationsPage() {
                   <span className="font-mono font-bold text-slate-800">{viewingApp.roc || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Sector:</span>
+                  <span className="text-slate-500">Primary Sector:</span>
                   <span className="font-semibold text-slate-800">{viewingApp.sector || 'General'}</span>
+                </div>
+                {viewingApp.sectors && Array.isArray(viewingApp.sectors) && viewingApp.sectors.length > 0 && (
+                  <div>
+                    <span className="text-slate-500 block mb-1">Working Sectors:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {viewingApp.sectors.map((sec, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium"
+                        >
+                          {sec}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Initial Workers:</span>
+                  <span className="font-bold text-slate-800">{viewingApp.total_workers || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Office Address:</span>
@@ -915,12 +952,48 @@ export default function TrialApplicationsPage() {
                     {viewingApp.address || '-'}
                   </span>
                 </div>
+                {viewingApp.description && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-slate-500 block mb-1">Overview:</span>
+                    <p className="text-slate-700 italic text-[11px] bg-slate-50 p-2 rounded-lg">
+                      {viewingApp.description}
+                    </p>
+                  </div>
+                )}
                 {viewingApp.created_company_id && (
                   <div className="flex justify-between pt-1 border-t border-slate-100">
                     <span className="text-slate-500">Created Company ID:</span>
                     <strong className="text-[#0b4da2] font-mono">{viewingApp.created_company_id}</strong>
                   </div>
                 )}
+              </div>
+
+              {/* Localization & Bank Details */}
+              <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
+                <div className="font-bold text-slate-900 flex items-center gap-1.5 pb-2 border-b border-slate-100">
+                  <Coins size={14} className="text-[#0b4da2]" />
+                  <span>Localization &amp; Banking</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Currency:</span>
+                  <strong className="text-slate-800 font-mono">{viewingApp.currency || 'MYR'}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Language:</span>
+                  <span className="font-semibold text-slate-800">{viewingApp.language || 'English'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Bank Name:</span>
+                  <span className="font-medium text-slate-800">{viewingApp.bank_name || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Account Name:</span>
+                  <span className="font-medium text-slate-800">{viewingApp.bank_account_name || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Account / IBAN:</span>
+                  <span className="font-mono font-bold text-slate-800">{viewingApp.bank_account_no || '-'}</span>
+                </div>
               </div>
 
               {/* Applicant & Admin Info */}
@@ -951,9 +1024,17 @@ export default function TrialApplicationsPage() {
                     {viewingApp.master_admin_username}
                   </code>
                 </div>
+                {viewingApp.master_admin_password && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Admin Password:</span>
+                    <code className="text-slate-700 bg-slate-100 px-2 py-0.5 rounded font-mono">
+                      {viewingApp.master_admin_password}
+                    </code>
+                  </div>
+                )}
               </div>
 
-              {/* Subscription Timeline */}
+              {/* Subscription Timeline & Payment */}
               <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
                 <div className="font-bold text-slate-900 flex items-center gap-1.5 pb-2 border-b border-slate-100">
                   <Calendar size={14} className="text-[#0b4da2]" />
@@ -972,18 +1053,6 @@ export default function TrialApplicationsPage() {
                   <span className="font-bold text-amber-700">{formatDate(viewingApp.trial_ends_at)}</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-slate-100">
-                  <span className="text-slate-500">Full Package Ends:</span>
-                  <span className="font-bold text-blue-700">{formatDate(viewingApp.package_ends_at)}</span>
-                </div>
-              </div>
-
-              {/* Payment Details */}
-              <div className="p-4 rounded-xl border border-slate-200 space-y-2.5">
-                <div className="font-bold text-slate-900 flex items-center gap-1.5 pb-2 border-b border-slate-100">
-                  <DollarSign size={14} className="text-[#0b4da2]" />
-                  <span>Payment Record</span>
-                </div>
-                <div className="flex justify-between">
                   <span className="text-slate-500">Payment Status:</span>
                   <span className="font-bold uppercase text-xs">
                     {viewingApp.payment_status === 'paid' ? (
@@ -994,20 +1063,101 @@ export default function TrialApplicationsPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Amount:</span>
+                  <span className="text-slate-500">Package Amount:</span>
                   <span className="font-mono font-bold text-slate-900">
-                    RM {viewingApp.payment_amount ? Number(viewingApp.payment_amount).toFixed(2) : '0.00'}
+                    RM {viewingApp.package_price ? Number(viewingApp.package_price).toFixed(2) : '0.00'}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Method:</span>
-                  <span className="text-slate-700">{viewingApp.payment_method || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Reference:</span>
-                  <span className="font-mono text-slate-700">{viewingApp.payment_reference || '-'}</span>
-                </div>
               </div>
+
+              {/* Managing Directors List (Full Width) */}
+              <div className="md:col-span-2 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div className="font-bold text-slate-900 flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-1.5">
+                    <User size={14} className="text-[#0b4da2]" />
+                    <span>Managing Director(s) &amp; Executive Officers</span>
+                  </div>
+                  <span className="text-slate-400 text-[11px]">
+                    {Array.isArray(viewingApp.directors) ? viewingApp.directors.length : 1} Record(s)
+                  </span>
+                </div>
+
+                {Array.isArray(viewingApp.directors) && viewingApp.directors.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {viewingApp.directors.map((d: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-[11px]"
+                      >
+                        <div className="flex items-center justify-between font-bold text-slate-900 border-b border-slate-200/80 pb-1">
+                          <span>
+                            {idx + 1}. {d.name || viewingApp.applicant_name}
+                          </span>
+                          {d.basicSalary && (
+                            <span className="text-[#0b4da2] font-mono">
+                              Salary: {viewingApp.currency || 'MYR'} {d.basicSalary}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 text-slate-600">
+                          <div>
+                            <span className="text-slate-400">NID: </span>
+                            <span className="font-mono font-medium">{d.nidNo || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Passport: </span>
+                            <span className="font-mono font-medium">{d.passportNo || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Phone: </span>
+                            <span className="font-medium">{d.phone || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Email: </span>
+                            <span className="font-medium truncate block">{d.email || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">SOCSO: </span>
+                            <span className="font-mono">{d.socsoNo || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">EPF: </span>
+                            <span className="font-mono">{d.epfNo || '-'}</span>
+                          </div>
+                        </div>
+
+                        {d.carPlateNo && (
+                          <div className="mt-1.5 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-700 bg-white p-1.5 rounded">
+                            <span className="font-bold">
+                              Car: {d.carPlateNo} ({d.carPurchaseType === 'cash' ? 'Cash' : 'EMI'})
+                            </span>
+                            {d.carAmount && <span>Value: RM {d.carAmount}</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-600 text-xs">
+                    <p>
+                      <strong>Director Name:</strong> {viewingApp.applicant_name}
+                    </p>
+                    <p>
+                      <strong>Phone:</strong> {viewingApp.phone} | <strong>Email:</strong> {viewingApp.email}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Inquiries / Notes */}
+              {viewingApp.notes && (
+                <div className="md:col-span-2 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200">
+                  <span className="text-amber-800 font-bold block mb-1">Applicant Notes &amp; Requests:</span>
+                  <p className="text-amber-900 text-[11px] leading-relaxed whitespace-pre-line">
+                    {viewingApp.notes}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Modal Actions */}

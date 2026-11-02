@@ -31,6 +31,8 @@ import {
   Gauge,
   Timer,
   Clock,
+  Building2,
+  Users,
 } from 'lucide-react';
 import {
   ThemeSettings,
@@ -38,21 +40,26 @@ import {
   DEFAULT_THEME1_DATA,
   DEFAULT_THEME2_DATA,
   ServiceCardsAnimationType,
+  DashboardCardDesignType,
   getStoredThemeSettings,
   fetchThemeSettings,
   saveThemeSettingsToBackend,
   getServiceCardAnimationClass,
   getServiceCardAnimationStyle,
 } from '@/lib/themeSettings';
+import CardDesignThemeSection from '@/components/CardDesignThemeSection';
 
 export default function ThemeManager() {
   const [settings, setSettings] = useState<ThemeSettings>(DEFAULT_THEME_SETTINGS);
   
-  // Top-level tabs: 'home' for Home page theme, 'service-cards' for Service Cards animation
-  const [mainTab, setMainTab] = useState<'home' | 'service-cards'>('home');
+  // Top-level tabs: 'home' for Home page theme, 'service-cards' for Service Cards animation, 'card-design' for Dashboard Card theme
+  const [mainTab, setMainTab] = useState<'home' | 'service-cards' | 'card-design'>('home');
 
   // Sub-tabs for Home Page Theme
   const [selectedHomeTab, setSelectedHomeTab] = useState<'theme2' | 'theme1'>('theme2');
+
+  // Selected Dashboard Card Design Theme
+  const [selectedCardDesign, setSelectedCardDesign] = useState<DashboardCardDesignType>('default');
 
   // Selected Service Cards Animation & Timing
   const [selectedCardAnim, setSelectedCardAnim] = useState<ServiceCardsAnimationType>('from-bottom');
@@ -71,6 +78,9 @@ export default function ThemeManager() {
     if (cached.active_theme) {
       setSelectedHomeTab(cached.active_theme);
     }
+    if (cached.dashboard_card_design) {
+      setSelectedCardDesign(cached.dashboard_card_design);
+    }
     if (cached.service_cards_animation) {
       setSelectedCardAnim(cached.service_cards_animation);
     }
@@ -88,6 +98,9 @@ export default function ThemeManager() {
         if (data.active_theme) {
           setSelectedHomeTab(data.active_theme);
         }
+        if (data.dashboard_card_design) {
+          setSelectedCardDesign(data.dashboard_card_design);
+        }
         if (data.service_cards_animation) {
           setSelectedCardAnim(data.service_cards_animation);
         }
@@ -102,6 +115,27 @@ export default function ThemeManager() {
         console.error('Failed to load theme settings from backend:', err);
       });
   }, []);
+
+  const handleCardDesignChange = async (design: DashboardCardDesignType) => {
+    const updated: ThemeSettings = {
+      ...settings,
+      dashboard_card_design: design,
+    };
+    setSettings(updated);
+    setSelectedCardDesign(design);
+
+    try {
+      setSaving(true);
+      await saveThemeSettingsToBackend({ dashboard_card_design: design });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to switch card design theme');
+      setTimeout(() => setErrorMessage(null), 4000);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleActiveThemeChange = async (theme: 'theme1' | 'theme2') => {
     const updated: ThemeSettings = {
@@ -195,6 +229,7 @@ export default function ThemeManager() {
         service_cards_animation: selectedCardAnim,
         service_cards_duration: cardDuration,
         service_cards_stagger: cardStagger,
+        dashboard_card_design: selectedCardDesign,
       };
       const result = await saveThemeSettingsToBackend(payload);
       setSettings(result);
@@ -318,12 +353,18 @@ export default function ThemeManager() {
 
           <div className="flex items-center gap-3">
             <Link
-              href={mainTab === 'home' ? '/' : '/services'}
+              href={mainTab === 'home' ? '/' : mainTab === 'service-cards' ? '/services' : '/'}
               target="_blank"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-xs transition-colors no-underline"
             >
               <Eye size={15} />
-              <span>{mainTab === 'home' ? 'Preview Homepage' : 'Preview Service Cards'}</span>
+              <span>
+                {mainTab === 'home'
+                  ? 'Preview Homepage'
+                  : mainTab === 'service-cards'
+                  ? 'Preview Service Cards'
+                  : 'Preview Dashboard Cards'}
+              </span>
               <ExternalLink size={13} className="text-slate-400" />
             </Link>
 
@@ -358,32 +399,45 @@ export default function ThemeManager() {
         )}
       </div>
 
-      {/* TOP NAVIGATION TABS: Home Page Theme vs Service Cards Animation */}
-      <div className="flex border-b border-slate-200 bg-white rounded-2xl p-2 gap-2 shadow-xs">
+      {/* TOP NAVIGATION TABS: Home Page Theme vs Service Cards Animation vs Dashboard Card Design */}
+      <div className="flex border-b border-slate-200 bg-white rounded-2xl p-2 gap-2 shadow-xs flex-col sm:flex-row">
         <button
           type="button"
           onClick={() => setMainTab('home')}
-          className={`flex-1 py-3 px-5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 transition-all cursor-pointer border-0 ${
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border-0 ${
             mainTab === 'home'
               ? 'bg-[#0b4da2] text-white shadow-sm'
               : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <Layers size={18} />
-          <span>Home Page Theme (AutoCount / Corporate)</span>
+          <Layers size={17} />
+          <span>Home Page Theme</span>
         </button>
 
         <button
           type="button"
           onClick={() => setMainTab('service-cards')}
-          className={`flex-1 py-3 px-5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 transition-all cursor-pointer border-0 ${
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border-0 ${
             mainTab === 'service-cards'
               ? 'bg-[#0b4da2] text-white shadow-sm'
               : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <LayoutGrid size={18} />
-          <span>Service Cards Animation Theme (Left / Right / Bottom / Top / Random)</span>
+          <LayoutGrid size={17} />
+          <span>Service Cards Animation</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMainTab('card-design')}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border-0 ${
+            mainTab === 'card-design'
+              ? 'bg-[#0b4da2] text-white shadow-sm'
+              : 'bg-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <CreditCard size={17} />
+          <span>Dashboard Card Design Theme</span>
         </button>
       </div>
 
@@ -744,6 +798,17 @@ export default function ThemeManager() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* TAB 3: DASHBOARD CARD DESIGN THEME (Classic / Glassmorphism)        */}
+      {/* ==================================================================== */}
+      {mainTab === 'card-design' && (
+        <CardDesignThemeSection
+          selectedCardDesign={selectedCardDesign}
+          onSelectDesign={handleCardDesignChange}
+          saving={saving}
+        />
       )}
 
       {/* ==================================================================== */}

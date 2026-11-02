@@ -4,27 +4,47 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Briefcase,
   Building2,
   Calendar,
+  Car,
   Check,
   CheckCircle2,
   Clock,
+  Coins,
   Copy,
+  CreditCard,
+  DollarSign,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
+  Globe2,
   HelpCircle,
+  Image as ImageIcon,
   KeyRound,
+  Languages,
+  Layers,
   Lock,
   Mail,
+  MapPin,
   Phone,
+  Plus,
   RefreshCw,
   Shield,
   ShieldCheck,
   Sparkles,
+  Trash2,
+  UploadCloud,
   User,
+  UserCheck,
+  UserPlus,
+  Users,
+  Wallet,
+  X,
   Zap,
 } from 'lucide-react';
 import {
@@ -37,6 +57,88 @@ import {
 } from '@/lib/companyTrialAndFinanceStorage';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+
+const SECTOR_OPTIONS = [
+  'Civil & Building Construction',
+  'Agriculture & Plantation',
+  'Manufacturing & Healthcare',
+  'Hospitality & Services',
+  'Agri-Commodity & Processing',
+  'Engineering & Development',
+  'Logistics & Supply Chain',
+  'General Commercial & Services',
+  'Information Technology & Telecom',
+  'Finance & Corporate Services',
+];
+
+const CURRENCY_OPTIONS = [
+  { code: 'MYR', name: 'Malaysian Ringgit (RM)', symbol: 'RM' },
+  { code: 'USD', name: 'US Dollar ($)', symbol: '$' },
+  { code: 'SGD', name: 'Singapore Dollar (S$)', symbol: 'S$' },
+  { code: 'EUR', name: 'Euro (€)', symbol: '€' },
+  { code: 'GBP', name: 'British Pound (£)', symbol: '£' },
+  { code: 'BDT', name: 'Bangladeshi Taka (৳)', symbol: '৳' },
+  { code: 'IDR', name: 'Indonesian Rupiah (Rp)', symbol: 'Rp' },
+  { code: 'INR', name: 'Indian Rupee (₹)', symbol: '₹' },
+];
+
+const LANGUAGE_OPTIONS = [
+  'English (Default)',
+  'Bahasa Melayu (Malay)',
+  'Chinese (Mandarin)',
+  'Tamil',
+  'Bengali',
+  'Arabic',
+];
+
+const BANK_PRESETS = [
+  'Maybank (Malayan Banking Berhad)',
+  'CIMB Bank Berhad',
+  'Public Bank Berhad',
+  'RHB Bank Berhad',
+  'Hong Leong Bank Berhad',
+  'AmBank Group',
+  'Standard Chartered Bank Malaysia',
+  'HSBC Bank Malaysia',
+  'United Overseas Bank (UOB)',
+  'Other Corporate Bank',
+];
+
+const TAG_OPTIONS = ['Verified JIM', 'Active', 'VIP Client', 'Pending Verification', 'Corporate'];
+
+export interface ApplicationDirector {
+  id: string;
+  name: string;
+  nidNo: string;
+  passportNo: string;
+  phone: string;
+  email: string;
+  socsoNo: string;
+  epfNo: string;
+  carPlateNo: string;
+  carPurchaseType: 'emi' | 'cash';
+  carAmount: string;
+  carTotalPayment: string;
+  basicSalary: string;
+}
+
+function createEmptyDirector(index = 1): ApplicationDirector {
+  return {
+    id: `dir-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    name: '',
+    nidNo: '',
+    passportNo: '',
+    phone: '',
+    email: '',
+    socsoNo: '',
+    epfNo: '',
+    carPlateNo: '',
+    carPurchaseType: 'emi',
+    carAmount: '',
+    carTotalPayment: '',
+    basicSalary: '',
+  };
+}
 
 function FreeTrialForm() {
   const searchParams = useSearchParams();
@@ -67,13 +169,31 @@ function FreeTrialForm() {
     }
   }, [planParam]);
 
-  // Form fields
+  // Section 2: Company Core Information
   const [companyName, setCompanyName] = useState('');
   const [roc, setRoc] = useState('');
-  const [sector, setSector] = useState('Information Technology');
+  const [sector, setSector] = useState(SECTOR_OPTIONS[0]);
+  const [companySectors, setCompanySectors] = useState<string[]>([SECTOR_OPTIONS[0]]);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [logo, setLogo] = useState<string>('');
+  const [tag, setTag] = useState('Verified JIM');
+  const [totalWorkers, setTotalWorkers] = useState<number>(0);
+  const [description, setDescription] = useState('');
+
+  // Section 3: Localization & Bank Account Details
+  const [currency, setCurrency] = useState('MYR');
+  const [language, setLanguage] = useState('English');
+  const [bankName, setBankName] = useState('Maybank (Malayan Banking Berhad)');
+  const [customBankName, setCustomBankName] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankAccountNo, setBankAccountNo] = useState('');
+
+  // Section 4: Managing Directors
+  const [directors, setDirectors] = useState<ApplicationDirector[]>([createEmptyDirector(1)]);
+
+  // Section 5: Master Admin Account Setup
   const [applicantName, setApplicantName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -89,7 +209,9 @@ function FreeTrialForm() {
   const activeDynamic = dynamicPlans.find((p) => p.plan_key === selectedPlan);
   const fallbackPkg = PLAN_PACKAGES.find((p) => p.key === selectedPlan) || PLAN_PACKAGES[1];
   const currentPlanLabel = activeDynamic ? activeDynamic.name : fallbackPkg.label;
-  const currentPlanPrice = activeDynamic ? `${activeDynamic.currency} ${activeDynamic.price}` : `${fallbackPkg.currency} ${fallbackPkg.price}`;
+  const currentPlanPrice = activeDynamic
+    ? `${activeDynamic.currency} ${activeDynamic.price}`
+    : `${fallbackPkg.currency} ${fallbackPkg.price}`;
 
   const generatePassword = () => {
     const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%';
@@ -98,6 +220,58 @@ function FreeTrialForm() {
       res += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     setPassword(res);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Logo file size should be less than 3MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setLogo((event.target?.result as string) || '');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleToggleSector = (sec: string) => {
+    setCompanySectors((prev) => {
+      if (prev.includes(sec)) {
+        if (prev.length === 1) return prev; // keep at least one
+        return prev.filter((s) => s !== sec);
+      } else {
+        return [...prev, sec];
+      }
+    });
+  };
+
+  const handleAddDirector = () => {
+    setDirectors((prev) => [...prev, createEmptyDirector(prev.length + 1)]);
+  };
+
+  const handleRemoveDirector = (index: number) => {
+    if (directors.length <= 1) {
+      alert('At least one Managing Director / Key Officer is required.');
+      return;
+    }
+    setDirectors((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleDirectorChange = (index: number, field: keyof ApplicationDirector, value: any) => {
+    setDirectors((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+
+    // Auto sync applicant name if it's the primary director and applicant name is empty or matched previous
+    if (index === 0 && field === 'name' && (!applicantName || applicantName === directors[0]?.name)) {
+      setApplicantName(value);
+    }
   };
 
   const handleCopyCredentials = () => {
@@ -124,10 +298,14 @@ function FreeTrialForm() {
       setErrorMessage('Please enter a Phone / WhatsApp contact number.');
       return;
     }
-    if (!applicantName.trim()) {
-      setErrorMessage('Please enter the Applicant / Managing Director Name.');
+
+    const primaryDirectorName = directors[0]?.name?.trim();
+    const finalApplicantName = applicantName.trim() || primaryDirectorName;
+    if (!finalApplicantName) {
+      setErrorMessage('Please enter the Managing Director / Applicant Name.');
       return;
     }
+
     if (!username.trim()) {
       setErrorMessage('Please provide a Master Admin Username for login.');
       return;
@@ -137,17 +315,33 @@ function FreeTrialForm() {
       return;
     }
 
+    const resolvedBankName =
+      bankName === 'Other Corporate Bank' && customBankName.trim()
+        ? customBankName.trim()
+        : bankName;
+
     setIsLoading(true);
     try {
       const res = await submitTrialApplication({
         company_name: companyName.trim(),
         roc: roc.trim() || undefined,
         sector: sector.trim() || undefined,
+        sectors: companySectors.length > 0 ? companySectors : [sector],
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
         address: address.trim() || undefined,
+        logo: logo || undefined,
+        currency: currency || 'MYR',
+        language: language || 'English',
+        bank_name: resolvedBankName || undefined,
+        bank_account_name: bankAccountName.trim() || undefined,
+        bank_account_no: bankAccountNo.trim() || undefined,
+        tag: tag.trim() || 'Verified JIM',
+        total_workers: Number(totalWorkers) || 0,
+        description: description.trim() || undefined,
+        directors: directors.filter((d) => d.name.trim()),
         plan_package: selectedPlan,
-        applicant_name: applicantName.trim(),
+        applicant_name: finalApplicantName,
         master_admin_username: username.trim(),
         master_admin_password: password,
         notes: notes.trim() || undefined,
@@ -168,101 +362,116 @@ function FreeTrialForm() {
   // SUCCESS VIEW
   if (submittedApp) {
     return (
-      <div className="max-w-2xl mx-auto py-12 px-4 sm:px-6">
+      <div className="max-w-3xl mx-auto py-12 px-4 sm:px-6">
         <div className="bg-white rounded-3xl shadow-xl border border-emerald-100 p-8 sm:p-10 text-center relative overflow-hidden">
           {/* Decorative backdrop */}
           <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-emerald-400 via-teal-500 to-blue-500" />
 
-          <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-5 shadow-sm">
-            <CheckCircle2 size={36} />
-          </div>
+          {submittedApp.logo ? (
+            <div className="w-20 h-20 rounded-2xl mx-auto mb-4 border border-slate-200 bg-white p-1 shadow-sm flex items-center justify-center overflow-hidden">
+              <img
+                src={submittedApp.logo}
+                alt={submittedApp.company_name}
+                className="max-h-full max-w-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-5 shadow-sm">
+              <CheckCircle2 size={36} />
+            </div>
+          )}
 
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider mb-3">
             <Sparkles size={13} className="text-emerald-500" />
-            Application Submitted
+            Full Application Submitted
           </span>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mb-2">
-            Free Trial Request Received!
+            Company Application Received!
           </h1>
           <p className="text-sm text-slate-600 max-w-lg mx-auto mb-8">
-            Your application for <span className="font-bold text-slate-900">{submittedApp.company_name}</span> has
-            been sent to the Super Admin. Upon approval, you will enjoy{' '}
+            Your comprehensive application for <span className="font-bold text-slate-900">{submittedApp.company_name}</span> has
+            been received with full company details, banking info, and director profiles. Upon Super Admin approval, you will enjoy{' '}
             <strong className="text-emerald-700">3 Days of completely free Master Admin access</strong>.
           </p>
 
           {/* Details Card */}
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/80 text-left mb-8 space-y-3.5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 text-xs">
+          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/80 text-left mb-8 space-y-3.5 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <span className="text-slate-500 font-medium">Application ID</span>
               <span className="font-mono font-bold text-slate-900">#APP-{submittedApp.id}</span>
             </div>
 
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <span className="text-slate-500 font-medium">Company Name</span>
+              <span className="font-bold text-slate-900">{submittedApp.company_name}</span>
+            </div>
+
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <span className="text-slate-500 font-medium">Target Subscription</span>
               <span className="font-bold text-[#0b4da2]">
                 {currentPlanLabel} ({currentPlanPrice})
               </span>
             </div>
 
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <span className="text-slate-500 font-medium">Free Trial Duration</span>
               <span className="font-extrabold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
                 3 Days Free Trial (Zero Cost)
               </span>
             </div>
 
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <span className="text-slate-500 font-medium">Managing Director / Applicant</span>
+              <span className="font-bold text-slate-900">{submittedApp.applicant_name}</span>
+            </div>
+
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <span className="text-slate-500 font-medium">Master Admin Username</span>
               <span className="font-mono font-bold text-slate-900">{submittedApp.master_admin_username}</span>
             </div>
 
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <span className="text-slate-500 font-medium">Currency & Language</span>
+              <span className="font-semibold text-slate-800">
+                {submittedApp.currency || 'MYR'} • {submittedApp.language || 'English'}
+              </span>
+            </div>
+
+            {submittedApp.bank_name && (
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                <span className="text-slate-500 font-medium">Bank Information</span>
+                <span className="font-medium text-slate-800 text-right">
+                  {submittedApp.bank_name} ({submittedApp.bank_account_no || 'Pending'})
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
               <span className="text-slate-500 font-medium">Current Status</span>
-              <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
                 <Clock size={12} /> Pending Super Admin Review
               </span>
             </div>
           </div>
 
-          {/* Next Steps Guide */}
-          <div className="bg-blue-50/60 rounded-2xl p-5 border border-blue-100/80 text-left mb-8">
-            <h4 className="text-xs font-bold text-[#0b4da2] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Zap size={14} className="text-amber-500" />
-              What Happens Next?
-            </h4>
-            <ol className="text-xs text-slate-600 space-y-1.5 list-decimal list-inside leading-relaxed">
-              <li>Super Admin will verify your company details and approve your 3-day trial.</li>
-              <li>Once approved, you can log in to Master Admin using your chosen credentials.</li>
-              <li>You can test attendance, employees, requests, face matching, and billing.</li>
-              <li>After 3 days, simply complete payment to activate your full {currentPlanLabel} package.</li>
-            </ol>
-          </div>
-
-          {/* Action buttons */}
+          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               type="button"
               onClick={handleCopyCredentials}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-xs transition-all cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors cursor-pointer"
             >
-              {copied ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-              <span>{copied ? 'Credentials Copied!' : 'Copy Info'}</span>
+              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+              <span>{copied ? 'Copied Application Info!' : 'Copy Application Info'}</span>
             </button>
 
             <Link
               href="/masteradmin/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#0b4da2] hover:bg-[#083877] text-white font-bold text-xs shadow-md hover:shadow-lg transition-all cursor-pointer no-underline"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#083877] text-white font-bold text-xs transition-colors no-underline"
             >
-              <span>Master Admin Login</span>
+              <span>Go to Master Admin Portal</span>
               <ExternalLink size={14} />
-            </Link>
-
-            <Link
-              href="/"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer no-underline"
-            >
-              <span>Back to Home</span>
             </Link>
           </div>
         </div>
@@ -270,38 +479,21 @@ function FreeTrialForm() {
     );
   }
 
-  // APPLICATION FORM VIEW
   return (
-    <div className="max-w-4xl mx-auto py-8 sm:py-12 px-4 sm:px-6">
-      {/* Top Breadcrumb & Back */}
-      <div className="flex items-center justify-between mb-6">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#0b4da2] transition-colors no-underline group"
-        >
-          <ArrowLeft size={15} className="group-hover:-translate-x-1 transition-transform" />
-          <span>Back to Homepage</span>
-        </Link>
-
-        <span className="text-xs font-semibold text-slate-400">
-          Step 1 of 1 • Instant Application
-        </span>
-      </div>
-
-      {/* Hero Header */}
+    <div className="max-w-6xl mx-auto py-10 px-4 sm:px-6">
+      {/* Header */}
       <div className="text-center mb-10">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-extrabold uppercase tracking-wider mb-4 shadow-2xs">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 text-[#0b4da2] text-xs font-bold border border-blue-200/60 mb-3 shadow-2xs">
           <Sparkles size={14} className="text-amber-500" />
-          <span>3-Days Free Trial • Zero Risk</span>
+          <span>Full Company Onboarding &amp; Free Trial</span>
         </div>
-
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3">
-          Start Your <span className="text-[#0b4da2]">3-Day Free Trial</span>
+        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-3">
+          Company Registration &amp; Free Trial Application
         </h1>
         <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Select your target subscription package and register your company. Get{' '}
-          <strong className="text-slate-900 font-bold">3 days of full Master Admin access</strong> upon Super Admin
-          approval. No credit card or advance payment required.
+          Fill in your complete company profile, banking, and director details to register your enterprise.
+          Get <strong className="text-slate-900 font-bold">3 days of full Master Admin access</strong> upon Super Admin
+          approval.
         </p>
       </div>
 
@@ -309,7 +501,10 @@ function FreeTrialForm() {
         {/* Error Alert */}
         {errorMessage && (
           <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center justify-between animate-shake">
-            <span>{errorMessage}</span>
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} />
+              <span>{errorMessage}</span>
+            </div>
             <button
               type="button"
               onClick={() => setErrorMessage(null)}
@@ -331,7 +526,7 @@ function FreeTrialForm() {
                 Choose Target Subscription Package
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                All plans include a 3-Day Free Trial first. You only pay if you decide to continue.
+                All plans include a 3-Day Free Trial first. You only pay after testing the system.
               </p>
             </div>
             <span className="hidden sm:inline-block text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
@@ -339,39 +534,67 @@ function FreeTrialForm() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
             {dynamicPlans.length > 0
               ? dynamicPlans.map((pkg) => {
                   const isSelected = selectedPlan === pkg.plan_key;
+                  const durationDays = Number(pkg.duration_days || 30);
+                  const trialDays = Number(pkg.trial_days ?? 3);
+                  const isFreePrice = Number(pkg.price) === 0;
+
+                  // Format Duration label (e.g. 1 Month, 3 Months, 6 Months, 10 Months, 1 Year)
+                  let durationText = '';
+                  if (durationDays === 30) durationText = '1 Month';
+                  else if (durationDays === 90) durationText = '3 Months';
+                  else if (durationDays === 180) durationText = '6 Months';
+                  else if (durationDays === 300) durationText = '10 Months';
+                  else if (durationDays === 365) durationText = '1 Year';
+                  else if (durationDays > 0 && durationDays % 30 === 0) durationText = `${durationDays / 30} Months`;
+                  else if (durationDays > 0) durationText = `${durationDays} Days`;
+                  else durationText = pkg.name || 'Subscription';
+
+                  // Format Free Trial label (e.g. 3 Days Free, 1 Month Free)
+                  let trialText = '';
+                  if (trialDays === 30) trialText = '1 Month Free';
+                  else if (trialDays > 0) trialText = `${trialDays} Days Free`;
+                  else if (isFreePrice) trialText = 'Free';
+                  else trialText = '3 Days Free';
+
                   return (
                     <div
                       key={pkg.id}
                       onClick={() => setSelectedPlan(pkg.plan_key)}
-                      className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      className={`relative p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between h-full min-w-0 overflow-hidden ${
                         isSelected
-                          ? 'border-[#0b4da2] bg-blue-50/50 shadow-md ring-2 ring-blue-500/20'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
+                          ? 'border-[#0b4da2] bg-blue-50/60 shadow-lg ring-2 ring-blue-500/25 -translate-y-0.5'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-sm'
                       }`}
                     >
-                      {pkg.badge && (
-                        <div className="absolute -top-2.5 right-3">
-                          <span
-                            className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-2xs ${
-                              pkg.is_popular ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
-                            }`}
-                          >
-                            {pkg.badge}
-                          </span>
-                        </div>
-                      )}
-
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs font-extrabold text-slate-900">{pkg.name}</div>
+                        {/* Top Row: Badges & Radio Check */}
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            {pkg.badge && (
+                              <span
+                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-2xs tracking-wider ${
+                                  pkg.is_popular
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-emerald-600 text-white'
+                                }`}
+                              >
+                                {pkg.badge}
+                              </span>
+                            )}
+                            {pkg.is_popular && !pkg.badge && (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs tracking-wider">
+                                POPULAR
+                              </span>
+                            )}
+                          </div>
                           <div
-                            className={`w-5 h-5 rounded-full flex items-center justify-center border ${
+                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
                               isSelected
-                                ? 'bg-[#0b4da2] border-[#0b4da2] text-white'
+                                ? 'bg-[#0b4da2] border-[#0b4da2] text-white shadow-xs'
                                 : 'border-slate-300 bg-white'
                             }`}
                           >
@@ -379,59 +602,108 @@ function FreeTrialForm() {
                           </div>
                         </div>
 
-                        <div className="mb-2">
-                          <span className="text-xs font-bold text-slate-500">{pkg.currency} </span>
-                          <span className="text-xl font-black text-slate-900">{pkg.price}</span>
+                        {/* Heading: e.g. 6 Months / 3 Days Free */}
+                        <div className="mb-2.5">
+                          <h3 className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                              {durationText}
+                            </span>
+                            <span className="text-slate-300 font-bold text-sm">/</span>
+                            <span className="text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 shadow-2xs">
+                              {trialText}
+                            </span>
+                          </h3>
+                          {pkg.name && !pkg.name.toLowerCase().startsWith(durationText.toLowerCase()) && (
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 truncate">
+                              {pkg.name}
+                            </div>
+                          )}
                         </div>
 
-                        <div className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1 mb-1">
-                          <Sparkles size={11} className="text-amber-500" />
-                          <span>{pkg.trial_days || 3} Days Free Trial</span>
+                        {/* Price */}
+                        <div className="mb-3">
+                          {isFreePrice ? (
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-2xl font-black text-emerald-600 tracking-tight">FREE</span>
+                              <span className="text-xs font-bold text-slate-400">({pkg.currency} 0.00)</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-1 flex-wrap">
+                              <span className="text-xs font-bold text-slate-500">{pkg.currency}</span>
+                              <span className="text-2xl font-black text-slate-900 tracking-tight">{pkg.price}</span>
+                              <span className="text-xs text-slate-400 font-medium ml-0.5">/ {durationText}</span>
+                            </div>
+                          )}
+                          <div className="text-[11px] font-bold text-emerald-700 mt-1 flex items-center gap-1 flex-wrap min-w-0">
+                            <Sparkles size={11} className="text-amber-500 shrink-0" />
+                            <span className="break-words">{pkg.currency || 'RM'} 0.00 due today ({trialText})</span>
+                          </div>
                         </div>
 
+                        {/* Description */}
                         {pkg.description && (
-                          <p className="text-[11px] text-slate-500 leading-tight mb-2">{pkg.description}</p>
+                          <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mb-3 break-words">
+                            {pkg.description}
+                          </p>
                         )}
                       </div>
 
-                      <div className="pt-3 mt-3 border-t border-slate-200/80 text-[10px] font-bold text-slate-600 flex items-center justify-between">
-                        <span>{pkg.duration_days} Days Sub</span>
-                        {pkg.savings_text && <span className="text-[#0b4da2]">{pkg.savings_text}</span>}
+                      {/* Footer Info */}
+                      <div className="pt-2.5 mt-auto border-t border-slate-100 text-[11px] font-bold text-slate-600 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-slate-500 truncate">{pkg.duration_days} Days Access</span>
+                        {pkg.savings_text && (
+                          <span className="text-[#0b4da2] bg-blue-50 px-2 py-0.5 rounded font-extrabold text-[10px] truncate">
+                            {pkg.savings_text}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
                 })
               : PLAN_PACKAGES.map((pkg) => {
                   const isSelected = selectedPlan === pkg.key;
+                  const durationDays = Number(pkg.durationDays || 30);
+                  const isFreePrice = Number(pkg.price) === 0;
+
+                  let durationText = '';
+                  if (durationDays === 30) durationText = '1 Month';
+                  else if (durationDays === 90) durationText = '3 Months';
+                  else if (durationDays === 180) durationText = '6 Months';
+                  else if (durationDays === 300) durationText = '10 Months';
+                  else durationText = `${durationDays} Days`;
+
+                  const trialText = '3 Days Free';
+
                   return (
                     <div
                       key={pkg.key}
                       onClick={() => setSelectedPlan(pkg.key)}
-                      className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                      className={`relative p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer flex flex-col justify-between h-full min-w-0 overflow-hidden ${
                         isSelected
-                          ? 'border-[#0b4da2] bg-blue-50/50 shadow-md ring-2 ring-blue-500/20'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/70'
+                          ? 'border-[#0b4da2] bg-blue-50/60 shadow-lg ring-2 ring-blue-500/25 -translate-y-0.5'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-sm'
                       }`}
                     >
-                      {pkg.badge && (
-                        <div className="absolute -top-2.5 right-3">
-                          <span
-                            className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-2xs ${
-                              pkg.popular ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
-                            }`}
-                          >
-                            {pkg.badge}
-                          </span>
-                        </div>
-                      )}
-
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs font-extrabold text-slate-900">{pkg.label}</div>
+                        {/* Top Row: Badges & Radio Check */}
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            {pkg.badge && (
+                              <span
+                                className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-2xs tracking-wider ${
+                                  pkg.popular
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-emerald-600 text-white'
+                                }`}
+                              >
+                                {pkg.badge}
+                              </span>
+                            )}
+                          </div>
                           <div
-                            className={`w-5 h-5 rounded-full flex items-center justify-center border ${
+                            className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 border transition-all ${
                               isSelected
-                                ? 'bg-[#0b4da2] border-[#0b4da2] text-white'
+                                ? 'bg-[#0b4da2] border-[#0b4da2] text-white shadow-xs'
                                 : 'border-slate-300 bg-white'
                             }`}
                           >
@@ -439,22 +711,58 @@ function FreeTrialForm() {
                           </div>
                         </div>
 
-                        <div className="mb-2">
-                          <span className="text-xs font-bold text-slate-500">{pkg.currency} </span>
-                          <span className="text-xl font-black text-slate-900">{pkg.price}</span>
+                        {/* Heading: e.g. 6 Months / 3 Days Free */}
+                        <div className="mb-2.5">
+                          <h3 className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                              {durationText}
+                            </span>
+                            <span className="text-slate-300 font-bold text-sm">/</span>
+                            <span className="text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 shadow-2xs">
+                              {trialText}
+                            </span>
+                          </h3>
+                          {pkg.label && !pkg.label.toLowerCase().startsWith(durationText.toLowerCase()) && (
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 truncate">
+                              {pkg.label}
+                            </div>
+                          )}
                         </div>
 
-                        <div className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1 mb-1">
-                          <Sparkles size={11} className="text-amber-500" />
-                          <span>3 Days Free Trial</span>
+                        {/* Price */}
+                        <div className="mb-3">
+                          {isFreePrice ? (
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-2xl font-black text-emerald-600 tracking-tight">FREE</span>
+                              <span className="text-xs font-bold text-slate-400">({pkg.currency} 0.00)</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-1 flex-wrap">
+                              <span className="text-xs font-bold text-slate-500">{pkg.currency}</span>
+                              <span className="text-2xl font-black text-slate-900 tracking-tight">{pkg.price}</span>
+                              <span className="text-xs text-slate-400 font-medium ml-0.5">/ {durationText}</span>
+                            </div>
+                          )}
+                          <div className="text-[11px] font-bold text-emerald-700 mt-1 flex items-center gap-1 flex-wrap min-w-0">
+                            <Sparkles size={11} className="text-amber-500 shrink-0" />
+                            <span className="break-words">{pkg.currency || 'RM'} 0.00 due today ({trialText})</span>
+                          </div>
                         </div>
 
-                        <p className="text-[11px] text-slate-500 leading-tight">{pkg.description}</p>
+                        {/* Description */}
+                        {pkg.description && (
+                          <p className="text-xs text-slate-500 leading-relaxed line-clamp-2 mb-3 break-words">
+                            {pkg.description}
+                          </p>
+                        )}
                       </div>
 
-                      <div className="pt-3 mt-3 border-t border-slate-200/80 text-[10px] font-bold text-slate-600 flex items-center justify-between">
-                        <span>{pkg.durationDays} Days Sub</span>
-                        <span className="text-[#0b4da2]">{pkg.savings}</span>
+                      {/* Footer Info */}
+                      <div className="pt-2.5 mt-auto border-t border-slate-100 text-[11px] font-bold text-slate-600 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-slate-500 truncate">{pkg.durationDays} Days Access</span>
+                        <span className="text-[#0b4da2] bg-blue-50 px-2 py-0.5 rounded font-extrabold text-[10px] truncate">
+                          {pkg.savings}
+                        </span>
                       </div>
                     </div>
                   );
@@ -464,19 +772,23 @@ function FreeTrialForm() {
 
         {/* SECTION 2: COMPANY INFORMATION */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
-          <div className="mb-5">
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-blue-100 text-[#0b4da2] text-xs font-black flex items-center justify-center">
-                2
-              </span>
-              Company Information
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Enter your official business information for company registration in the agency system.
-            </p>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-100 text-[#0b4da2] text-xs font-black flex items-center justify-center">
+                  2
+                </span>
+                Company Profile &amp; Core Details
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Official corporate details identical to the company master creation registry.
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-slate-400">Section 2 of 5</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Company Name */}
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Company Name <span className="text-rose-500">*</span>
@@ -494,6 +806,7 @@ function FreeTrialForm() {
               </div>
             </div>
 
+            {/* ROC */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Registration / ROC No. <span className="text-slate-400 font-normal">(Optional)</span>
@@ -503,31 +816,11 @@ function FreeTrialForm() {
                 placeholder="e.g. 202401009876 (123456-X)"
                 value={roc}
                 onChange={(e) => setRoc(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white font-mono"
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Industry Sector
-              </label>
-              <select
-                value={sector}
-                onChange={(e) => setSector(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
-              >
-                <option value="Information Technology">Information Technology / Software</option>
-                <option value="Trading & Services">Trading & General Services</option>
-                <option value="Manufacturing">Manufacturing & Production</option>
-                <option value="Construction & Engineering">Construction & Engineering</option>
-                <option value="Healthcare & Medical">Healthcare & Medical</option>
-                <option value="Logistics & Supply Chain">Logistics & Supply Chain</option>
-                <option value="Education & Training">Education & Training</option>
-                <option value="Financial & Accounting">Financial & Accounting</option>
-                <option value="Other">Other Enterprise</option>
-              </select>
-            </div>
-
+            {/* Email */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Official Contact Email <span className="text-rose-500">*</span>
@@ -545,6 +838,7 @@ function FreeTrialForm() {
               </div>
             </div>
 
+            {/* Phone */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Phone / WhatsApp Number <span className="text-rose-500">*</span>
@@ -562,39 +856,547 @@ function FreeTrialForm() {
               </div>
             </div>
 
+            {/* Total Workers */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Initial Total Workers <span className="text-slate-400 font-normal">(Count)</span>
+              </label>
+              <div className="relative">
+                <Users size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={totalWorkers}
+                  onChange={(e) => setTotalWorkers(parseInt(e.target.value) || 0)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Primary Sector */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Primary Industry Sector
+              </label>
+              <select
+                value={sector}
+                onChange={(e) => {
+                  setSector(e.target.value);
+                  if (!companySectors.includes(e.target.value)) {
+                    setCompanySectors([e.target.value, ...companySectors]);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+              >
+                {SECTOR_OPTIONS.map((sec) => (
+                  <option key={sec} value={sec}>
+                    {sec}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tag / Category Badge */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Verification / Category Tag
+              </label>
+              <select
+                value={tag}
+                onChange={(e) => setTag(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+              >
+                {TAG_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Working Sectors (Multiple Checkboxes) */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Working Sectors / Active Lines of Business
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {SECTOR_OPTIONS.map((sec) => {
+                  const active = companySectors.includes(sec);
+                  return (
+                    <button
+                      type="button"
+                      key={sec}
+                      onClick={() => handleToggleSector(sec)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
+                        active
+                          ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {active ? `✓ ${sec}` : `+ ${sec}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Office Address */}
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Office / Business Address <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
-              <input
-                type="text"
-                placeholder="Level 12, Tower A, Business District"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+              <div className="relative">
+                <MapPin size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Level 12, Tower A, Business District, Kuala Lumpur"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Company Logo Upload */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Company Logo <span className="text-slate-400 font-normal">(PNG, JPG, SVG)</span>
+              </label>
+              <div className="flex items-center gap-3">
+                {logo ? (
+                  <div className="relative w-12 h-12 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                    <img src={logo} alt="Company Logo" className="max-h-full max-w-full object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => setLogo('')}
+                      className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 hover:bg-rose-700 cursor-pointer shadow"
+                      title="Remove Logo"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
+                    <ImageIcon size={20} />
+                  </div>
+                )}
+                <label className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors">
+                  <UploadCloud size={14} className="text-[#0b4da2]" />
+                  <span>{logo ? 'Change Logo' : 'Upload Logo'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Company Overview / Description <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Brief summary of company operations, products, or services..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
               />
             </div>
           </div>
         </div>
 
-        {/* SECTION 3: MASTER ADMIN CREDENTIALS */}
+        {/* SECTION 3: LOCALIZATION & BANK ACCOUNT */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
-          <div className="mb-5">
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-blue-100 text-[#0b4da2] text-xs font-black flex items-center justify-center">
-                3
-              </span>
-              Master Admin Account Setup
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              These credentials will be used to log in to your company&apos;s Master Admin Portal upon Super Admin approval.
-            </p>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-100 text-[#0b4da2] text-xs font-black flex items-center justify-center">
+                  3
+                </span>
+                Localization &amp; Corporate Bank Details
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Currency, operational language, and official company banking details.
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-slate-400">Section 3 of 5</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Currency */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Operating Currency <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Coins size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                >
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Language */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Primary System Language <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Languages size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                >
+                  {LANGUAGE_OPTIONS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Bank Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Corporate Bank Name
+              </label>
+              <div className="relative">
+                <Wallet size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <select
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                >
+                  {BANK_PRESETS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Custom Bank Name if "Other" */}
+            {bankName === 'Other Corporate Bank' && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Specify Bank Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Bank of China / Standard Chartered"
+                  value={customBankName}
+                  onChange={(e) => setCustomBankName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                />
+              </div>
+            )}
+
+            {/* Bank Account Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Bank Account Name
+              </label>
+              <div className="relative">
+                <CreditCard size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="e.g. Apex Global Industries Sdn Bhd"
+                  value={bankAccountName}
+                  onChange={(e) => setBankAccountName(e.target.value)}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Bank Account No */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Bank Account / IBAN Number
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. 5140 1234 5678"
+                value={bankAccountNo}
+                onChange={(e) => setBankAccountNo(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white font-mono"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 4: MANAGING DIRECTORS */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-100 text-[#0b4da2] text-xs font-black flex items-center justify-center">
+                  4
+                </span>
+                Managing Director / Board Details
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Record details for company director(s), identity numbers, and vehicle schemes.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleAddDirector}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-[#0b4da2] hover:bg-blue-100 font-bold text-xs transition-colors cursor-pointer border border-blue-200"
+            >
+              <Plus size={14} />
+              <span>Add Another Director</span>
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {directors.map((dir, idx) => (
+              <div
+                key={dir.id}
+                className="p-5 rounded-2xl border border-slate-200 bg-slate-50/50 space-y-4 relative"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </div>
+                    <span className="font-bold text-xs text-slate-900">
+                      {idx === 0 ? 'Primary Managing Director / CEO' : `Director #${idx + 1}`}
+                    </span>
+                  </div>
+
+                  {directors.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDirector(idx)}
+                      className="text-rose-500 hover:text-rose-700 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  {/* Director Name */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Director Full Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required={idx === 0}
+                      placeholder="e.g. Dato' Sri Tan / Rakibul Alam"
+                      value={dir.name}
+                      onChange={(e) => handleDirectorChange(idx, 'name', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                    />
+                  </div>
+
+                  {/* NID */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      National ID (NID / MyKad)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 880101-14-5555"
+                      value={dir.nidNo}
+                      onChange={(e) => handleDirectorChange(idx, 'nidNo', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                    />
+                  </div>
+
+                  {/* Passport */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Passport No. <span className="text-slate-400 font-normal">(If expat)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. A12345678"
+                      value={dir.passportNo}
+                      onChange={(e) => handleDirectorChange(idx, 'passportNo', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                    />
+                  </div>
+
+                  {/* Personal Phone */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Personal Phone / Mobile
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="+60 12-345 6789"
+                      value={dir.phone}
+                      onChange={(e) => handleDirectorChange(idx, 'phone', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                    />
+                  </div>
+
+                  {/* Personal Email */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Personal / Direct Email
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="director@company.com"
+                      value={dir.email}
+                      onChange={(e) => handleDirectorChange(idx, 'email', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                    />
+                  </div>
+
+                  {/* SOCSO */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      SOCSO (PERKESO) No.
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. SOC1234567"
+                      value={dir.socsoNo}
+                      onChange={(e) => handleDirectorChange(idx, 'socsoNo', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                    />
+                  </div>
+
+                  {/* EPF */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      EPF (KWSP) No.
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. EPF9876543"
+                      value={dir.epfNo}
+                      onChange={(e) => handleDirectorChange(idx, 'epfNo', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                    />
+                  </div>
+
+                  {/* Basic Salary */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Basic Salary ({currency})
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 15000"
+                      value={dir.basicSalary}
+                      onChange={(e) => handleDirectorChange(idx, 'basicSalary', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                    />
+                  </div>
+
+                  {/* Company Car Scheme Sub-Card */}
+                  <div className="col-span-1 sm:col-span-2 lg:col-span-4 p-4 bg-white rounded-xl border border-slate-200 min-w-0">
+                    <div className="flex items-center gap-1.5 font-bold text-[11px] text-slate-800 mb-3">
+                      <Car size={14} className="text-[#0b4da2] shrink-0" />
+                      <span>Executive Car Scheme</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                      <div className="min-w-0">
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 truncate" title="Scheme Type">
+                          Scheme Type
+                        </label>
+                        <select
+                          value={dir.carPurchaseType}
+                          onChange={(e) =>
+                            handleDirectorChange(idx, 'carPurchaseType', e.target.value as 'emi' | 'cash')
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 bg-white focus:outline-none focus:border-[#0b4da2]"
+                        >
+                          <option value="emi">Installment (EMI)</option>
+                          <option value="cash">Company Cash</option>
+                        </select>
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 truncate" title="Car Plate No.">
+                          Car Plate No.
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. WYY 8888"
+                          value={dir.carPlateNo}
+                          onChange={(e) => handleDirectorChange(idx, 'carPlateNo', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 uppercase font-mono focus:outline-none focus:border-[#0b4da2]"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 truncate" title="Vehicle Total Value">
+                          Vehicle Total Value
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 180000"
+                          value={dir.carAmount}
+                          onChange={(e) => handleDirectorChange(idx, 'carAmount', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-[#0b4da2]"
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1 truncate" title="Total Paid / Downpayment">
+                          Downpayment / Paid
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 36000"
+                          value={dir.carTotalPayment}
+                          onChange={(e) => handleDirectorChange(idx, 'carTotalPayment', e.target.value)}
+                          className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-[#0b4da2]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SECTION 5: MASTER ADMIN CREDENTIALS */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-100 text-[#0b4da2] text-xs font-black flex items-center justify-center">
+                  5
+                </span>
+                Master Admin Account Setup
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                These credentials will be used to log in to your company&apos;s Master Admin Portal upon Super Admin approval.
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-slate-400">Section 5 of 5</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Applicant / Managing Director Full Name <span className="text-rose-500">*</span>
+                Applicant / Contact Person Full Name <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <User size={16} className="absolute left-3.5 top-3 text-slate-400" />
@@ -680,7 +1482,7 @@ function FreeTrialForm() {
           </div>
         </div>
 
-        {/* SECTION 4: TRUST & TERMS SUMMARY */}
+        {/* SECTION 6: TRUST & TERMS SUMMARY */}
         <div className="bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-emerald-50/60 rounded-3xl p-6 border border-blue-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="w-10 h-10 rounded-xl bg-white text-[#0b4da2] shadow-2xs flex items-center justify-center shrink-0 border border-blue-100">
@@ -719,12 +1521,12 @@ function FreeTrialForm() {
             {isLoading ? (
               <>
                 <RefreshCw size={18} className="animate-spin" />
-                <span>Submitting Trial Application...</span>
+                <span>Submitting Complete Application...</span>
               </>
             ) : (
               <>
                 <Sparkles size={18} className="text-yellow-300" />
-                <span>Submit Application & Get 3-Days Free Trial</span>
+                <span>Submit Application &amp; Get 3-Days Free Trial</span>
                 <ArrowRight size={18} />
               </>
             )}

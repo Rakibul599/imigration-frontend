@@ -1,3 +1,7 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+
 export interface Theme1Data {
   eyebrow: string;
   title_line1: string;
@@ -34,12 +38,15 @@ export type ServiceCardsAnimationType =
   | 'from-top'
   | 'random';
 
+export type DashboardCardDesignType = 'default' | 'glassmorphism';
+
 export interface ThemeSettings {
   id?: number;
   active_theme: 'theme1' | 'theme2';
   service_cards_animation: ServiceCardsAnimationType;
   service_cards_duration: number; // in milliseconds (e.g. 1000)
   service_cards_stagger: number; // in milliseconds per card (e.g. 120)
+  dashboard_card_design: DashboardCardDesignType;
   theme1_data: Theme1Data;
   theme2_data: Theme2Data;
   updated_at?: string;
@@ -79,6 +86,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   service_cards_animation: 'from-bottom',
   service_cards_duration: 1000,
   service_cards_stagger: 120,
+  dashboard_card_design: 'default',
   theme1_data: DEFAULT_THEME1_DATA,
   theme2_data: DEFAULT_THEME2_DATA,
 };
@@ -109,6 +117,7 @@ export function getStoredThemeSettings(): ThemeSettings {
           typeof parsed.service_cards_stagger === 'number'
             ? parsed.service_cards_stagger
             : 120,
+        dashboard_card_design: parsed.dashboard_card_design || 'default',
         theme1_data: {
           ...DEFAULT_THEME1_DATA,
           ...(parsed.theme1_data || {}),
@@ -160,6 +169,7 @@ export async function fetchThemeSettings(): Promise<ThemeSettings> {
             typeof data.service_cards_stagger === 'number'
               ? data.service_cards_stagger
               : 120,
+          dashboard_card_design: data.dashboard_card_design || 'default',
           theme1_data: {
             ...DEFAULT_THEME1_DATA,
             ...(typeof data.theme1_data === 'string'
@@ -219,6 +229,7 @@ export async function saveThemeSettingsToBackend(
       typeof rawUpdated.service_cards_stagger === 'number'
         ? rawUpdated.service_cards_stagger
         : 120,
+    dashboard_card_design: rawUpdated.dashboard_card_design || 'default',
     theme1_data: {
       ...DEFAULT_THEME1_DATA,
       ...(typeof rawUpdated.theme1_data === 'string'
@@ -308,4 +319,67 @@ export function getServiceCardAnimationStyle(
     animationDuration: `${Math.max(200, duration)}ms`,
     animationDelay: `${cardIndex * Math.max(10, stagger)}ms`,
   };
+}
+
+/**
+ * Helper to get CSS classes for dashboard cards based on active theme
+ */
+export function getDashboardCardClasses(
+  cardDesign: DashboardCardDesignType = 'default',
+  options: {
+    isSpecial?: boolean;
+    clickable?: boolean;
+    className?: string;
+  } = {}
+): string {
+  const { isSpecial = false, clickable = false, className = '' } = options;
+
+  if (cardDesign === 'glassmorphism') {
+    return `dashboard-card-glass rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[120px] relative overflow-hidden ${
+      clickable ? 'cursor-pointer active:scale-[0.99]' : ''
+    } ${
+      isSpecial
+        ? 'ring-1 ring-sky-300/50'
+        : ''
+    } ${className}`.trim();
+  }
+
+  // Default Classic Card Design
+  return `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[120px] ${
+    clickable ? 'cursor-pointer active:scale-[0.99]' : ''
+  } ${
+    isSpecial
+      ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
+      : 'border-slate-200 hover:border-blue-400'
+  } ${className}`.trim();
+}
+
+/**
+ * React Hook to subscribe to active dashboard card design
+ */
+export function useDashboardCardDesign(): DashboardCardDesignType {
+  const [design, setDesign] = useState<DashboardCardDesignType>(() => {
+    return getStoredThemeSettings().dashboard_card_design || 'default';
+  });
+
+  useEffect(() => {
+    const initial = getStoredThemeSettings().dashboard_card_design;
+    if (initial) setDesign(initial);
+
+    fetchThemeSettings()
+      .then((s) => {
+        if (s.dashboard_card_design) setDesign(s.dashboard_card_design);
+      })
+      .catch(() => {});
+
+    const unsub = subscribeToThemeChanges((settings) => {
+      if (settings.dashboard_card_design) {
+        setDesign(settings.dashboard_card_design);
+      }
+    });
+
+    return unsub;
+  }, []);
+
+  return design;
 }

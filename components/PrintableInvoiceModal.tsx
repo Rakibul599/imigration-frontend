@@ -1,31 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  Building2,
-  Calendar,
-  Check,
-  CheckCircle2,
-  Clock,
-  CreditCard,
   DollarSign,
-  Download,
-  FileCheck,
-  FileSpreadsheet,
   FileText,
-  Globe2,
-  Mail,
-  MapPin,
-  Phone,
   Printer,
-  QrCode,
-  ShieldCheck,
-  Sparkles,
-  Wallet,
   X,
 } from 'lucide-react';
 import { CompanyInvoice } from '@/lib/companyTrialAndFinanceStorage';
-import { amountToWords } from './PrintableQuotationModal';
+import { Company, resolveFileUrl } from '@/lib/companies';
+import { getStoredCompanies } from '@/lib/companyStorage';
+import { formatCorporateDate } from './PrintableQuotationModal';
 
 interface PrintableInvoiceModalProps {
   invoice: CompanyInvoice;
@@ -38,58 +24,179 @@ export default function PrintableInvoiceModal({
   onClose,
   onOpenSettleModal,
 }: PrintableInvoiceModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const handlePrint = () => {
     window.print();
   };
 
+  const companies: Company[] = useMemo(() => {
+    return getStoredCompanies();
+  }, []);
+
+  const company = useMemo(() => {
+    return companies.find(
+      (c) => c.id === invoice.company_id || c.name.toLowerCase() === (invoice.company_name || '').toLowerCase()
+    );
+  }, [companies, invoice.company_id, invoice.company_name]);
+
+  const companyName = company?.name || invoice.company_name || 'LOTUSS STORES (MALAYSIA) SDN BHD';
+  const companyLogo = company?.logo || (invoice as any).company_logo || '';
+  const companyRoc = company?.roc || (invoice as any).company_roc || '200001018812 (521419-K)';
+  const companyAddress = company?.address || (invoice as any).company_address || 'Head Office, Level 3, No. 3, Jalan 7A/62A,\nBandar Menjalara, 52200 Kuala Lumpur.';
+  const companyPhone = company?.phone || (invoice as any).company_phone || '(603) 6287 6000';
+  const companyBankName = company?.bankName || invoice.bank_name || (invoice as any).company_bank_name || 'SCB';
+  const companyBankAccountNo = company?.bankAccountNo || invoice.bank_account_no || (invoice as any).company_bank_account_no || '770578000000816';
+
   const totalAmount = Number(invoice.total_amount) || 0;
   const subtotal = Number(invoice.subtotal) || 0;
-  const discount = Number(invoice.discount) || 0;
   const taxAmount = Number(invoice.tax_amount) || 0;
   const taxPercentage = Number(invoice.tax_percentage) || 0;
-  const amountPaid = Number(invoice.amount_paid) || 0;
-  const balanceDue = Number(invoice.balance_due) >= 0 ? Number(invoice.balance_due) : Math.max(0, totalAmount - amountPaid);
-  const currency = invoice.currency || 'MYR';
+  const currency = invoice.currency || 'RM';
+  const items = invoice.items || [];
   const isPaid = invoice.payment_status === 'Paid';
 
-  return (
-    <>
-      {/* Print-specific style overrides */}
+  const logoUrl = resolveFileUrl(companyLogo);
+
+  if (!mounted) return null;
+
+  const modalContent = (
+    <div className="print-modal-portal">
+      {/* Print-specific style overrides matching official corporate layout */}
       <style jsx global>{`
         @media print {
-          /* Hide everything in the DOM */
-          body * {
-            visibility: hidden !important;
+          /* 1. Hide everything on the background page completely */
+          body > *:not(.print-modal-portal) {
+            display: none !important;
           }
-          /* Make our printable invoice document visible */
+
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            font-size: 11px !important;
+            color: #000000 !important;
+          }
+
+          /* 2. Reset modal container overlays */
+          .print-modal-portal,
+          .print-modal-overlay {
+            position: static !important;
+            display: block !important;
+            inset: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            border: none !important;
+            box-shadow: none !important;
+            z-index: auto !important;
+          }
+
+          .print-modal-dialog {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            min-height: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            overflow: visible !important;
+          }
+
+          .print-modal-scroll {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+
+          /* 3. The actual printable sheet begins at top (0, 0) */
+          #printable-invoice {
+            position: static !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+            gap: 16px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+
           #printable-invoice,
           #printable-invoice * {
             visibility: visible !important;
           }
-          #printable-invoice {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
+
+          /* Ensure table styling is not broken by globals.css */
+          #printable-invoice table {
             width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 12mm 15mm !important;
-            background: white !important;
-            z-index: 9999999 !important;
-            box-shadow: none !important;
+            border-collapse: collapse !important;
             border: none !important;
           }
+          #printable-invoice thead tr {
+            background-color: #6b7280 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-invoice th {
+            background-color: #6b7280 !important;
+            color: #ffffff !important;
+            border: none !important;
+            padding: 8px 12px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-invoice td {
+            border: none !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 8px 12px !important;
+            color: #000000 !important;
+          }
+
           .no-print {
             display: none !important;
           }
+
           @page {
             size: A4 portrait;
-            margin: 0;
+            margin: 12mm 15mm;
           }
+
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+
           .avoid-break {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -98,8 +205,8 @@ export default function PrintableInvoiceModal({
       `}</style>
 
       {/* Screen Modal Overlay */}
-      <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-        <div className="bg-slate-100 rounded-3xl max-w-4xl w-full my-auto shadow-2xl border border-slate-300 flex flex-col max-h-[96vh]">
+      <div className="print-modal-overlay fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+        <div className="print-modal-dialog bg-slate-100 rounded-3xl max-w-4xl w-full my-auto shadow-2xl border border-slate-300 flex flex-col max-h-[96vh]">
           {/* Top Control Bar (Screen only, hidden on print) */}
           <div className="no-print p-4 sm:px-6 bg-white border-b border-slate-200 rounded-t-3xl flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2.5">
@@ -122,7 +229,7 @@ export default function PrintableInvoiceModal({
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-500">
-                  Official Malaysian Tax Invoice &bull; LHDN Compliant
+                  Official Malaysian Corporate Tax Invoice Format (A4 Ready)
                 </div>
               </div>
             </div>
@@ -145,7 +252,7 @@ export default function PrintableInvoiceModal({
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer border-0"
                 >
                   <DollarSign size={14} />
-                  <span>Record Payment</span>
+                  <span>Settle / Receive Payment</span>
                 </button>
               )}
 
@@ -161,301 +268,203 @@ export default function PrintableInvoiceModal({
           </div>
 
           {/* Document Container */}
-          <div className="overflow-y-auto p-4 sm:p-8 flex justify-center bg-slate-200/60">
-            {/* The Actual A4 Printable Sheet */}
+          <div className="print-modal-scroll overflow-y-auto p-4 sm:p-8 flex justify-center bg-slate-200/60">
+            {/* The Actual A4 Printable Sheet matching user screenshot layout */}
             <div
               id="printable-invoice"
-              className="bg-white w-full max-w-[800px] shadow-lg border border-slate-300 p-8 sm:p-12 text-slate-800 font-sans text-xs flex flex-col justify-between"
+              className="bg-white w-full max-w-[800px] shadow-lg border border-slate-300 p-8 sm:p-12 text-slate-900 font-sans text-xs flex flex-col justify-between"
               style={{ minHeight: '1050px' }}
             >
-              {/* Top Letterhead */}
               <div>
-                <div className="flex justify-between items-start pb-6 border-b-2 border-slate-800">
-                  {/* Company Logo & Details */}
-                  <div className="space-y-1 max-w-[420px]">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#124021] to-[#1c6e3b] text-white flex items-center justify-center font-black text-lg shadow-sm">
-                        AC
-                      </div>
-                      <div>
-                        <h1 className="text-base sm:text-lg font-black tracking-tight text-slate-900 m-0 leading-tight">
-                          ACCO AGENCY &amp; WORKFORCE MANAGEMENT
-                        </h1>
-                        <p className="text-[10px] font-bold text-emerald-700 tracking-wider m-0 uppercase">
-                          Corporate Payroll, ERP &amp; Worker Services
-                        </p>
-                      </div>
+                {/* 1. Header Section: Logo on Left + Company Details */}
+                <div className="flex items-start gap-6 pb-6">
+                  {/* Left: Company Logo (if available) */}
+                  {logoUrl ? (
+                    <div className="shrink-0 w-36 max-w-[150px] pt-1">
+                      <img
+                        src={logoUrl}
+                        alt={companyName}
+                        className="h-14 sm:h-16 max-w-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
                     </div>
+                  ) : null}
 
-                    <div className="text-[11px] text-slate-600 pt-2 space-y-0.5 leading-relaxed">
-                      <div>
-                        <strong>ROC No:</strong> 202401089234 (1542109-W) &bull; <strong>SST No:</strong> W10-2401-32000491
-                      </div>
-                      <div>
-                        Level 28, Menara Exchange 106, Lingkaran TRX, 55188 Kuala Lumpur, Malaysia
-                      </div>
-                      <div>
-                        Tel: +60 3-2788 9000 &bull; Email: billing@acco-agency.com &bull; Web: www.acco-agency.com
-                      </div>
+                  {/* Company Heading Info */}
+                  <div className="space-y-0.5 text-slate-800 text-[11px] leading-tight flex-1">
+                    <div className="font-extrabold text-sm sm:text-base text-black uppercase tracking-tight">
+                      {companyName}
                     </div>
-                  </div>
-
-                  {/* Document Title & Meta */}
-                  <div className="text-right space-y-2">
-                    <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded-lg text-sm sm:text-base font-black tracking-wider uppercase">
-                      TAX INVOICE
+                    {companyRoc && (
+                      <div className="font-bold text-xs text-black">
+                        (Registration No. {companyRoc})
+                      </div>
+                    )}
+                    {companyAddress && (
+                      <div className="text-slate-700 text-[10.5px] whitespace-pre-line leading-relaxed pt-0.5">
+                        {companyAddress}
+                      </div>
+                    )}
+                    <div className="text-slate-700 text-[10.5px]">
+                      General Line: {companyPhone || '(603) 6287 6000'}
                     </div>
-                    <div className="space-y-1 text-xs pt-1">
-                      <div>
-                        <span className="text-slate-400 font-medium">Invoice No: </span>
-                        <strong className="text-slate-900 font-mono text-sm">{invoice.invoice_no}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Invoice Date: </span>
-                        <strong className="text-slate-800">{invoice.invoice_date}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Due Date: </span>
-                        <strong className="text-slate-800">{invoice.due_date || 'Due Upon Receipt'}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Currency: </span>
-                        <strong className="text-slate-900 font-bold">{currency}</strong>
-                      </div>
+                    <div className="text-slate-700 text-[10.5px]">
+                      ST ID: {companyRoc ? `B16-1811-${companyRoc.replace(/\D/g, '').slice(-8) || '32000038'}` : 'B16-1811-32000038'}
                     </div>
                   </div>
                 </div>
 
-                {/* Recipient / Billed To Details */}
-                <div className="grid grid-cols-2 gap-6 my-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-                      BILLED TO / CUSTOMER:
-                    </span>
-                    <div className="font-extrabold text-sm text-slate-900 leading-tight">
-                      {invoice.company_name || 'Corporate Customer'}
+                {/* 2. Middle Section: BILL TO on Left | TAX INVOICE Meta on Right */}
+                <div className="flex justify-between items-start gap-8 my-6 text-[11px] text-slate-800">
+                  {/* Left Column: BILL TO */}
+                  <div className="space-y-0.5 max-w-[360px] flex-1">
+                    <div className="font-black text-xs text-black uppercase tracking-wider mb-1">
+                      BILL TO:
                     </div>
-                    <div className="text-slate-700 font-semibold mt-1">
-                      Attn: {invoice.customer_name}
+                    <div className="font-bold text-xs text-black">
+                      {invoice.customer_name || 'CLIENT ACCOUNT'}
                     </div>
-                    {invoice.customer_address && (
-                      <div className="text-slate-600 mt-0.5 leading-relaxed">
+                    {invoice.customer_address ? (
+                      <div className="text-slate-700 whitespace-pre-line leading-relaxed text-[11px]">
                         {invoice.customer_address}
                       </div>
+                    ) : (
+                      <div className="text-slate-500 italic text-[10.5px]">No address provided</div>
                     )}
-                    <div className="text-slate-600 mt-1 flex flex-wrap gap-x-4">
-                      {invoice.customer_email && <span>Email: {invoice.customer_email}</span>}
-                      {invoice.customer_phone && <span>Tel: {invoice.customer_phone}</span>}
-                    </div>
+                    {invoice.customer_phone && (
+                      <div className="text-slate-700 text-[10.5px]">Tel: {invoice.customer_phone}</div>
+                    )}
+                    {invoice.customer_email && (
+                      <div className="text-slate-700 text-[10.5px]">Email: {invoice.customer_email}</div>
+                    )}
                   </div>
 
-                  <div className="text-right flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-                        PAYMENT SETTLEMENT STATUS:
-                      </span>
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                          isPaid
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                            : invoice.payment_status === 'Partial'
-                            ? 'bg-amber-50 text-amber-800 border-amber-300'
-                            : 'bg-rose-50 text-rose-800 border-rose-300'
-                        }`}
-                      >
-                        <CheckCircle2 size={13} className={isPaid ? 'text-emerald-600' : 'text-slate-400'} />
-                        <span>STATUS: {invoice.payment_status?.toUpperCase()}</span>
+                  {/* Right Column: TAX INVOICE Metadata */}
+                  <div className="w-56 shrink-0 space-y-1">
+                    <div className="font-black text-xs text-black uppercase tracking-wider mb-1">
+                      TAX INVOICE
+                    </div>
+                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
+                      <span className="font-bold text-black uppercase">NUMBER</span>
+                      <span className="font-bold">:</span>
+                      <span className="font-mono font-bold text-black">{invoice.invoice_no}</span>
+                    </div>
+                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
+                      <span className="font-bold text-black uppercase">DATE</span>
+                      <span className="font-bold">:</span>
+                      <span className="font-bold text-black">
+                        {formatCorporateDate(invoice.invoice_date)}
                       </span>
                     </div>
-
-                    {isPaid && (
-                      <div className="pt-2">
-                        <span className="inline-block border-2 border-emerald-600 text-emerald-700 font-black px-2.5 py-0.5 rounded text-[11px] uppercase tracking-wider transform rotate-1">
-                          ✓ PAID &bull; OFFICIAL RECEIPT
-                        </span>
-                      </div>
-                    )}
+                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
+                      <span className="font-bold text-black uppercase">DUE DATE</span>
+                      <span className="font-bold">:</span>
+                      <span className="font-bold text-black">
+                        {formatCorporateDate(invoice.due_date)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Itemized Table */}
-                <div className="border border-slate-300 rounded-xl overflow-hidden mb-6">
+                {/* 3. Line Items Table (Matches Screenshot: Dark Gray Header, Clean Columns) */}
+                <div className="mt-8">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-slate-900 text-white font-bold text-[11px] uppercase tracking-wider">
-                        <th className="py-3 px-3 text-center w-10">#</th>
-                        <th className="py-3 px-4">Item &amp; Description</th>
-                        <th className="py-3 px-3 text-center w-16">Qty</th>
-                        <th className="py-3 px-4 text-right w-28">Unit Price ({currency})</th>
-                        <th className="py-3 px-4 text-right w-28">Total ({currency})</th>
+                      <tr className="bg-[#6b7280] text-white font-bold text-xs">
+                        <th className="py-2 px-3 text-left">Description</th>
+                        <th className="py-2 px-3 text-right w-28">Gross</th>
+                        <th className="py-2 px-3 text-right w-24">Tax</th>
+                        <th className="py-2 px-3 text-right w-28">{currency}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {invoice.items && invoice.items.length > 0 ? (
-                        invoice.items.map((it, idx) => (
-                          <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
-                            <td className="py-3 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-900">{it.description}</div>
+                    <tbody className="divide-y divide-slate-100">
+                      {/* SST Sub-line matching screenshot */}
+                      <tr>
+                        <td colSpan={4} className="py-2 px-3 text-[11px] italic text-slate-700 underline font-medium">
+                          Subject to {taxPercentage}% SST
+                        </td>
+                      </tr>
+
+                      {items.map((it, idx) => {
+                        const itemGross = it.qty * it.unit_price;
+                        const itemTax = (itemGross * taxPercentage) / 100;
+                        const itemTotal = itemGross + itemTax;
+
+                        return (
+                          <tr key={idx} className="border-b border-slate-100">
+                            <td className="py-2 px-3 text-slate-800 text-[11px] align-top">
+                              {it.description}
                             </td>
-                            <td className="py-3 px-3 text-center font-semibold text-slate-700">{it.qty}</td>
-                            <td className="py-3 px-4 text-right font-mono text-slate-700">
-                              {Number(it.unit_price).toFixed(2)}
+                            <td className="py-2 px-3 text-right text-slate-800 text-[11px] font-mono align-top">
+                              {itemGross.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                              {Number(it.total).toFixed(2)}
+                            <td className="py-2 px-3 text-right text-slate-800 text-[11px] font-mono align-top">
+                              {itemTax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2 px-3 text-right text-slate-900 text-[11px] font-mono font-bold align-top">
+                              {itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="py-4 text-center text-slate-500 italic">
-                            No items listed
-                          </td>
-                        </tr>
-                      )}
+                        );
+                      })}
                     </tbody>
                   </table>
+                  {/* Dark horizontal underline */}
+                  <div className="w-full h-[1.5px] bg-slate-900 mt-1" />
                 </div>
 
-                {/* Calculation Summary & Amount in Words */}
-                <div className="flex justify-between items-start gap-6 pb-6 border-b border-slate-200 avoid-break">
-                  {/* Left: Amount in Words & Payment Settlement Record */}
-                  <div className="flex-1 space-y-3">
-                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
-                      <span className="text-[10px] uppercase font-bold text-emerald-800 block">
-                        TOTAL INVOICE AMOUNT IN WORDS:
-                      </span>
-                      <p className="font-semibold text-slate-800 text-xs italic m-0 mt-0.5">
-                        {amountToWords(totalAmount, currency)}
-                      </p>
-                    </div>
-
-                    {/* Payment Receipt Voucher */}
-                    {invoice.payment_reference && (
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[11px] text-slate-600">
-                        <strong className="text-slate-800 block text-xs flex items-center justify-between">
-                          <span>Official Payment Settlement Record:</span>
-                          <span className="text-emerald-700 font-bold">{invoice.payment_method || 'Bank Transfer'}</span>
-                        </strong>
-                        <div className="flex justify-between">
-                          <span>Payment Reference / Transaction ID:</span>
-                          <strong className="font-mono text-slate-900">{invoice.payment_reference}</strong>
-                        </div>
-                        {invoice.payment_date && (
-                          <div className="flex justify-between">
-                            <span>Settlement Date:</span>
-                            <strong className="text-slate-800">{invoice.payment_date}</strong>
-                          </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span>Bank Account:</span>
-                          <span>Maybank &bull; 5140 1234 5678</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right: Numbers Summary */}
-                  <div className="w-72 space-y-2 text-right">
-                    <div className="flex justify-between text-slate-600 text-xs">
-                      <span>Subtotal:</span>
-                      <span className="font-mono font-bold text-slate-800">{currency} {subtotal.toFixed(2)}</span>
-                    </div>
-
-                    {discount > 0 && (
-                      <div className="flex justify-between text-emerald-700 text-xs">
-                        <span>Discount:</span>
-                        <span className="font-mono font-bold">-{currency} {discount.toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    {taxPercentage > 0 && (
-                      <div className="flex justify-between text-slate-600 text-xs">
-                        <span>SST / Tax ({taxPercentage}%):</span>
-                        <span className="font-mono font-semibold text-slate-800">{currency} {taxAmount.toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t-2 border-slate-800 flex justify-between items-baseline">
-                      <span className="text-sm font-black text-slate-900 uppercase">Total Invoice:</span>
-                      <span className="text-lg font-black text-slate-900 font-mono">
-                        {currency} {totalAmount.toFixed(2)}
+                {/* 4. Totals Section (Right Aligned, Total highlighted in Gray) */}
+                <div className="flex justify-end mb-8 text-[11px]">
+                  <div className="w-72 space-y-1">
+                    <div className="grid grid-cols-[100px_10px_1fr] py-0.5 px-2">
+                      <span className="font-bold text-slate-800">Subtotal</span>
+                      <span className="font-bold">:</span>
+                      <span className="text-right font-mono font-bold text-slate-900">
+                        {subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
-
-                    <div className="flex justify-between text-xs text-emerald-700 font-bold pt-1 border-t border-slate-200">
-                      <span>Amount Paid:</span>
-                      <span className="font-mono">{currency} {amountPaid.toFixed(2)}</span>
-                    </div>
-
-                    <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-200">
-                      <span className="text-slate-700">Balance Due:</span>
-                      <span className={`font-mono text-sm ${balanceDue > 0 ? 'text-rose-600 font-black' : 'text-emerald-700'}`}>
-                        {currency} {balanceDue.toFixed(2)}
+                    <div className="grid grid-cols-[100px_10px_1fr] py-0.5 px-2">
+                      <span className="font-bold text-slate-800">Tax ({taxPercentage}%)</span>
+                      <span className="font-bold">:</span>
+                      <span className="text-right font-mono font-bold text-slate-900">
+                        {taxAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Terms and Signatures */}
-                <div className="pt-6 space-y-6 avoid-break">
-                  {invoice.notes && (
-                    <div className="text-[10px] text-slate-500 leading-relaxed">
-                      <strong className="text-slate-700 uppercase block mb-1">Notes &amp; Instructions:</strong>
-                      <div className="whitespace-pre-line">{invoice.notes}</div>
-                    </div>
-                  )}
-
-                  {/* Dual Signature & Verification Box */}
-                  <div className="grid grid-cols-2 gap-8 pt-4">
-                    {/* Issuer Authorization */}
-                    <div className="border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-36">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-bold text-slate-400">ISSUED &amp; VERIFIED BY:</span>
-                        <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold">
-                          LHDN COMPLIANT
-                        </span>
-                      </div>
-                      <div className="border-t border-slate-300 pt-1.5 flex justify-between items-end">
-                        <div>
-                          <div className="font-bold text-slate-800">Finance &amp; Accounts Division</div>
-                          <div className="text-[10px] text-slate-500">ACCO Agency Management</div>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">Date: {invoice.invoice_date}</div>
-                      </div>
-                    </div>
-
-                    {/* Client Acknowledgement */}
-                    <div className="border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-36">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-bold text-slate-400">CUSTOMER ACKNOWLEDGEMENT:</span>
-                        <span className="text-[9px] text-slate-400 font-medium">Receipt Chop</span>
-                      </div>
-                      <div className="border-t border-slate-300 pt-1.5 flex justify-between items-end">
-                        <div>
-                          <div className="font-bold text-slate-800">Received By / Signature</div>
-                          <div className="text-[10px] text-slate-500">{invoice.company_name || invoice.customer_name}</div>
-                        </div>
-                        <div className="text-[10px] text-slate-400">Date: _______________</div>
-                      </div>
+                    {/* Total Row with Gray Band */}
+                    <div className="grid grid-cols-[100px_10px_1fr] bg-[#9ca3af] text-slate-900 font-extrabold py-1 px-2 rounded-xs">
+                      <span className="font-black text-xs uppercase">Total</span>
+                      <span className="font-black text-xs">:</span>
+                      <span className="text-right font-mono font-black text-xs">
+                        {totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Bottom Official Footer */}
-              <div className="pt-8 border-t border-slate-200 mt-8 flex items-center justify-between text-[10px] text-slate-400">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck size={13} className="text-emerald-600" />
-                  <span>Official Computer Generated Tax Invoice &bull; No physical signature required</span>
+              {/* 5. Footer Section: Computer Generated notice & Payment Details */}
+              <div className="space-y-4 pt-6 text-[10.5px] text-slate-700 leading-relaxed avoid-break">
+                <div>This invoice is computer generated and does not require any signature.</div>
+
+                <div className="space-y-0.5">
+                  <div>
+                    Please make payment payable to <strong className="text-black uppercase">{companyName}</strong>
+                  </div>
+                  <div>
+                    Electronic Payments: <strong>{companyBankName || 'SCB'}</strong>, Account No. :{' '}
+                    <strong className="font-mono">{companyBankAccountNo || '770578000000816'}</strong>
+                  </div>
+                  <div>Interest at 2% per month shall be levied on overdue accounts.</div>
                 </div>
-                <div>Page 1 of 1</div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

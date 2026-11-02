@@ -1,38 +1,28 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowLeft,
   Building2,
-  Calendar,
   Check,
-  CheckCircle2,
-  DollarSign,
-  Download,
-  Eye,
   FileCheck,
   FileSpreadsheet,
-  FileText,
-  Mail,
-  MapPin,
-  Phone,
   Plus,
   Printer,
   Save,
   Trash2,
-  X,
 } from 'lucide-react';
 import {
   CompanyQuotation,
   QuotationItem,
   createQuotation,
 } from '@/lib/companyTrialAndFinanceStorage';
-import { Company } from '@/lib/companies';
+import { Company, resolveFileUrl } from '@/lib/companies';
 import { fetchCompaniesFromBackend, getStoredCompanies } from '@/lib/companyStorage';
-import PrintableQuotationModal from '@/components/PrintableQuotationModal';
+import PrintableQuotationModal, { formatCorporateDate } from '@/components/PrintableQuotationModal';
 
 function CreateQuotationContent() {
   const router = useRouter();
@@ -51,10 +41,10 @@ function CreateQuotationContent() {
     d.setDate(d.getDate() + 30);
     return d.toISOString().split('T')[0];
   });
-  const [currency, setCurrency] = useState<string>('MYR');
+  const [currency, setCurrency] = useState<string>('RM');
   const [status, setStatus] = useState<'Draft' | 'Sent' | 'Accepted'>('Draft');
   const [discount, setDiscount] = useState<number>(0);
-  const [taxPercentage, setTaxPercentage] = useState<number>(0);
+  const [taxPercentage, setTaxPercentage] = useState<number>(6);
   const [terms, setTerms] = useState<string>(
     '1. This quotation is valid for 30 days from the date of issue.\n2. Payment terms: 50% advance upon confirmation, balance upon completion.\n3. Goods/Services delivered remain property of the company until full payment.'
   );
@@ -82,10 +72,12 @@ function CreateQuotationContent() {
 
   // Pre-fill from query params if passed
   useEffect(() => {
+    const cId = searchParams.get('company_id');
     const cName = searchParams.get('company_name');
     const custName = searchParams.get('customer_name');
     const email = searchParams.get('email');
     const phone = searchParams.get('phone');
+    if (cId) setSelectedCompanyId(cId);
     if (cName) setCompanyName(cName);
     if (custName) setCustomerName(custName);
     if (email) setCustomerEmail(email);
@@ -100,20 +92,44 @@ function CreateQuotationContent() {
     }).catch(() => {});
   }, []);
 
+  const applyCompanyToBilling = (comp: Company) => {
+    setCompanyName(comp.name);
+    // Custom/client name auto fills with company name (+ ROC if present)
+    const formattedClientName = comp.roc ? `${comp.name} (${comp.roc})` : comp.name;
+    setCustomerName(formattedClientName);
+    setCustomerAddress(comp.address || '');
+    setCustomerPhone(comp.phone || '');
+    setCustomerEmail(comp.email || '');
+  };
+
+  const selectedCompany = useMemo(() => {
+    return companies.find((c) => c.id === selectedCompanyId || (c as any).company_id === selectedCompanyId);
+  }, [companies, selectedCompanyId]);
+
+  // Auto-fill on initial load or when company list finishes loading
+  useEffect(() => {
+    if (selectedCompanyId && companies.length > 0 && !customerName) {
+      const comp = companies.find((c) => c.id === selectedCompanyId || (c as any).company_id === selectedCompanyId);
+      if (comp) {
+        applyCompanyToBilling(comp);
+      }
+    }
+  }, [selectedCompanyId, companies, customerName]);
+
   const handleCompanySelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cId = e.target.value;
     setSelectedCompanyId(cId);
     if (cId) {
       const comp = companies.find((c) => c.id === cId || (c as any).company_id === cId);
       if (comp) {
-        setCompanyName(comp.name);
-        if (comp.email && !customerEmail) setCustomerEmail(comp.email);
-        if (comp.phone && !customerPhone) setCustomerPhone(comp.phone);
-        if (comp.address && !customerAddress) setCustomerAddress(comp.address);
-        if (comp.directors?.[0]?.name && !customerName) {
-          setCustomerName(comp.directors[0].name);
-        }
+        applyCompanyToBilling(comp);
       }
+    } else {
+      setCompanyName('');
+      setCustomerName('');
+      setCustomerAddress('');
+      setCustomerPhone('');
+      setCustomerEmail('');
     }
   };
 
@@ -172,7 +188,7 @@ function CreateQuotationContent() {
     try {
       const res = await createQuotation({
         company_id: selectedCompanyId || undefined,
-        company_name: companyName.trim() || undefined,
+        company_name: selectedCompany?.name || companyName.trim() || undefined,
         customer_name: customerName.trim(),
         customer_email: customerEmail.trim() || undefined,
         customer_phone: customerPhone.trim() || undefined,
@@ -189,12 +205,15 @@ function CreateQuotationContent() {
       });
 
       setSavedQuotation(res);
+      setShowPreviewModal(true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to save quotation');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const logoUrl = selectedCompany?.logo ? resolveFileUrl(selectedCompany.logo) : '';
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-5xl mx-auto min-h-screen">
@@ -213,7 +232,7 @@ function CreateQuotationContent() {
               <span>Create Customer Quotation</span>
             </h1>
             <p className="text-xs text-slate-500">
-              Prepare formal pricing estimates and service proposals for companies and clients.
+              Prepare formal pricing estimates and service proposals matching official corporate invoicing standard.
             </p>
           </div>
         </div>
@@ -235,138 +254,194 @@ function CreateQuotationContent() {
         </div>
       )}
 
-      {/* Main Quotation Paper Form */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8 space-y-6 print:border-none print:shadow-none print:p-0">
-        {/* Paper Header Strip */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 pb-6 border-b border-slate-200">
+      {/* Prominent Issuing Company Selection Bar */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] border border-blue-200 flex items-center justify-center shrink-0">
+            <Building2 size={20} />
+          </div>
           <div>
-            <div className="text-2xl font-black text-[#0b4da2] tracking-tight">OFFICIAL QUOTATION</div>
-            <p className="text-xs text-slate-500 mt-0.5">Enterprise Management Console &amp; Commercial Solutions</p>
-            <div className="mt-3 text-xs text-slate-600 space-y-0.5">
-              <div className="font-semibold text-slate-800">Agency Operating Portal</div>
-              <div>Kuala Lumpur, Malaysia</div>
-              <div>support@agencyportal.com | +60 3-8888 9999</div>
+            <label className="text-xs font-bold text-slate-900 block">
+              Select Issuing Company / Employer <span className="text-rose-500">*</span>
+            </label>
+            <p className="text-[11px] text-slate-500 m-0">
+              When selected, the company logo and heading automatically update in the quotation header and printout.
+            </p>
+          </div>
+        </div>
+
+        <select
+          value={selectedCompanyId}
+          onChange={handleCompanySelect}
+          className="w-full sm:w-80 px-3 py-2.5 rounded-xl border border-blue-300 text-xs bg-white text-slate-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer shadow-2xs"
+        >
+          <option value="">-- Choose Company (e.g. Lotus&apos;s, Gamuda, etc.) --</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} ({c.roc || c.id})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Main Quotation Paper Form (Live representation matching user screenshot) */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8 space-y-6">
+        {/* 1. Paper Header Strip: Dynamic Company Logo & Official Heading */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 pb-6 border-b border-slate-200">
+          {/* Left: Company Logo (if available) + Company Name & Official Details */}
+          <div className="flex items-start gap-5 flex-1">
+            {logoUrl ? (
+              <div className="shrink-0 w-36 max-w-[150px] pt-1">
+                <img
+                  src={logoUrl}
+                  alt={selectedCompany?.name || companyName}
+                  className="h-14 sm:h-16 max-w-full object-contain"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {/* Company Details (Always bold uppercase name; no logo needed if unavailable) */}
+            <div className="space-y-0.5 text-slate-800 text-[11px] leading-tight flex-1">
+              <div className="font-extrabold text-sm sm:text-base text-black uppercase tracking-tight">
+                {selectedCompany?.name || companyName || 'LOTUSS STORES (MALAYSIA) SDN BHD'}
+              </div>
+              <div className="font-bold text-xs text-black">
+                (Registration No. {selectedCompany?.roc || '200001018812 (521419-K)'})
+              </div>
+              <div className="text-slate-700 text-[10.5px] whitespace-pre-line leading-relaxed pt-0.5">
+                {selectedCompany?.address || 'Head Office, Level 3, No. 3, Jalan 7A/62A,\nBandar Menjalara, 52200 Kuala Lumpur.'}
+              </div>
+              <div className="text-slate-700 text-[10.5px]">
+                General Line: {selectedCompany?.phone || '(603) 6287 6000'}
+              </div>
+              <div className="text-slate-700 text-[10.5px]">
+                ST ID: {selectedCompany?.roc ? `B16-1811-${selectedCompany.roc.replace(/\D/g, '').slice(-8) || '32000038'}` : 'B16-1811-32000038'}
+              </div>
             </div>
           </div>
 
           {/* Quotation Metadata Box */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 w-full sm:w-72 space-y-2.5 text-xs">
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Quotation No.
-              </label>
-              <span className="font-mono font-bold text-[#0b4da2] text-sm">
-                {savedQuotation?.quotation_no || 'AUTO-GENERATED ON SAVE'}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 w-full sm:w-72 space-y-2 text-xs shrink-0">
+            <div className="font-black text-sm text-black uppercase tracking-wider mb-2">
+              QUOTATION
+            </div>
+            <div className="grid grid-cols-[80px_10px_1fr] text-[11px] items-center">
+              <span className="font-bold text-slate-700 uppercase">NUMBER</span>
+              <span className="font-bold">:</span>
+              <span className="font-mono font-bold text-[#0b4da2]">
+                {savedQuotation?.quotation_no || 'AUTO-GENERATED'}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={quotationDate}
-                  onChange={(e) => setQuotationDate(e.target.value)}
-                  className="w-full px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Valid Until
-                </label>
-                <input
-                  type="date"
-                  value={validUntil}
-                  onChange={(e) => setValidUntil(e.target.value)}
-                  className="w-full px-2 py-1 rounded border border-slate-300 text-xs bg-white"
-                />
-              </div>
+            <div className="grid grid-cols-[80px_10px_1fr] text-[11px] items-center">
+              <span className="font-bold text-slate-700 uppercase">DATE</span>
+              <span className="font-bold">:</span>
+              <input
+                type="date"
+                value={quotationDate}
+                onChange={(e) => setQuotationDate(e.target.value)}
+                className="w-full px-2 py-1 rounded border border-slate-300 text-[11px] bg-white font-bold"
+              />
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Currency
-              </label>
+            <div className="grid grid-cols-[80px_10px_1fr] text-[11px] items-center">
+              <span className="font-bold text-slate-700 uppercase">DUE DATE</span>
+              <span className="font-bold">:</span>
+              <input
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+                className="w-full px-2 py-1 rounded border border-slate-300 text-[11px] bg-white font-bold"
+              />
+            </div>
+            <div className="grid grid-cols-[80px_10px_1fr] text-[11px] items-center pt-1.5 border-t border-slate-200">
+              <span className="font-bold text-slate-700 uppercase">CURRENCY</span>
+              <span className="font-bold">:</span>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-2 py-1 rounded border border-slate-300 text-xs bg-white font-semibold"
+                className="w-full px-2 py-1 rounded border border-slate-300 text-[11px] bg-white font-bold"
               >
-                <option value="MYR">MYR (Malaysian Ringgit)</option>
-                <option value="USD">USD (US Dollar)</option>
-                <option value="SGD">SGD (Singapore Dollar)</option>
-                <option value="BDT">BDT (Bangladeshi Taka)</option>
+                <option value="RM">RM (MYR)</option>
+                <option value="MYR">MYR</option>
+                <option value="USD">USD</option>
+                <option value="SGD">SGD</option>
               </select>
             </div>
           </div>
         </div>
 
-        {/* Customer / Company Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-slate-200 text-xs">
-          {/* Select Registered Company */}
-          <div className="space-y-3">
-            <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <Building2 size={14} className="text-[#0b4da2]" />
-              <span>Link Registered Company (Optional)</span>
-            </label>
-            <select
-              value={selectedCompanyId}
-              onChange={handleCompanySelect}
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-            >
-              <option value="">-- Manual Customer Entry / Custom Company --</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.id})
-                </option>
-              ))}
-            </select>
+        {/* 2. Middle Section: BILL TO Customer Form */}
+        <div className="space-y-3 pb-6 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="font-black text-xs text-black uppercase tracking-wider flex items-center gap-2">
+              <span>BILL TO:</span>
+              {selectedCompany && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  ✓ Auto-filled from company details
+                </span>
+              )}
+            </div>
 
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-slate-500 text-[11px] font-medium">Auto-fill from:</span>
+              <select
+                onChange={(e) => {
+                  const comp = companies.find((c) => c.id === e.target.value || (c as any).company_id === e.target.value);
+                  if (comp) applyCompanyToBilling(comp);
+                }}
+                className="px-2 py-1 rounded-lg border border-slate-300 text-[11px] bg-white text-slate-800 font-semibold cursor-pointer"
+                defaultValue=""
+              >
+                <option value="" disabled>-- Select Company to Fill --</option>
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} {c.roc ? `(${c.roc})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Company / Organization Name</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Customer / Client Name <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="text"
-                placeholder="e.g. Apex Global Industries"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+                required
+                placeholder="e.g. DIDI SMART TRADING (8000000816)"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
+              <input
+                type="tel"
+                placeholder="+60 12-345 6789"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
               />
             </div>
           </div>
 
-          {/* Quotation Recipient Details */}
-          <div className="space-y-3">
-            <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <span>Customer / Recipient Details</span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Customer / Contact Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Mr. David Wong"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Phone Number</label>
-                <input
-                  type="tel"
-                  placeholder="+60 12-345 6789"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-                />
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Email Address</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Billing Address</label>
+              <textarea
+                rows={2}
+                placeholder="150 MALL Lotus's Mergong&#10;No 68, Jalan KLC 3, Kulim Kedah"
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
               <input
                 type="email"
                 placeholder="client@example.com"
@@ -375,21 +450,10 @@ function CreateQuotationContent() {
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
               />
             </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Address / Billing Location</label>
-              <input
-                type="text"
-                placeholder="Office suite, building, street, city..."
-                value={customerAddress}
-                onChange={(e) => setCustomerAddress(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-              />
-            </div>
           </div>
         </div>
 
-        {/* Line Items Table */}
+        {/* 3. Line Items Table: Dark gray bar header matching screenshot */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-800 uppercase tracking-wider text-xs">
@@ -405,11 +469,11 @@ function CreateQuotationContent() {
             </button>
           </div>
 
-          <div className="border border-slate-200 rounded-xl overflow-hidden">
+          <div className="border border-slate-300 rounded-xl overflow-hidden">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-2.5 px-3">Item Description</th>
+                <tr className="bg-[#6b7280] text-white font-bold text-[11px]">
+                  <th className="py-2.5 px-3">Description</th>
                   <th className="py-2.5 px-3 w-20 text-center">Qty</th>
                   <th className="py-2.5 px-3 w-32 text-right">Unit Price ({currency})</th>
                   <th className="py-2.5 px-3 w-32 text-right">Total ({currency})</th>
@@ -448,7 +512,7 @@ function CreateQuotationContent() {
                         className="w-28 px-1.5 py-1.5 rounded border border-slate-200 text-xs text-right focus:outline-none focus:border-[#0b4da2]"
                       />
                     </td>
-                    <td className="py-2 px-3 text-right font-bold text-slate-900">
+                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
                       {it.total.toFixed(2)}
                     </td>
                     <td className="py-2 px-3 text-center">
@@ -469,7 +533,7 @@ function CreateQuotationContent() {
           </div>
         </div>
 
-        {/* Calculation Summary */}
+        {/* 4. Calculation Summary: Totals with Gray Highlight Band */}
         <div className="flex flex-col sm:flex-row items-start justify-between gap-6 pt-4 border-t border-slate-200 text-xs">
           {/* Terms & Notes */}
           <div className="w-full sm:flex-1 space-y-3">
@@ -494,48 +558,47 @@ function CreateQuotationContent() {
           </div>
 
           {/* Pricing Totals Box */}
-          <div className="w-full sm:w-80 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between text-slate-600">
-              <span>Subtotal:</span>
-              <span className="font-semibold">{currency} {subtotal.toFixed(2)}</span>
+          <div className="w-full sm:w-80 space-y-2">
+            <div className="grid grid-cols-[100px_10px_1fr] py-0.5 px-2 text-xs">
+              <span className="font-bold text-slate-800">Subtotal</span>
+              <span className="font-bold">:</span>
+              <span className="text-right font-mono font-bold text-slate-900">
+                {subtotal.toFixed(2)}
+              </span>
             </div>
 
-            <div className="flex items-center justify-between text-slate-600">
-              <span>Discount ({currency}):</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={discount}
-                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                className="w-24 px-2 py-1 rounded border border-slate-300 text-xs text-right bg-white"
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-slate-600">
-              <span>Tax / SST (%):</span>
-              <div className="flex items-center gap-1">
+            <div className="grid grid-cols-[100px_10px_1fr] items-center py-0.5 px-2 text-xs">
+              <div className="flex items-center gap-1 font-bold text-slate-800">
+                <span>Tax</span>
                 <input
                   type="number"
                   min="0"
                   max="100"
-                  step="0.1"
+                  step="0.5"
                   value={taxPercentage}
                   onChange={(e) => setTaxPercentage(parseFloat(e.target.value) || 0)}
-                  className="w-16 px-2 py-1 rounded border border-slate-300 text-xs text-right bg-white"
+                  className="w-12 px-1 py-0.5 rounded border border-slate-300 text-[10px] text-center bg-white"
                 />
-                <span className="font-semibold text-slate-700">({currency} {taxAmount.toFixed(2)})</span>
+                <span>%</span>
               </div>
+              <span className="font-bold">:</span>
+              <span className="text-right font-mono font-bold text-slate-900">
+                {taxAmount.toFixed(2)}
+              </span>
             </div>
 
-            <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-sm font-extrabold text-slate-900">
-              <span>Total Amount:</span>
-              <span className="text-base text-[#0b4da2]">{currency} {totalAmount.toFixed(2)}</span>
+            {/* Total Row with Gray Band matching screenshot */}
+            <div className="grid grid-cols-[100px_10px_1fr] bg-[#9ca3af] text-slate-900 font-extrabold py-1.5 px-3 rounded-xs shadow-xs">
+              <span className="font-black text-xs uppercase">Total</span>
+              <span className="font-black text-xs">:</span>
+              <span className="text-right font-mono font-black text-sm">
+                {currency} {totalAmount.toFixed(2)}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* 5. Action Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-6 border-t border-slate-200">
           <div className="text-xs text-slate-500">
             {savedQuotation ? (
@@ -554,7 +617,7 @@ function CreateQuotationContent() {
               className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer shadow-2xs"
             >
               <Printer size={14} />
-              <span>Print Preview</span>
+              <span>Preview &amp; Print</span>
             </button>
 
             <button
@@ -591,7 +654,7 @@ function CreateQuotationContent() {
             id: savedQuotation?.id || 0,
             quotation_no: savedQuotation?.quotation_no || 'QTN-DRAFT-PREVIEW',
             company_id: selectedCompanyId || undefined,
-            company_name: companyName || 'Company Name',
+            company_name: selectedCompany?.name || companyName || 'LOTUSS STORES (MALAYSIA) SDN BHD',
             customer_name: customerName || 'Valued Customer',
             customer_email: customerEmail || 'customer@example.com',
             customer_phone: customerPhone || undefined,

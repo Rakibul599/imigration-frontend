@@ -47,7 +47,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head />
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=JSON.parse(localStorage.getItem('agency_theme_settings_cache')||'{}');if(t.dashboard_card_design==='glassmorphism'){document.documentElement.setAttribute('data-card-design','glassmorphism');document.documentElement.classList.add('card-theme-glass');}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className="font-sans antialiased">
         <ChunkErrorReloader />
         <SiteSettingsProvider />

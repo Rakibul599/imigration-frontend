@@ -24,6 +24,7 @@ import {
   Search,
   Trash2,
   X,
+  XCircle,
 } from 'lucide-react';
 import {
   CompanyQuotation,
@@ -58,9 +59,26 @@ export default function QuotationsListPage() {
     loadData();
   }, []);
 
+  const isOpen = (s?: string) => s === 'Sent' || s?.toLowerCase() === 'open';
+  const isAccepted = (s?: string) => s === 'Accepted' || s === 'Converted' || s?.toLowerCase() === 'accepted';
+  const isPending = (s?: string) => s === 'Draft' || s?.toLowerCase() === 'pending';
+  const isRejected = (s?: string) => s === 'Declined' || s?.toLowerCase() === 'rejected' || s?.toLowerCase() === 'declined';
+
   const filteredQuotations = useMemo(() => {
     return quotations.filter((quo) => {
-      if (statusFilter !== 'all' && quo.status !== statusFilter) return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'open') {
+          if (!isOpen(quo.status)) return false;
+        } else if (statusFilter === 'accepted') {
+          if (!isAccepted(quo.status)) return false;
+        } else if (statusFilter === 'pending') {
+          if (!isPending(quo.status)) return false;
+        } else if (statusFilter === 'rejected') {
+          if (!isRejected(quo.status)) return false;
+        } else if (quo.status !== statusFilter) {
+          return false;
+        }
+      }
       if (searchTerm.trim()) {
         const s = searchTerm.toLowerCase();
         const matchesNo = quo.quotation_no?.toLowerCase().includes(s);
@@ -73,10 +91,17 @@ export default function QuotationsListPage() {
     });
   }, [quotations, statusFilter, searchTerm]);
 
-  const totalCount = quotations.length;
-  const draftCount = quotations.filter((q) => q.status === 'Draft').length;
-  const sentCount = quotations.filter((q) => q.status === 'Sent' || q.status === 'Accepted').length;
-  const convertedCount = quotations.filter((q) => q.status === 'Converted').length;
+  const openQuotes = useMemo(() => quotations.filter((q) => isOpen(q.status)), [quotations]);
+  const acceptedQuotes = useMemo(() => quotations.filter((q) => isAccepted(q.status)), [quotations]);
+  const pendingQuotes = useMemo(() => quotations.filter((q) => isPending(q.status)), [quotations]);
+  const rejectedQuotes = useMemo(() => quotations.filter((q) => isRejected(q.status)), [quotations]);
+
+  const openAmount = useMemo(() => openQuotes.reduce((acc, q) => acc + (Number(q.total_amount) || 0), 0), [openQuotes]);
+  const acceptedAmount = useMemo(() => acceptedQuotes.reduce((acc, q) => acc + (Number(q.total_amount) || 0), 0), [acceptedQuotes]);
+  const pendingAmount = useMemo(() => pendingQuotes.reduce((acc, q) => acc + (Number(q.total_amount) || 0), 0), [pendingQuotes]);
+  const rejectedAmount = useMemo(() => rejectedQuotes.reduce((acc, q) => acc + (Number(q.total_amount) || 0), 0), [rejectedQuotes]);
+
+  const defaultCurrency = quotations[0]?.currency || 'RM';
 
   const handleConvertToInvoice = async (quo: CompanyQuotation) => {
     if (!confirm(`Convert Quotation #${quo.quotation_no} directly into a Customer Payment Invoice?`)) return;
@@ -176,66 +201,114 @@ export default function QuotationsListPage() {
         </div>
       )}
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Quotes</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center">
-              <FileSpreadsheet size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-2">{totalCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">All issued quotations</div>
-        </div>
+      {/* Summary KPI Cards: Total Open, Total Accept, Total Pending, Total Reject */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {[
+          {
+            key: 'open',
+            title: 'Total Open Quotation',
+            count: openQuotes.length,
+            amount: openAmount,
+            icon: FileSpreadsheet,
+            titleColor: 'text-[#0b4da2]',
+            iconBg: 'bg-blue-50 border border-blue-100',
+            iconColor: 'text-[#0b4da2]',
+            amountColor: 'text-[#0b4da2]',
+            activeBorder: 'border-[#0b4da2] ring-2 ring-blue-500/20 shadow-sm',
+            subtitle: 'Issued & active quotes',
+          },
+          {
+            key: 'accepted',
+            title: 'Total Accept Quotation',
+            count: acceptedQuotes.length,
+            amount: acceptedAmount,
+            icon: CheckCircle2,
+            titleColor: 'text-emerald-700',
+            iconBg: 'bg-emerald-50 border border-emerald-100',
+            iconColor: 'text-emerald-700',
+            amountColor: 'text-emerald-700',
+            activeBorder: 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm',
+            subtitle: 'Confirmed & accepted deals',
+          },
+          {
+            key: 'pending',
+            title: 'Total Pending Quotation',
+            count: pendingQuotes.length,
+            amount: pendingAmount,
+            icon: Clock,
+            titleColor: 'text-amber-700',
+            iconBg: 'bg-amber-50 border border-amber-100',
+            iconColor: 'text-amber-700',
+            amountColor: 'text-amber-700',
+            activeBorder: 'border-amber-400 ring-2 ring-amber-400/20 shadow-sm',
+            subtitle: 'Drafts pending finalization',
+          },
+          {
+            key: 'rejected',
+            title: 'Total Reject Quotation',
+            count: rejectedQuotes.length,
+            amount: rejectedAmount,
+            icon: XCircle,
+            titleColor: 'text-rose-700',
+            iconBg: 'bg-rose-50 border border-rose-100',
+            iconColor: 'text-rose-700',
+            amountColor: 'text-rose-700',
+            activeBorder: 'border-rose-400 ring-2 ring-rose-400/20 shadow-sm',
+            subtitle: 'Declined / rejected quotes',
+          },
+        ].map((card) => {
+          const isActive = statusFilter === card.key;
+          return (
+            <div
+              key={card.key}
+              onClick={() => setStatusFilter(isActive ? 'all' : card.key)}
+              className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-2xs cursor-pointer transition-all hover:shadow-sm ${
+                isActive ? card.activeBorder : 'border-slate-200/90 hover:border-slate-300'
+              }`}
+            >
+              {/* Card Top: Title & Icon */}
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold uppercase tracking-wider ${card.titleColor}`}>
+                  {card.title}
+                </span>
+                <div className={`w-8 h-8 rounded-xl ${card.iconBg} ${card.iconColor} flex items-center justify-center shrink-0`}>
+                  <card.icon size={16} />
+                </div>
+              </div>
 
-        <div
-          onClick={() => setStatusFilter('Draft')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'Draft' ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-slate-200/90'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Drafts</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
-              <Clock size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-amber-600 mt-2">{draftCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Pending finalization</div>
-        </div>
+              {/* Card Middle: Left = Value (Count), Right = Amount */}
+              <div className="flex items-end justify-between gap-2 mt-3 pt-2.5 border-t border-slate-100">
+                {/* Left: Value / Count */}
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Value
+                  </div>
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">
+                    {card.count}
+                  </div>
+                </div>
 
-        <div
-          onClick={() => setStatusFilter('Sent')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'Sent' ? 'border-blue-400 ring-2 ring-blue-400/20' : 'border-slate-200/90'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Sent / Active</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <FileCheck size={16} />
-            </div>
-          </div>
-          <div className="text-2xl font-extrabold text-[#0b4da2] mt-2">{sentCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Sent for client approval</div>
-        </div>
+                {/* Right: Amount */}
+                <div className="text-right">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">
+                    Amount
+                  </div>
+                  <div className={`text-sm sm:text-base font-extrabold font-mono tracking-tight leading-none ${card.amountColor}`}>
+                    {defaultCurrency} {card.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
 
-        <div
-          onClick={() => setStatusFilter('Converted')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'Converted' ? 'border-emerald-400 ring-2 ring-emerald-400/20' : 'border-slate-200/90'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Converted to Invoices</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <DollarSign size={16} />
+              {/* Card Bottom: Subtitle */}
+              <div className="text-[11px] text-slate-500 mt-2.5 flex items-center justify-between">
+                <span className="truncate">{card.subtitle}</span>
+                <span className="text-[10px] text-slate-400 shrink-0 font-medium">
+                  {isActive ? 'Filtered' : 'Filter'}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="text-2xl font-extrabold text-emerald-600 mt-2">{convertedCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Converted into billing invoices</div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Filter and Search Bar */}
@@ -253,18 +326,25 @@ export default function QuotationsListPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {['all', 'Draft', 'Sent', 'Accepted', 'Converted', 'Declined'].map((st) => (
+            {[
+              { key: 'all', label: 'All Quotations' },
+              { key: 'open', label: 'Open' },
+              { key: 'accepted', label: 'Accepted' },
+              { key: 'pending', label: 'Pending' },
+              { key: 'rejected', label: 'Rejected' },
+              { key: 'Converted', label: 'Converted to Invoices' },
+            ].map((st) => (
               <button
-                key={st}
+                key={st.key}
                 type="button"
-                onClick={() => setStatusFilter(st)}
+                onClick={() => setStatusFilter(st.key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border ${
-                  statusFilter === st
+                  statusFilter === st.key
                     ? 'bg-[#0b4da2] text-white border-[#0b4da2]'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                {st === 'all' ? 'All' : st}
+                {st.label}
               </button>
             ))}
           </div>

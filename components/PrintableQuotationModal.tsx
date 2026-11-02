@@ -1,26 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  Building2,
-  Calendar,
-  CheckCircle2,
-  Clock,
   DollarSign,
-  Download,
-  FileCheck,
   FileSpreadsheet,
-  Globe2,
-  Mail,
-  MapPin,
-  Phone,
   Printer,
-  QrCode,
-  ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react';
 import { CompanyQuotation } from '@/lib/companyTrialAndFinanceStorage';
+import { Company, resolveFileUrl } from '@/lib/companies';
+import { getStoredCompanies } from '@/lib/companyStorage';
 
 interface PrintableQuotationModalProps {
   quotation: CompanyQuotation;
@@ -28,59 +18,18 @@ interface PrintableQuotationModalProps {
   onConvertToInvoice?: (quotation: CompanyQuotation) => void;
 }
 
-export function amountToWords(amount: number, currency: string = 'Ringgit Malaysia'): string {
-  const units = [
-    '',
-    'One',
-    'Two',
-    'Three',
-    'Four',
-    'Five',
-    'Six',
-    'Seven',
-    'Eight',
-    'Nine',
-    'Ten',
-    'Eleven',
-    'Twelve',
-    'Thirteen',
-    'Fourteen',
-    'Fifteen',
-    'Sixteen',
-    'Seventeen',
-    'Eighteen',
-    'Nineteen',
-  ];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-  const numToWordsLessThanThousand = (num: number): string => {
-    if (num === 0) return '';
-    if (num < 20) return units[num];
-    if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? ' ' + units[num % 10] : '');
-    return units[Math.floor(num / 100)] + ' Hundred' + (num % 100 !== 0 ? ' ' + numToWordsLessThanThousand(num % 100) : '');
-  };
-
-  const integerPart = Math.floor(Math.abs(amount));
-  const decimalPart = Math.round((Math.abs(amount) - integerPart) * 100);
-
-  if (integerPart === 0 && decimalPart === 0) return `${currency}: Zero Only`;
-
-  let words = '';
-  const millions = Math.floor(integerPart / 1000000);
-  const thousands = Math.floor((integerPart % 1000000) / 1000);
-  const remainder = integerPart % 1000;
-
-  if (millions > 0) words += numToWordsLessThanThousand(millions) + ' Million ';
-  if (thousands > 0) words += numToWordsLessThanThousand(thousands) + ' Thousand ';
-  if (remainder > 0) words += numToWordsLessThanThousand(remainder);
-
-  words = words.trim();
-  let result = `${currency}: ${words}`;
-  if (decimalPart > 0) {
-    result += ` and Cents ${numToWordsLessThanThousand(decimalPart)}`;
-  }
-  result += ' Only';
-  return result;
+/**
+ * Formats date into Malaysian corporate style: e.g. 01-AUG-2026
+ */
+export function formatCorporateDate(dateStr?: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
 }
 
 export default function PrintableQuotationModal({
@@ -88,55 +37,178 @@ export default function PrintableQuotationModal({
   onClose,
   onConvertToInvoice,
 }: PrintableQuotationModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const handlePrint = () => {
     window.print();
   };
 
+  const companies: Company[] = useMemo(() => {
+    return getStoredCompanies();
+  }, []);
+
+  const company = useMemo(() => {
+    return companies.find(
+      (c) => c.id === quotation.company_id || c.name.toLowerCase() === (quotation.company_name || '').toLowerCase()
+    );
+  }, [companies, quotation.company_id, quotation.company_name]);
+
+  const companyName = company?.name || quotation.company_name || 'LOTUSS STORES (MALAYSIA) SDN BHD';
+  const companyLogo = company?.logo || (quotation as any).company_logo || '';
+  const companyRoc = company?.roc || (quotation as any).company_roc || '200001018812 (521419-K)';
+  const companyAddress = company?.address || (quotation as any).company_address || 'Head Office, Level 3, No. 3, Jalan 7A/62A,\nBandar Menjalara, 52200 Kuala Lumpur.';
+  const companyPhone = company?.phone || (quotation as any).company_phone || '(603) 6287 6000';
+  const companyBankName = company?.bankName || (quotation as any).company_bank_name || 'SCB';
+  const companyBankAccountNo = company?.bankAccountNo || (quotation as any).company_bank_account_no || '770578000000816';
+
   const totalAmount = Number(quotation.total_amount) || 0;
   const subtotal = Number(quotation.subtotal) || 0;
-  const discount = Number(quotation.discount) || 0;
   const taxAmount = Number(quotation.tax_amount) || 0;
   const taxPercentage = Number(quotation.tax_percentage) || 0;
-  const currency = quotation.currency || 'MYR';
+  const currency = quotation.currency || 'RM';
+  const items = quotation.items || [];
 
-  return (
-    <>
-      {/* Print-specific style overrides */}
+  const logoUrl = resolveFileUrl(companyLogo);
+
+  if (!mounted) return null;
+
+  const modalContent = (
+    <div className="print-modal-portal">
+      {/* Print-specific style overrides matching official corporate layout */}
       <style jsx global>{`
         @media print {
-          /* Hide everything in the DOM */
-          body * {
-            visibility: hidden !important;
+          /* 1. Hide everything on the background page completely */
+          body > *:not(.print-modal-portal) {
+            display: none !important;
           }
-          /* Make our printable document visible */
+
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            font-size: 11px !important;
+            color: #000000 !important;
+          }
+
+          /* 2. Reset modal container overlays */
+          .print-modal-portal,
+          .print-modal-overlay {
+            position: static !important;
+            display: block !important;
+            inset: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            border: none !important;
+            box-shadow: none !important;
+            z-index: auto !important;
+          }
+
+          .print-modal-dialog {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            min-height: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            overflow: visible !important;
+          }
+
+          .print-modal-scroll {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+
+          /* 3. The actual printable sheet begins at top (0, 0) */
+          #printable-quotation {
+            position: static !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+            gap: 16px !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
+
           #printable-quotation,
           #printable-quotation * {
             visibility: visible !important;
           }
-          #printable-quotation {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
+
+          /* Ensure table styling is not broken by globals.css */
+          #printable-quotation table {
             width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 12mm 15mm !important;
-            background: white !important;
-            z-index: 9999999 !important;
-            box-shadow: none !important;
+            border-collapse: collapse !important;
             border: none !important;
           }
+          #printable-quotation thead tr {
+            background-color: #6b7280 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-quotation th {
+            background-color: #6b7280 !important;
+            color: #ffffff !important;
+            border: none !important;
+            padding: 8px 12px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-quotation td {
+            border: none !important;
+            border-bottom: 1px solid #e5e7eb !important;
+            padding: 8px 12px !important;
+            color: #000000 !important;
+          }
+
           .no-print {
             display: none !important;
           }
+
           @page {
             size: A4 portrait;
-            margin: 0;
+            margin: 12mm 15mm;
           }
+
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+
           .avoid-break {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -145,8 +217,8 @@ export default function PrintableQuotationModal({
       `}</style>
 
       {/* Screen Modal Overlay */}
-      <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-        <div className="bg-slate-100 rounded-3xl max-w-4xl w-full my-auto shadow-2xl border border-slate-300 flex flex-col max-h-[96vh]">
+      <div className="print-modal-overlay fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+        <div className="print-modal-dialog bg-slate-100 rounded-3xl max-w-4xl w-full my-auto shadow-2xl border border-slate-300 flex flex-col max-h-[96vh]">
           {/* Top Control Bar (Screen only, hidden on print) */}
           <div className="no-print p-4 sm:px-6 bg-white border-b border-slate-200 rounded-t-3xl flex items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-2.5">
@@ -200,259 +272,201 @@ export default function PrintableQuotationModal({
           </div>
 
           {/* Document Container */}
-          <div className="overflow-y-auto p-4 sm:p-8 flex justify-center bg-slate-200/60">
-            {/* The Actual A4 Printable Sheet */}
+          <div className="print-modal-scroll overflow-y-auto p-4 sm:p-8 flex justify-center bg-slate-200/60">
+            {/* The Actual A4 Printable Sheet matching user screenshot layout */}
             <div
               id="printable-quotation"
-              className="bg-white w-full max-w-[800px] shadow-lg border border-slate-300 p-8 sm:p-12 text-slate-800 font-sans text-xs flex flex-col justify-between"
+              className="bg-white w-full max-w-[800px] shadow-lg border border-slate-300 p-8 sm:p-12 text-slate-900 font-sans text-xs flex flex-col justify-between"
               style={{ minHeight: '1050px' }}
             >
-              {/* Top Letterhead */}
               <div>
-                <div className="flex justify-between items-start pb-6 border-b-2 border-[#0b4da2]">
-                  {/* Company Logo & Details */}
-                  <div className="space-y-1 max-w-[420px]">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0b4da2] to-[#062c5e] text-white flex items-center justify-center font-black text-lg shadow-sm">
-                        AC
-                      </div>
-                      <div>
-                        <h1 className="text-base sm:text-lg font-black tracking-tight text-[#0b4da2] m-0 leading-tight">
-                          ACCO AGENCY &amp; WORKFORCE MANAGEMENT
-                        </h1>
-                        <p className="text-[10px] font-bold text-slate-500 tracking-wider m-0 uppercase">
-                          Official Licensed Agency &amp; Enterprise Solutions
-                        </p>
-                      </div>
+                {/* 1. Header Section: Logo on Left + Company Details */}
+                <div className="flex items-start gap-6 pb-6">
+                  {/* Left: Company Logo (if available) */}
+                  {logoUrl ? (
+                    <div className="shrink-0 w-36 max-w-[150px] pt-1">
+                      <img
+                        src={logoUrl}
+                        alt={companyName}
+                        className="h-14 sm:h-16 max-w-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
                     </div>
+                  ) : null}
 
-                    <div className="text-[11px] text-slate-600 pt-2 space-y-0.5 leading-relaxed">
-                      <div>
-                        <strong>ROC No:</strong> 202401089234 (1542109-W) &bull; <strong>SST No:</strong> W10-2401-32000491
-                      </div>
-                      <div>
-                        Level 28, Menara Exchange 106, Lingkaran TRX, 55188 Kuala Lumpur, Malaysia
-                      </div>
-                      <div>
-                        Tel: +60 3-2788 9000 &bull; Email: billing@acco-agency.com &bull; Web: www.acco-agency.com
-                      </div>
+                  {/* Company Heading Info */}
+                  <div className="space-y-0.5 text-slate-800 text-[11px] leading-tight flex-1">
+                    <div className="font-extrabold text-sm sm:text-base text-black uppercase tracking-tight">
+                      {companyName}
                     </div>
-                  </div>
-
-                  {/* Document Title & Meta */}
-                  <div className="text-right space-y-2">
-                    <div className="inline-block bg-[#0b4da2] text-white px-4 py-1.5 rounded-lg text-sm sm:text-base font-black tracking-wider uppercase">
-                      OFFICIAL QUOTATION
-                    </div>
-                    <div className="space-y-1 text-xs pt-1">
-                      <div>
-                        <span className="text-slate-400 font-medium">Quotation No: </span>
-                        <strong className="text-slate-900 font-mono text-sm">{quotation.quotation_no}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Date: </span>
-                        <strong className="text-slate-800">{quotation.quotation_date}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Valid Until: </span>
-                        <strong className="text-slate-800">{quotation.valid_until || '30 Days from Issue'}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 font-medium">Currency: </span>
-                        <strong className="text-[#0b4da2] font-bold">{currency}</strong>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recipient / Client Details */}
-                <div className="grid grid-cols-2 gap-6 my-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-                      QUOTATION ISSUED TO:
-                    </span>
-                    <div className="font-extrabold text-sm text-slate-900 leading-tight">
-                      {quotation.company_name || 'Client Corporate Account'}
-                    </div>
-                    <div className="text-slate-700 font-semibold mt-1">
-                      Attn: {quotation.customer_name}
-                    </div>
-                    {quotation.customer_address && (
-                      <div className="text-slate-600 mt-0.5 leading-relaxed">
-                        {quotation.customer_address}
+                    {companyRoc && (
+                      <div className="font-bold text-xs text-black">
+                        (Registration No. {companyRoc})
                       </div>
                     )}
-                    <div className="text-slate-600 mt-1 flex flex-wrap gap-x-4">
-                      {quotation.customer_email && <span>Email: {quotation.customer_email}</span>}
-                      {quotation.customer_phone && <span>Tel: {quotation.customer_phone}</span>}
+                    {companyAddress && (
+                      <div className="text-slate-700 text-[10.5px] whitespace-pre-line leading-relaxed pt-0.5">
+                        {companyAddress}
+                      </div>
+                    )}
+                    <div className="text-slate-700 text-[10.5px]">
+                      General Line: {companyPhone || '(603) 6287 6000'}
                     </div>
-                  </div>
-
-                  <div className="text-right flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
-                        STATUS &amp; REFERENCES:
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-[#0b4da2] border border-blue-200">
-                        <CheckCircle2 size={13} />
-                        <span>Status: {quotation.status}</span>
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 pt-2">
-                      Please refer to Quote <strong>#{quotation.quotation_no}</strong> for all inquiries.
+                    <div className="text-slate-700 text-[10.5px]">
+                      ST ID: {companyRoc ? `B16-1811-${companyRoc.replace(/\D/g, '').slice(-8) || '32000038'}` : 'B16-1811-32000038'}
                     </div>
                   </div>
                 </div>
 
-                {/* Itemized Table */}
-                <div className="border border-slate-300 rounded-xl overflow-hidden mb-6">
+                {/* 2. Middle Section: BILL TO on Left | QUOTATION Meta on Right */}
+                <div className="flex justify-between items-start gap-8 my-6 text-[11px] text-slate-800">
+                  {/* Left Column: BILL TO */}
+                  <div className="space-y-0.5 max-w-[360px] flex-1">
+                    <div className="font-black text-xs text-black uppercase tracking-wider mb-1">
+                      BILL TO:
+                    </div>
+                    <div className="font-bold text-xs text-black">
+                      {quotation.customer_name || 'CLIENT ACCOUNT'}
+                    </div>
+                    {quotation.customer_address ? (
+                      <div className="text-slate-700 whitespace-pre-line leading-relaxed text-[11px]">
+                        {quotation.customer_address}
+                      </div>
+                    ) : (
+                      <div className="text-slate-500 italic text-[10.5px]">No address provided</div>
+                    )}
+                    {quotation.customer_phone && (
+                      <div className="text-slate-700 text-[10.5px]">Tel: {quotation.customer_phone}</div>
+                    )}
+                    {quotation.customer_email && (
+                      <div className="text-slate-700 text-[10.5px]">Email: {quotation.customer_email}</div>
+                    )}
+                  </div>
+
+                  {/* Right Column: QUOTATION Metadata */}
+                  <div className="w-56 shrink-0 space-y-1">
+                    <div className="font-black text-xs text-black uppercase tracking-wider mb-1">
+                      QUOTATION
+                    </div>
+                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
+                      <span className="font-bold text-black uppercase">NUMBER</span>
+                      <span className="font-bold">:</span>
+                      <span className="font-mono font-bold text-black">{quotation.quotation_no}</span>
+                    </div>
+                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
+                      <span className="font-bold text-black uppercase">DATE</span>
+                      <span className="font-bold">:</span>
+                      <span className="font-bold text-black">
+                        {formatCorporateDate(quotation.quotation_date)}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
+                      <span className="font-bold text-black uppercase">DUE DATE</span>
+                      <span className="font-bold">:</span>
+                      <span className="font-bold text-black">
+                        {formatCorporateDate(quotation.valid_until)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Line Items Table: Dark gray header bar (#6b7280) */}
+                <div className="mt-8">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-[#0b4da2] text-white font-bold text-[11px] uppercase tracking-wider">
-                        <th className="py-3 px-3 text-center w-10">#</th>
-                        <th className="py-3 px-4">Item &amp; Service Description</th>
-                        <th className="py-3 px-3 text-center w-16">Qty</th>
-                        <th className="py-3 px-4 text-right w-28">Unit Price ({currency})</th>
-                        <th className="py-3 px-4 text-right w-28">Total ({currency})</th>
+                      <tr className="bg-[#6b7280] text-white font-bold text-xs">
+                        <th className="py-2 px-3 text-left">Description</th>
+                        <th className="py-2 px-3 text-right w-28">Gross</th>
+                        <th className="py-2 px-3 text-right w-24">Tax</th>
+                        <th className="py-2 px-3 text-right w-28">{currency}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {quotation.items && quotation.items.length > 0 ? (
-                        quotation.items.map((it, idx) => (
-                          <tr key={idx} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
-                            <td className="py-3 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-slate-900">{it.description}</div>
+                    <tbody className="divide-y divide-slate-100">
+                      {/* SST Sub-line matching screenshot */}
+                      <tr>
+                        <td colSpan={4} className="py-2 px-3 text-[11px] italic text-slate-700 underline font-medium">
+                          Subject to {taxPercentage}% SST
+                        </td>
+                      </tr>
+
+                      {items.map((it, idx) => {
+                        const itemGross = it.qty * it.unit_price;
+                        const itemTax = (itemGross * taxPercentage) / 100;
+                        const itemTotal = itemGross + itemTax;
+
+                        return (
+                          <tr key={idx} className="border-b border-slate-100">
+                            <td className="py-2 px-3 text-slate-800 text-[11px] align-top">
+                              {it.description}
                             </td>
-                            <td className="py-3 px-3 text-center font-semibold text-slate-700">{it.qty}</td>
-                            <td className="py-3 px-4 text-right font-mono text-slate-700">
-                              {Number(it.unit_price).toFixed(2)}
+                            <td className="py-2 px-3 text-right text-slate-800 text-[11px] font-mono align-top">
+                              {itemGross.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                              {Number(it.total).toFixed(2)}
+                            <td className="py-2 px-3 text-right text-slate-800 text-[11px] font-mono align-top">
+                              {itemTax.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2 px-3 text-right text-slate-900 text-[11px] font-mono font-bold align-top">
+                              {itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="py-4 text-center text-slate-500 italic">
-                            No items listed
-                          </td>
-                        </tr>
-                      )}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
-                {/* Calculation Summary & Amount in Words */}
-                <div className="flex justify-between items-start gap-6 pb-6 border-b border-slate-200 avoid-break">
-                  {/* Left: Amount in Words & Bank Details */}
-                  <div className="flex-1 space-y-3">
-                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
-                      <span className="text-[10px] uppercase font-bold text-[#0b4da2] block">
-                        AMOUNT IN WORDS:
-                      </span>
-                      <p className="font-semibold text-slate-800 text-xs italic m-0 mt-0.5">
-                        {amountToWords(totalAmount, currency)}
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[11px] text-slate-600">
-                      <strong className="text-slate-800 block text-xs">Payment Remittance Details:</strong>
-                      <div>Bank: <strong>Malayan Banking Berhad (Maybank)</strong></div>
-                      <div>Account Name: <strong>ACCO AGENCY WORKFORCE SDN BHD</strong></div>
-                      <div>Account No: <strong className="font-mono text-slate-900">5140 1234 5678</strong> (DuitNow Accepted)</div>
-                    </div>
-                  </div>
-
-                  {/* Right: Numbers Summary */}
-                  <div className="w-72 space-y-2 text-right">
-                    <div className="flex justify-between text-slate-600 text-xs">
-                      <span>Subtotal:</span>
-                      <span className="font-mono font-bold text-slate-800">{currency} {subtotal.toFixed(2)}</span>
-                    </div>
-
-                    {discount > 0 && (
-                      <div className="flex justify-between text-emerald-700 text-xs">
-                        <span>Discount:</span>
-                        <span className="font-mono font-bold">-{currency} {discount.toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    {taxPercentage > 0 && (
-                      <div className="flex justify-between text-slate-600 text-xs">
-                        <span>Sales Tax / SST ({taxPercentage}%):</span>
-                        <span className="font-mono font-semibold text-slate-800">{currency} {taxAmount.toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    <div className="pt-2 border-t-2 border-[#0b4da2] flex justify-between items-baseline">
-                      <span className="text-sm font-black text-slate-900 uppercase">Grand Total:</span>
-                      <span className="text-lg font-black text-[#0b4da2] font-mono">
-                        {currency} {totalAmount.toFixed(2)}
+                {/* 4. Totals Block: Subtotal, Tax, and Total with Gray Bar */}
+                <div className="flex justify-end mt-6">
+                  <div className="w-72 space-y-1 text-xs">
+                    <div className="grid grid-cols-[100px_10px_1fr] py-0.5 px-2">
+                      <span className="font-bold text-slate-800">Subtotal</span>
+                      <span className="font-bold">:</span>
+                      <span className="text-right font-mono font-bold text-slate-900">
+                        {subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Terms and Signatures */}
-                <div className="pt-6 space-y-6 avoid-break">
-                  {quotation.terms && (
-                    <div className="text-[10px] text-slate-500 leading-relaxed">
-                      <strong className="text-slate-700 uppercase block mb-1">Terms &amp; Conditions:</strong>
-                      <div className="whitespace-pre-line">{quotation.terms}</div>
+                    <div className="grid grid-cols-[100px_10px_1fr] py-0.5 px-2">
+                      <span className="font-bold text-slate-800">Tax ({taxPercentage}%)</span>
+                      <span className="font-bold">:</span>
+                      <span className="text-right font-mono font-bold text-slate-900">
+                        {taxAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
-                  )}
-
-                  {/* Signatures Dual Box */}
-                  <div className="grid grid-cols-2 gap-8 pt-4">
-                    {/* Issuer Sign */}
-                    <div className="border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-36">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-bold text-slate-400">ISSUED BY:</span>
-                        <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold">
-                          VERIFIED
-                        </span>
-                      </div>
-                      <div className="border-t border-slate-300 pt-1.5 flex justify-between items-end">
-                        <div>
-                          <div className="font-bold text-slate-800">Authorized Signature</div>
-                          <div className="text-[10px] text-slate-500">ACCO Agency Management</div>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">Date: {quotation.quotation_date}</div>
-                      </div>
-                    </div>
-
-                    {/* Client Acceptance */}
-                    <div className="border border-slate-200 rounded-xl p-4 flex flex-col justify-between h-36">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] uppercase font-bold text-slate-400">ACCEPTED &amp; CONFIRMED BY:</span>
-                        <span className="text-[9px] text-slate-400 font-medium">Customer Stamp</span>
-                      </div>
-                      <div className="border-t border-slate-300 pt-1.5 flex justify-between items-end">
-                        <div>
-                          <div className="font-bold text-slate-800">Client Signature / Chop</div>
-                          <div className="text-[10px] text-slate-500">{quotation.company_name || quotation.customer_name}</div>
-                        </div>
-                        <div className="text-[10px] text-slate-400">Date: _______________</div>
-                      </div>
+                    {/* Total Row with Gray Band */}
+                    <div className="grid grid-cols-[100px_10px_1fr] bg-[#9ca3af] text-slate-900 font-extrabold py-1 px-2 rounded-xs">
+                      <span className="font-black text-xs uppercase">Total</span>
+                      <span className="font-black text-xs">:</span>
+                      <span className="text-right font-mono font-black text-xs">
+                        {totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Bottom Official Footer */}
-              <div className="pt-8 border-t border-slate-200 mt-8 flex items-center justify-between text-[10px] text-slate-400">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck size={13} className="text-emerald-600" />
-                  <span>Computer Generated Quotation &bull; Compliant with Malaysian Commercial Practice</span>
+              {/* 5. Footer Section: Computer Generated notice & Payment Details */}
+              <div className="space-y-4 pt-6 text-[10.5px] text-slate-700 leading-relaxed avoid-break">
+                <div>This quotation is computer generated and does not require any signature.</div>
+
+                <div className="space-y-0.5">
+                  <div>
+                    Please make payment payable to <strong className="text-black uppercase">{companyName}</strong>
+                  </div>
+                  <div>
+                    Electronic Payments: <strong>{companyBankName || 'SCB'}</strong>, Account No. :{' '}
+                    <strong className="font-mono">{companyBankAccountNo || '770578000000816'}</strong>
+                  </div>
+                  <div>Interest at 2% per month shall be levied on overdue accounts.</div>
                 </div>
-                <div>Page 1 of 1</div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
