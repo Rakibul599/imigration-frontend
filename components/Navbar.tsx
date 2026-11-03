@@ -159,10 +159,12 @@ export default function Navbar() {
                 </span>
               )}
               <button
+                type="button"
                 onClick={handleLogout}
-                className="inline-flex items-center gap-1 text-yellow-300 hover:text-white font-semibold transition-colors cursor-pointer border-0 bg-transparent text-xs"
+                className="inline-flex items-center gap-1.5 text-yellow-300 hover:text-white font-semibold transition-colors cursor-pointer border-0 bg-transparent text-xs ml-1 hover:underline"
+                title="Log Out of Portal"
               >
-                <LogOut size={12} />
+                <LogOut size={13} />
                 <span>Log Out</span>
               </button>
             </div>
@@ -247,17 +249,6 @@ export default function Navbar() {
                     </span>
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    handleLogout();
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg border border-rose-200/80 transition-colors cursor-pointer"
-                >
-                  <LogOut size={13} />
-                  <span>Log Out</span>
-                </button>
               </div>
             ) : (
               <>
@@ -433,20 +424,9 @@ export default function Navbar() {
                     <span>Your Panel ({panelInfo.panelBadge})</span>
                   </Link>
                 )}
-                <div className="flex items-center justify-between px-1 mb-2">
-                  <div>
-                    <div className="text-xs font-bold text-slate-800">{currentUser?.name}</div>
-                    <div className="text-[10px] text-slate-500">{currentUser?.email} ({formatRoleName(currentUser?.role)})</div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      handleLogout();
-                    }}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded border border-rose-200"
-                  >
-                    <LogOut size={12} /> Log Out
-                  </button>
+                <div className="px-1 mb-2">
+                  <div className="text-xs font-bold text-slate-800">{currentUser?.name}</div>
+                  <div className="text-[10px] text-slate-500">{currentUser?.email} ({formatRoleName(currentUser?.role)})</div>
                 </div>
               </div>
             )}

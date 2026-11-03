@@ -424,7 +424,7 @@ export default function SuperadminCustomerDepositAmountPage() {
       {/* 2. TOP 4 KPI CARDS: Total Target, Total Deposit, Total Balanced, Total Remaining */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Total Target Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+        <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
             <DollarSign size={24} />
           </div>
@@ -440,7 +440,7 @@ export default function SuperadminCustomerDepositAmountPage() {
         </div>
 
         {/* Card 2: Total Deposit Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+        <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
             <ArrowDownCircle size={24} />
           </div>
@@ -456,7 +456,7 @@ export default function SuperadminCustomerDepositAmountPage() {
         </div>
 
         {/* Card 3: Total Balanced Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+        <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
             <CreditCard size={24} />
           </div>
@@ -472,7 +472,7 @@ export default function SuperadminCustomerDepositAmountPage() {
         </div>
 
         {/* Card 4: Total Remaining Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+        <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
             <Clock size={24} />
           </div>

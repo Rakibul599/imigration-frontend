@@ -295,7 +295,7 @@ export default function CompanySectorsPage() {
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs">
+        <div className="admin-stat-card bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Total Sectors
@@ -310,7 +310,7 @@ export default function CompanySectorsPage() {
 
         <div
           onClick={() => setStatusFilter('active')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
             statusFilter === 'active'
               ? 'border-emerald-400 ring-2 ring-emerald-400/20'
               : 'border-slate-200/90 hover:border-emerald-300'
@@ -330,7 +330,7 @@ export default function CompanySectorsPage() {
 
         <div
           onClick={() => setStatusFilter('inactive')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
             statusFilter === 'inactive'
               ? 'border-slate-400 ring-2 ring-slate-400/20'
               : 'border-slate-200/90 hover:border-slate-300'

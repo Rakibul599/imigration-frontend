@@ -309,7 +309,7 @@ export default function SuperAdminPasswordManagementPage() {
           return (
             <div
               key={card.id}
-              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+              className="admin-stat-card bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
             >
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight truncate">

@@ -423,7 +423,7 @@ export default function SuperAdminAttendancePage() {
               <Link
                 key={card.key}
                 href={`/superadmin/attendance/list?type=${card.key}`}
-                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-[#0b4da2] hover:-translate-y-0.5 transition-all flex items-center justify-between group no-underline cursor-pointer"
+                className="admin-stat-card bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-[#0b4da2] hover:-translate-y-0.5 transition-all flex items-center justify-between group no-underline cursor-pointer"
               >
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate group-hover:text-[#0b4da2] transition-colors">
@@ -766,7 +766,7 @@ export default function SuperAdminAttendancePage() {
             filteredProfiles.map((p) => (
               <div
                 key={p.employee_code}
-                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-blue-300 transition-all flex flex-col justify-between"
+                className="admin-stat-card bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-blue-300 transition-all flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-start justify-between">

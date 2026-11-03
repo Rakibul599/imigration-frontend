@@ -345,16 +345,6 @@ function CreateQuotationContent() {
                 className="w-full px-2 py-1 rounded border border-slate-300 text-[11px] bg-white font-bold"
               />
             </div>
-            <div className="grid grid-cols-[80px_10px_1fr] text-[11px] items-center">
-              <span className="font-bold text-slate-700 uppercase">DUE DATE</span>
-              <span className="font-bold">:</span>
-              <input
-                type="date"
-                value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
-                className="w-full px-2 py-1 rounded border border-slate-300 text-[11px] bg-white font-bold"
-              />
-            </div>
             <div className="grid grid-cols-[80px_10px_1fr] text-[11px] items-center pt-1.5 border-t border-slate-200">
               <span className="font-bold text-slate-700 uppercase">CURRENCY</span>
               <span className="font-bold">:</span>

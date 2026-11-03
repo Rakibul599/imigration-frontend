@@ -281,7 +281,7 @@ export default function SuperAdminCompanyDetailsPage() {
           return (
             <div
               key={card.id}
-              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+              className="admin-stat-card bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
             >
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight">
@@ -665,9 +665,8 @@ export default function SuperAdminCompanyDetailsPage() {
                         return (
                           <div
                             key={xDoc.id || xIdx}
-                            className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                              isWord ? 'bg-blue-50/60 border-blue-200' : 'bg-emerald-50/70 border-emerald-200'
-                            }`}
+                            className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${isWord ? 'bg-blue-50/60 border-blue-200' : 'bg-emerald-50/70 border-emerald-200'
+                              }`}
                           >
                             <div className="flex items-center gap-2.5 truncate">
                               {isWord ? (
@@ -699,11 +698,10 @@ export default function SuperAdminCompanyDetailsPage() {
                                     setSelectedExcelDoc(xDoc);
                                   }
                                 }}
-                                className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border ${
-                                  isWord
-                                    ? 'bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-300'
-                                    : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-300'
-                                }`}
+                                className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border ${isWord
+                                  ? 'bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-300'
+                                  : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border-emerald-300'
+                                  }`}
                                 title={isWord ? 'View Document in Microsoft Word' : 'View Spreadsheet in Microsoft Excel'}
                               >
                                 <Eye size={12} />
@@ -714,11 +712,10 @@ export default function SuperAdminCompanyDetailsPage() {
                                 <a
                                   href={resolveFileUrl(xDoc.fileData)}
                                   download={xDoc.fileName}
-                                  className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border no-underline bg-white ${
-                                    isWord
-                                      ? 'text-blue-800 hover:bg-blue-50 border-blue-300'
-                                      : 'text-emerald-800 hover:bg-emerald-50 border-emerald-300'
-                                  }`}
+                                  className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0 border no-underline bg-white ${isWord
+                                    ? 'text-blue-800 hover:bg-blue-50 border-blue-300'
+                                    : 'text-emerald-800 hover:bg-emerald-50 border-emerald-300'
+                                    }`}
                                 >
                                   <Download size={12} />
                                   <span>Download</span>

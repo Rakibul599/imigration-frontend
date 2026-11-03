@@ -71,6 +71,7 @@ export default function SuperAdminLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [companyMenuOpen, setCompanyMenuOpen] = useState(true);
+  const [accountsMenuOpen, setAccountsMenuOpen] = useState(true);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
@@ -324,7 +325,14 @@ export default function SuperAdminLayout({
 
   // Auto-expand menus when navigating
   useEffect(() => {
-    if (pathname.startsWith('/superadmin/companies') || pathname.startsWith('/companies')) {
+    if (
+      pathname.startsWith('/superadmin/companies/quotations') ||
+      pathname.startsWith('/companies/quotations') ||
+      pathname.startsWith('/superadmin/companies/invoices') ||
+      pathname.startsWith('/companies/invoices')
+    ) {
+      setAccountsMenuOpen(true);
+    } else if (pathname.startsWith('/superadmin/companies') || pathname.startsWith('/companies')) {
       setCompanyMenuOpen(true);
     }
     if (pathname.startsWith('/superadmin/employees')) {
@@ -419,16 +427,6 @@ export default function SuperAdminLayout({
                 icon: Briefcase,
               },
               {
-                name: 'Customer Quotation',
-                href: '/superadmin/companies/quotations',
-                icon: FileSpreadsheet,
-              },
-              {
-                name: 'Customer Invoice',
-                href: '/superadmin/companies/invoices',
-                icon: DollarSign,
-              },
-              {
                 name: 'Trial Applications',
                 href: '/superadmin/companies/trial-applications',
                 icon: Sparkles,
@@ -438,6 +436,29 @@ export default function SuperAdminLayout({
                 name: 'Subscription Plans',
                 href: '/superadmin/companies/plans',
                 icon: Layers,
+              },
+            ],
+          },
+          {
+            name: 'Program Management',
+            icon: BookOpen,
+            isGroup: true,
+            badge: programCount > 0 ? `${programCount}` : undefined,
+            children: [
+              {
+                name: 'Create Program',
+                href: '/superadmin/programs/create',
+                icon: PlusCircle,
+              },
+              {
+                name: 'Programs List',
+                href: '/superadmin/programs',
+                icon: BookOpen,
+              },
+              {
+                name: 'Program Customers',
+                href: '/superadmin/programs/customers',
+                icon: Users,
               },
             ],
           },
@@ -540,25 +561,19 @@ export default function SuperAdminLayout({
             ],
           },
           {
-            name: 'Program Management',
-            icon: BookOpen,
+            name: 'Account Management',
+            icon: Receipt,
             isGroup: true,
-            badge: programCount > 0 ? `${programCount}` : undefined,
             children: [
               {
-                name: 'Create Program',
-                href: '/superadmin/programs/create',
-                icon: PlusCircle,
+                name: 'Company Quotation',
+                href: '/superadmin/companies/quotations',
+                icon: FileSpreadsheet,
               },
               {
-                name: 'Programs List',
-                href: '/superadmin/programs',
-                icon: BookOpen,
-              },
-              {
-                name: 'Program Customers',
-                href: '/superadmin/programs/customers',
-                icon: Users,
+                name: 'Company Invoice',
+                href: '/superadmin/companies/invoices',
+                icon: DollarSign,
               },
             ],
           },
@@ -763,19 +778,23 @@ export default function SuperAdminLayout({
                       const isGroupOpen =
                         link.name === 'Company Management'
                           ? companyMenuOpen
-                          : link.name === 'Customer Management'
-                            ? customerMenuOpen
-                            : link.name === 'Attendance Management'
-                              ? attendanceMenuOpen
-                              : link.name === 'Program Management'
-                                ? programMenuOpen
-                                : link.name === 'Agent Management'
-                                  ? agentMenuOpen
-                                  : employeeMenuOpen;
+                          : link.name === 'Account Management'
+                            ? accountsMenuOpen
+                            : link.name === 'Customer Management'
+                              ? customerMenuOpen
+                              : link.name === 'Attendance Management'
+                                ? attendanceMenuOpen
+                                : link.name === 'Program Management'
+                                  ? programMenuOpen
+                                  : link.name === 'Agent Management'
+                                    ? agentMenuOpen
+                                    : employeeMenuOpen;
                       const toggleGroup = () => {
                         if (!sidebarOpen) setSidebarOpen(true);
                         if (link.name === 'Company Management') {
                           setCompanyMenuOpen(!companyMenuOpen);
+                        } else if (link.name === 'Account Management') {
+                          setAccountsMenuOpen(!accountsMenuOpen);
                         } else if (link.name === 'Customer Management') {
                           setCustomerMenuOpen(!customerMenuOpen);
                         } else if (link.name === 'Attendance Management') {

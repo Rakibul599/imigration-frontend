@@ -7,11 +7,14 @@ import {
   AlertCircle,
   BookOpen,
   Building2,
+  CalendarClock,
   Check,
   CheckCircle2,
   ChevronDown,
+  Clock,
   Edit3,
   Globe2,
+  Hourglass,
   LogOut,
   Search,
   Settings,
@@ -158,6 +161,85 @@ export default function CompaniesPage() {
   const [editRoc, setEditRoc] = useState('');
   const [editSector, setEditSector] = useState('');
 
+  // Real-time live countdown ticker (ticks every 1 second)
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getCountdownInfo = (expiresAtStr?: string | null) => {
+    if (!expiresAtStr) {
+      return {
+        hasExpiry: false,
+        isExpired: false,
+        isExpiringSoon: false,
+        label: 'No Expiry Set',
+      };
+    }
+
+    const expireTime = new Date(expiresAtStr).getTime();
+    if (isNaN(expireTime)) {
+      return {
+        hasExpiry: false,
+        isExpired: false,
+        isExpiringSoon: false,
+        label: 'Invalid Date',
+      };
+    }
+
+    const diff = expireTime - currentTime;
+    const isExpired = diff <= 0;
+
+    if (isExpired) {
+      const pastSeconds = Math.abs(Math.floor(diff / 1000));
+      const pastDays = Math.floor(pastSeconds / 86400);
+      const pastHours = Math.floor((pastSeconds % 86400) / 3600);
+      return {
+        hasExpiry: true,
+        isExpired: true,
+        isExpiringSoon: false,
+        label: pastDays > 0 ? `Expired (${pastDays}d ago)` : `Expired (${pastHours}h ago)`,
+      };
+    }
+
+    const totalSecs = Math.floor(diff / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    const isExpiringSoon = days <= 7;
+
+    let label = '';
+    if (days > 0) {
+      label = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    } else if (hours > 0) {
+      label = `${hours}h ${minutes}m ${seconds}s`;
+    } else {
+      label = `${minutes}m ${seconds}s`;
+    }
+
+    return {
+      hasExpiry: true,
+      isExpired: false,
+      isExpiringSoon,
+      label,
+    };
+  };
+
+  const getPlanLabel = (key?: string | null, isTrial?: boolean) => {
+    if (isTrial) return '3-Day Free Trial';
+    if (!key) return 'Standard Plan';
+    if (key === '1_month') return '1 Month Plan';
+    if (key === '3_months') return '3 Months Plan';
+    if (key === '6_months') return '6 Months Plan';
+    if (key === '10_months') return '10 Months Plan';
+    return key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
   // Sync with persistent company storage, backend MySQL, and auth
   useEffect(() => {
     const user = getCurrentUser() || getMasterAdminUser();
@@ -177,7 +259,7 @@ export default function CompaniesPage() {
       .then((list) => {
         setCompanyList(list);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     const unsubscribe = subscribeToCompanyChanges(() => {
       setCompanyList(getStoredCompanies());
@@ -214,36 +296,36 @@ export default function CompaniesPage() {
   // Filter companies: strictly restrict for employees and master admins to their assigned_companies
   const accessibleCompanies = isRestrictedRole
     ? companyList.filter((c) => {
-        const assigned = Array.isArray(currentUser?.assigned_companies)
-          ? currentUser.assigned_companies
-          : [];
-        if (assigned.length === 0) return false;
-        if (assigned.includes('*')) return true;
+      const assigned = Array.isArray(currentUser?.assigned_companies)
+        ? currentUser.assigned_companies
+        : [];
+      if (assigned.length === 0) return false;
+      if (assigned.includes('*')) return true;
 
-        const cleanCompId = (c.id || '').trim().toLowerCase();
-        const cleanCompName = (c.name || '').trim().toLowerCase();
-        const cleanCompRoc = (c.roc || '').trim().toLowerCase();
-        const cleanDbId = String(c.db_id || '').trim().toLowerCase();
-        const cleanCompNormalized = cleanCompName.replace(/[^a-z0-9]/g, '');
+      const cleanCompId = (c.id || '').trim().toLowerCase();
+      const cleanCompName = (c.name || '').trim().toLowerCase();
+      const cleanCompRoc = (c.roc || '').trim().toLowerCase();
+      const cleanDbId = String(c.db_id || '').trim().toLowerCase();
+      const cleanCompNormalized = cleanCompName.replace(/[^a-z0-9]/g, '');
 
-        const workerCompId = (currentUser as any)?.company_id ? String((currentUser as any).company_id).trim().toLowerCase() : '';
-        if (workerCompId && (workerCompId === cleanCompId || workerCompId === cleanDbId)) {
-          return true;
-        }
+      const workerCompId = (currentUser as any)?.company_id ? String((currentUser as any).company_id).trim().toLowerCase() : '';
+      if (workerCompId && (workerCompId === cleanCompId || workerCompId === cleanDbId)) {
+        return true;
+      }
 
-        return assigned.some((raw) => {
-          const id = (raw || '').trim().toLowerCase();
-          if (!id) return false;
-          const idNormalized = id.replace(/[^a-z0-9]/g, '');
-          return (
-            id === cleanCompId ||
-            id === cleanCompName ||
-            (cleanCompRoc && id === cleanCompRoc) ||
-            (cleanDbId && id === cleanDbId) ||
-            (idNormalized && cleanCompNormalized && idNormalized === cleanCompNormalized)
-          );
-        });
-      })
+      return assigned.some((raw) => {
+        const id = (raw || '').trim().toLowerCase();
+        if (!id) return false;
+        const idNormalized = id.replace(/[^a-z0-9]/g, '');
+        return (
+          id === cleanCompId ||
+          id === cleanCompName ||
+          (cleanCompRoc && id === cleanCompRoc) ||
+          (cleanDbId && id === cleanDbId) ||
+          (idNormalized && cleanCompNormalized && idNormalized === cleanCompNormalized)
+        );
+      });
+    })
     : companyList;
 
 
@@ -316,6 +398,12 @@ export default function CompaniesPage() {
     router.push('/login');
   };
 
+  const primaryCompany = accessibleCompanies[0] || companyList[0] || null;
+  const primaryExpiry = primaryCompany?.subscription_expires_at || currentUser?.subscription_ends_at || currentUser?.trial_ends_at || null;
+  const primaryCountdown = getCountdownInfo(primaryExpiry);
+  const isPrimaryTrial = primaryCompany?.subscription_status === 'trial_active' || currentUser?.trial_status === 'trial_active';
+  const primaryPlanLabel = getPlanLabel(primaryCompany?.subscription_plan_key || currentUser?.subscription_package, isPrimaryTrial);
+
   if (isAuthChecking || !currentUser) {
     return (
       <main className="min-h-screen bg-[#f8fafc] flex flex-col justify-center items-center text-slate-800 p-6 font-sans">
@@ -367,127 +455,121 @@ export default function CompaniesPage() {
         </div>
         <div className="w-full border-b border-slate-200 mb-6" />
 
-        {/* Employee Access Restriction Banner */}
-        {isEmployeeRole && (
-          <div className="mb-6 bg-white border border-emerald-300 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
-                <ShieldCheck size={22} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-md border border-emerald-200">
-                    Employee Access Control Active
-                  </span>
-                  <span className="text-xs text-slate-500 font-mono font-medium">
-                    ID: {currentUser?.employee_code}
-                  </span>
-                </div>
-                <div className="text-sm font-bold text-slate-900 mt-1">
-                  Logged in as: {currentUser?.name}{' '}
-                  <span className="text-xs font-normal text-slate-500">
-                    ({currentUser?.email})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs text-slate-600">
-                  <span className="font-medium">
-                    Assigned Clearance:{' '}
-                    <strong className="text-emerald-700 font-bold">
-                      {accessibleCompanies.length}
-                    </strong>{' '}
-                    of{' '}
-                    <strong className="text-slate-700">
-                      {companyList.length}
-                    </strong>{' '}
-                    total companies
-                  </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-slate-500">Your Permissions:</span>
-                    <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                        userCanEdit
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                          : 'bg-slate-100 text-slate-400 line-through'
-                      }`}
-                    >
-                      Edit
-                    </span>
-                    <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                        userCanDelete
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                          : 'bg-slate-100 text-slate-400 line-through'
-                      }`}
-                    >
-                      Delete
-                    </span>
-                  </span>
-                </div>
-              </div>
+        {/* Company Activation Information Card */}
+        <div className="admin-stat-card mb-6 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-6 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5 pb-4 border-b border-slate-100">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center font-bold shrink-0 shadow-md shadow-emerald-500/20">
+              <ShieldCheck size={26} />
             </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 m-0">
+                  Company Activation Information
+                </h2>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Activation Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 m-0 mt-0.5">
+                Subscription license and enterprise access details for your authorized employer entities.
+              </p>
+            </div>
+          </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">
-                Standard Staff Access
+          {/* Quick Metrics / Details Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-4">
+            {/* 1. Plan Package */}
+            <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Plan Package
               </span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <Sparkles size={16} className="text-blue-600 shrink-0" />
+                <span className="font-bold text-slate-800 text-sm">
+                  {primaryPlanLabel}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Master Admin / Assigned Admin Access Restriction Banner */}
-        {isMasterAdminRole && (
-          <div className="mb-6 bg-white border border-[#0b4da2]/30 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold shrink-0">
-                <ShieldCheck size={22} />
+            {/* 2. Expire Date */}
+            <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Expire Date
+              </span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <CalendarClock size={16} className="text-indigo-600 shrink-0" />
+                <span className="font-bold text-slate-800 text-sm font-mono">
+                  {primaryExpiry ? (
+                    new Date(primaryExpiry).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })
+                  ) : (
+                    <span className="text-slate-400 font-sans font-normal text-xs">Active License</span>
+                  )}
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-100 text-[#0b4da2] px-2.5 py-0.5 rounded-md border border-blue-200">
-                    Administrator Access Active
+            </div>
+
+            {/* 3. Live Countdown */}
+            <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Remaining Duration
+              </span>
+              <div className="mt-1.5">
+                {primaryCountdown.hasExpiry ? (
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold font-mono tracking-tight shadow-2xs ${primaryCountdown.isExpired
+                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                        : primaryCountdown.isExpiringSoon
+                          ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      }`}
+                  >
+                    {primaryCountdown.isExpired ? (
+                      <AlertCircle size={13} className="text-rose-600 shrink-0" />
+                    ) : primaryCountdown.isExpiringSoon ? (
+                      <Hourglass size={13} className="text-amber-600 shrink-0" />
+                    ) : (
+                      <Clock size={13} className="text-emerald-600 shrink-0" />
+                    )}
+                    <span>{primaryCountdown.label}</span>
+                  </div>
+                ) : (
+                  <span className="font-bold text-emerald-600 text-sm flex items-center gap-1.5">
+                    <CheckCircle2 size={16} /> Fully Active
                   </span>
-                  <span className="text-xs text-slate-500 font-mono font-medium">
-                    ID: {currentUser?.employee_code || currentUser?.username}
-                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* 4. Logged in Identity */}
+            <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Authorized Account
+              </span>
+              <div className="mt-1 text-xs">
+                <div className="font-bold text-slate-800 truncate" title={currentUser?.name}>
+                  {currentUser?.name}
                 </div>
-                <div className="text-sm font-bold text-slate-900 mt-1">
-                  Logged in as: {currentUser?.name}{' '}
-                  <span className="text-xs font-normal text-slate-500">
-                    ({currentUser?.email})
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs text-slate-600">
-                  <span className="font-medium">
-                    Assigned Clearance:{' '}
-                    <strong className="text-[#0b4da2] font-bold">
-                      {accessibleCompanies.length}
-                    </strong>{' '}
-                    of{' '}
-                    <strong className="text-slate-700">
-                      {companyList.length}
-                    </strong>{' '}
-                    total companies
-                  </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-slate-500">
-                    Access strictly restricted to your permitted employer entities.
-                  </span>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                  ID: {currentUser?.employee_code || currentUser?.username || 'masteradmin'} • {accessibleCompanies.length} {accessibleCompanies.length === 1 ? 'Company' : 'Companies'}
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
 
         {/* Action Feedback Banner */}
         {actionFeedback && (
           <div
-            className={`mb-5 p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold animate-in fade-in duration-200 ${
-              actionFeedback.type === 'success'
+            className={`mb-5 p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold animate-in fade-in duration-200 ${actionFeedback.type === 'success'
                 ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
                 : 'bg-blue-50 border border-blue-200 text-blue-900'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
@@ -550,7 +632,7 @@ export default function CompaniesPage() {
               <tr className="bg-[#22a34a] text-white text-xs font-bold">
                 <th
                   onClick={toggleSort}
-                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[60%]"
+                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[38%]"
                 >
                   <div className="flex items-center justify-between">
                     <span>Company Name</span>
@@ -559,96 +641,152 @@ export default function CompaniesPage() {
                     </span>
                   </div>
                 </th>
-                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[25%]">
+                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[20%]">
                   Remark
                 </th>
-                <th className="py-3 px-4 text-center font-bold w-[15%]">
+                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[28%]">
+                  Expire Date &amp; Countdown
+                </th>
+                <th className="py-3 px-4 text-center font-bold w-[14%]">
                   {/* Empty header matching screenshot */}
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-xs">
-              {filtered.map((company) => (
-                <tr
-                  key={company.id}
-                  className="hover:bg-blue-50/40 transition-colors group"
-                >
-                  {/* Company Name as Blue Clickable Link */}
-                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                    <div className="flex items-center justify-between gap-2">
-                      <Link
-                        href={`/services?company=${encodeURIComponent(company.id)}`}
-                        className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-semibold text-[13px] tracking-tight block"
-                      >
-                        {company.name}
-                      </Link>
-                      <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
-                        {company.roc}
-                      </span>
-                    </div>
-                  </td>
+              {filtered.map((company) => {
+                const compExpiry = company.subscription_expires_at || currentUser?.subscription_ends_at || currentUser?.trial_ends_at;
+                const compCountdown = getCountdownInfo(compExpiry);
+                const compIsTrial = company.subscription_status === 'trial_active';
+                const compPlan = getPlanLabel(company.subscription_plan_key, compIsTrial);
 
-                  {/* Remark Column */}
-                  <td className="py-3.5 px-4 border-r border-slate-200 text-slate-500 align-middle">
-                    {company.sector ? (
-                      <span className="text-slate-600 text-[11px] font-medium">
-                        {company.sector}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
+                return (
+                  <tr
+                    key={company.id}
+                    className="hover:bg-blue-50/40 transition-colors group"
+                  >
+                    {/* Company Name as Blue Clickable Link */}
+                    <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
+                      <div className="flex items-center justify-between gap-2">
+                        <Link
+                          href={`/services?company=${encodeURIComponent(company.id)}`}
+                          className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-semibold text-[13px] tracking-tight block"
+                        >
+                          {company.name}
+                        </Link>
+                        <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+                          {company.roc}
+                        </span>
+                      </div>
+                    </td>
 
-                  {/* Action Buttons: Details & Settings matching screenshot icons */}
-                  <td className="py-3 px-4 align-middle text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Link
-                        href={`/services?company=${encodeURIComponent(company.id)}`}
-                        title="View Digital Service Cards"
-                        className="w-9 h-8 rounded border border-slate-400/80 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
-                      >
-                        <BookOpen size={16} />
-                      </Link>
+                    {/* Remark Column */}
+                    <td className="py-3.5 px-4 border-r border-slate-200 text-slate-500 align-middle">
+                      {company.sector ? (
+                        <span className="text-slate-600 text-[11px] font-medium">
+                          {company.sector}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
 
-                      {userCanEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => openSettingsModal(company)}
-                          title="Edit Company Details"
+                    {/* Expire Date & Countdown Column */}
+                    <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-[#0b4da2] border border-blue-200/80">
+                            <Sparkles size={11} className="text-[#0b4da2]" />
+                            {compPlan}
+                          </span>
+                          {compExpiry ? (
+                            <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 font-mono">
+                              <CalendarClock size={12} className="text-slate-400 shrink-0" />
+                              {new Date(compExpiry).toLocaleDateString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">No expiry set</span>
+                          )}
+                        </div>
+
+                        {compCountdown.hasExpiry ? (
+                          <div
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold font-mono tracking-tight w-fit shadow-2xs ${compCountdown.isExpired
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : compCountdown.isExpiringSoon
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              }`}
+                          >
+                            {compCountdown.isExpired ? (
+                              <AlertCircle size={12} className="text-rose-600 shrink-0" />
+                            ) : compCountdown.isExpiringSoon ? (
+                              <Hourglass size={12} className="text-amber-600 shrink-0" />
+                            ) : (
+                              <Clock size={12} className="text-emerald-600 shrink-0" />
+                            )}
+                            <span>{compCountdown.label}</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-medium italic">Active License</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Action Buttons: Details & Settings matching screenshot icons */}
+                    <td className="py-3 px-4 align-middle text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link
+                          href={`/services?company=${encodeURIComponent(company.id)}`}
+                          title="View Digital Service Cards"
                           className="w-9 h-8 rounded border border-slate-400/80 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
                         >
-                          <Settings size={16} />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => openSettingsModal(company)}
-                          title="View Company Information (Read Only)"
-                          className="w-9 h-8 rounded border border-slate-300 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                        >
-                          <Settings size={16} />
-                        </button>
-                      )}
+                          <BookOpen size={16} />
+                        </Link>
 
-                      {userCanDelete && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCompany(company.id, company.name)}
-                          title="Delete Company"
-                          className="w-9 h-8 rounded border border-rose-200 bg-rose-50/60 hover:bg-rose-100 flex items-center justify-center text-rose-600 transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        {userCanEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => openSettingsModal(company)}
+                            title="Edit Company Details"
+                            className="w-9 h-8 rounded border border-slate-400/80 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
+                          >
+                            <Settings size={16} />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openSettingsModal(company)}
+                            title="View Company Information (Read Only)"
+                            className="w-9 h-8 rounded border border-slate-300 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                          >
+                            <Settings size={16} />
+                          </button>
+                        )}
+
+                        {userCanDelete && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCompany(company.id, company.name)}
+                            title="Delete Company"
+                            className="w-9 h-8 rounded border border-rose-200 bg-rose-50/60 hover:bg-rose-100 flex items-center justify-center text-rose-600 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={3}
+                    colSpan={4}
                     className="py-12 text-center text-slate-500 font-medium bg-slate-50/50"
                   >
                     {isRestrictedRole && accessibleCompanies.length === 0 ? (

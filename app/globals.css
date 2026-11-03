@@ -483,13 +483,7 @@ th, table th {
 /* DASHBOARD GLASSMORPHISM CARD THEME                                         */
 /* Crystal frosted glass panel with visible subtle edge border & bevels       */
 /* HOVER: Luminous Frosted Glass with delicate even Akashi Sky Blue tint      */
-/* Automatically applies to all admin cards when theme is active              */
-/* ========================================================================== */
-/* ========================================================================== */
-/* DASHBOARD GLASSMORPHISM CARD THEME                                         */
-/* Crystal frosted glass panel with visible subtle edge border & bevels       */
-/* HOVER: Luminous Frosted Glass with delicate even Akashi Sky Blue tint      */
-/* Automatically applies to all admin cards when theme is active              */
+/* Applied ONLY to designated cards - never to buttons, forms, or inputs      */
 /* ========================================================================== */
 .dashboard-card-glass,
 html[data-card-design="glassmorphism"] .admin-stat-card,
@@ -500,36 +494,8 @@ html[data-card-design="glassmorphism"] .admin-card,
 body.card-theme-glass .admin-card,
 html[data-card-design="glassmorphism"] .kpi-card,
 body.card-theme-glass .kpi-card,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass),
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass),
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass) {
+html[data-card-design="glassmorphism"] .company-directory-card,
+body.card-theme-glass .company-directory-card {
   position: relative;
   /* Multi-stop crystal frosted glass with subtle diagonal specular sheen */
   background: 
@@ -560,36 +526,8 @@ html[data-card-design="glassmorphism"] .admin-card::before,
 body.card-theme-glass .admin-card::before,
 html[data-card-design="glassmorphism"] .kpi-card::before,
 body.card-theme-glass .kpi-card::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"])::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"])::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass)::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass)::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass)::before {
+html[data-card-design="glassmorphism"] .company-directory-card::before,
+body.card-theme-glass .company-directory-card::before {
   content: '';
   position: absolute;
   top: 0;
@@ -619,36 +557,8 @@ html[data-card-design="glassmorphism"] .admin-card::after,
 body.card-theme-glass .admin-card::after,
 html[data-card-design="glassmorphism"] .kpi-card::after,
 body.card-theme-glass .kpi-card::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"])::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"])::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass)::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass)::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass)::after {
+html[data-card-design="glassmorphism"] .company-directory-card::after,
+body.card-theme-glass .company-directory-card::after {
   content: '';
   position: absolute;
   bottom: 0;
@@ -678,39 +588,10 @@ html[data-card-design="glassmorphism"] .admin-card:hover,
 body.card-theme-glass .admin-card:hover,
 html[data-card-design="glassmorphism"] .kpi-card:hover,
 body.card-theme-glass .kpi-card:hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass):hover,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass):hover,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass):hover {
+html[data-card-design="glassmorphism"] .company-directory-card:hover,
+body.card-theme-glass .company-directory-card:hover {
   transform: translateY(-4px) !important;
   border-color: rgba(56, 189, 248, 0.75) !important;
-  /* Translucent frosted glass - even sky-blue tint throughout center without opaque heaviness */
   background: linear-gradient(
     135deg,
     rgba(56, 189, 248, 0.30) 0%,
@@ -736,36 +617,8 @@ html[data-card-design="glassmorphism"] .admin-card:hover::before,
 body.card-theme-glass .admin-card:hover::before,
 html[data-card-design="glassmorphism"] .kpi-card:hover::before,
 body.card-theme-glass .kpi-card:hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass):hover::before,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass):hover::before,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass):hover::before {
+html[data-card-design="glassmorphism"] .company-directory-card:hover::before,
+body.card-theme-glass .company-directory-card:hover::before {
   left: 8%;
   width: 48%;
   height: 2.5px;
@@ -788,36 +641,8 @@ html[data-card-design="glassmorphism"] .admin-card:hover::after,
 body.card-theme-glass .admin-card:hover::after,
 html[data-card-design="glassmorphism"] .kpi-card:hover::after,
 body.card-theme-glass .kpi-card:hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="min-h-"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="min-h-"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="min-h-"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-2xs"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="shadow-xs"]:not(.no-glass):not([role="menu"]):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="shadow-xs"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="shadow-xs"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-xl"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-2xl"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="rounded-3xl"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > a[class*="rounded-"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > button[class*="rounded-"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-4"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-5"][class*="border"]:not(.no-glass):hover::after,
-html[data-card-design="glassmorphism"] .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass):hover::after,
-body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="border"]:not(.no-glass):hover::after {
+html[data-card-design="glassmorphism"] .company-directory-card:hover::after,
+body.card-theme-glass .company-directory-card:hover::after {
   right: 8%;
   width: 48%;
   height: 2.5px;
@@ -831,4 +656,29 @@ body.card-theme-glass .grid[class*="grid-cols-"] > div[class*="p-6"][class*="bor
   box-shadow: 0 0 14px 3px rgba(56, 189, 248, 0.6);
 }
 
+/* STRICT ISOLATION: Buttons, forms, inputs, selects, and dialogs are completely protected from card glass styles */
+button:not(.dashboard-card-glass):not(.admin-stat-card):not(.dashboard-stat-card):not(.admin-card):not(.kpi-card),
+input,
+select,
+textarea,
+form,
+form *,
+.nav-dropdown,
+.modal-content,
+[role="dialog"],
+[role="dialog"] * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+button:not(.dashboard-card-glass):not(.admin-stat-card)::before,
+button:not(.dashboard-card-glass):not(.admin-stat-card)::after,
+form ::before,
+form ::after,
+[role="dialog"] ::before,
+[role="dialog"] ::after,
+.modal-content ::before,
+.modal-content ::after {
+  content: none !important;
+}
 

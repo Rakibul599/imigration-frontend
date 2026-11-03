@@ -578,7 +578,7 @@ export default function SuperAdminServicesPage() {
       {/* Metric Cards Row (Exact Dashboard Card Design) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Total Active Cards */}
-        <div className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
+        <div className="admin-stat-card bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight">
               Total Cards
@@ -596,7 +596,7 @@ export default function SuperAdminServicesPage() {
         </div>
 
         {/* 2. Permanent Core Cards */}
-        <div className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
+        <div className="admin-stat-card bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight">
               Core Modules
@@ -614,7 +614,7 @@ export default function SuperAdminServicesPage() {
         </div>
 
         {/* 3. Priority Sequence */}
-        <div className="bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
+        <div className="admin-stat-card bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-amber-700 transition-colors leading-tight">
               Priority Order
@@ -632,7 +632,7 @@ export default function SuperAdminServicesPage() {
         </div>
 
         {/* 4. Tagged Customer Documents */}
-        <div className="bg-white border border-slate-200 hover:border-purple-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
+        <div className="admin-stat-card bg-white border border-slate-200 hover:border-purple-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-purple-700 transition-colors leading-tight">
               Worker Docs

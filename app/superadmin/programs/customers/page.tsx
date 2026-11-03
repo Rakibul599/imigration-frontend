@@ -336,7 +336,7 @@ function ProgramCustomersContent() {
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="admin-stat-card bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Enrolled Workers
@@ -351,7 +351,7 @@ function ProgramCustomersContent() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="admin-stat-card bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Active Workers
@@ -366,7 +366,7 @@ function ProgramCustomersContent() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="admin-stat-card bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Assigned Employers
@@ -381,7 +381,7 @@ function ProgramCustomersContent() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="admin-stat-card bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Recruitment Agents

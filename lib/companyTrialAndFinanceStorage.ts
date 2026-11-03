@@ -92,7 +92,7 @@ export interface CompanyTrialApplication {
   applicant_name: string;
   master_admin_username: string;
   master_admin_password?: string;
-  status: 'pending' | 'approved_trial' | 'paid_active' | 'expired' | 'rejected';
+  status: 'pending' | 'approved_trial' | 'paid_active' | 'expired' | 'rejected' | 'active' | 'inactive';
   trial_starts_at?: string;
   trial_ends_at?: string;
   package_starts_at?: string;
@@ -292,6 +292,60 @@ export async function rejectTrialApplication(id: number, reason?: string): Promi
     body: JSON.stringify({ reason }),
   });
   return await res.json();
+}
+
+export async function updateTrialApplication(
+  id: number,
+  data: Partial<CompanyTrialApplication>
+): Promise<{ success: boolean; message: string; application: CompanyTrialApplication }> {
+  const res = await fetch(`${API_BASE}/company-trial-applications/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    throw new Error(result.message || 'Failed to update application');
+  }
+  return result;
+}
+
+export async function updateTrialDuration(
+  id: number,
+  durationData: {
+    trial_days?: number;
+    package_duration_days?: number;
+    trial_ends_at?: string;
+    package_ends_at?: string;
+    extend_days?: number;
+  }
+): Promise<{ success: boolean; message: string; application: CompanyTrialApplication }> {
+  const res = await fetch(`${API_BASE}/company-trial-applications/${id}/duration`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(durationData),
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    throw new Error(result.message || 'Failed to update duration');
+  }
+  return result;
+}
+
+export async function updateTrialStatus(
+  id: number,
+  status: 'active' | 'inactive' | 'pending' | 'approved_trial' | 'paid_active' | 'expired' | 'rejected'
+): Promise<{ success: boolean; message: string; application: CompanyTrialApplication }> {
+  const res = await fetch(`${API_BASE}/company-trial-applications/${id}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+  const result = await res.json();
+  if (!res.ok) {
+    throw new Error(result.message || 'Failed to update status');
+  }
+  return result;
 }
 
 export async function deleteTrialApplication(id: number): Promise<any> {

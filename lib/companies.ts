@@ -110,6 +110,12 @@ export type Company = {
   deactivated_at?: string | null;
   deactivation_reason?: string | null;
   deactivation_duration?: string | null;
+  subscription_plan_key?: string | null;
+  subscription_starts_at?: string | null;
+  subscription_expires_at?: string | null;
+  subscription_status?: string | null;
+  subscription_trial_days?: number;
+  subscription_notes?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };

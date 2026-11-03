@@ -418,7 +418,7 @@ export default function CustomerPendingAmountPage() {
       ) : (
         /* ALL CUSTOMERS GENERAL KPI CARDS */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
               <Clock size={24} />
             </div>
@@ -433,7 +433,7 @@ export default function CustomerPendingAmountPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
               <TrendingUp size={24} />
             </div>
@@ -448,7 +448,7 @@ export default function CustomerPendingAmountPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
               <CheckCircle2 size={24} />
             </div>
@@ -463,7 +463,7 @@ export default function CustomerPendingAmountPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+          <div className="admin-stat-card bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
               <Wallet size={24} />
             </div>

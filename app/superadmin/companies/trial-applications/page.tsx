@@ -26,11 +26,14 @@ import {
   Filter,
   Globe2,
   Hash,
+  Hourglass,
   KeyRound,
   Mail,
   MapPin,
   Phone,
   Plus,
+  Power,
+  PowerOff,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -38,6 +41,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Tag,
+  Timer,
   Trash2,
   User,
   UserCheck,
@@ -54,6 +58,9 @@ import {
   activateTrialPackage,
   rejectTrialApplication,
   deleteTrialApplication,
+  updateTrialApplication,
+  updateTrialDuration,
+  updateTrialStatus,
 } from '@/lib/companyTrialAndFinanceStorage';
 
 export default function TrialApplicationsPage() {
@@ -62,7 +69,7 @@ export default function TrialApplicationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<
-    'all' | 'pending' | 'approved_trial' | 'paid_active' | 'expired' | 'rejected'
+    'all' | 'pending' | 'approved_trial' | 'paid_active' | 'active' | 'inactive' | 'expired' | 'rejected'
   >('all');
   const [planFilter, setPlanFilter] = useState<string>('all');
 
@@ -85,6 +92,44 @@ export default function TrialApplicationsPage() {
   const [bankName, setBankName] = useState<string>('Maybank');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [isActivating, setIsActivating] = useState(false);
+
+  // Duration Modal
+  const [durationApp, setDurationApp] = useState<CompanyTrialApplication | null>(null);
+  const [durationDaysInput, setDurationDaysInput] = useState<number>(3);
+  const [packageDaysInput, setPackageDaysInput] = useState<number>(30);
+  const [customEndDateInput, setCustomEndDateInput] = useState<string>('');
+  const [isSavingDuration, setIsSavingDuration] = useState(false);
+
+  // Edit Modal
+  const [editingApp, setEditingApp] = useState<CompanyTrialApplication | null>(null);
+  const [editFormData, setEditFormData] = useState<{
+    company_name: string;
+    roc: string;
+    sector: string;
+    applicant_name: string;
+    email: string;
+    phone: string;
+    address: string;
+    plan_package: string;
+    package_price: number;
+    master_admin_username: string;
+    status: any;
+    notes: string;
+  }>({
+    company_name: '',
+    roc: '',
+    sector: 'General Business',
+    applicant_name: '',
+    email: '',
+    phone: '',
+    address: '',
+    plan_package: '1_month',
+    package_price: 199,
+    master_admin_username: '',
+    status: 'pending',
+    notes: '',
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Notifications
   const [notification, setNotification] = useState<{
@@ -111,7 +156,15 @@ export default function TrialApplicationsPage() {
   // Filtered applications
   const filteredApps = useMemo(() => {
     return applications.filter((app) => {
-      if (statusFilter !== 'all' && app.status !== statusFilter) return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'active') {
+          if (!['active', 'approved_trial', 'paid_active'].includes(app.status)) return false;
+        } else if (statusFilter === 'inactive') {
+          if (app.status !== 'inactive') return false;
+        } else if (app.status !== statusFilter) {
+          return false;
+        }
+      }
       if (planFilter !== 'all' && app.plan_package !== planFilter) return false;
       if (searchTerm.trim()) {
         const s = searchTerm.toLowerCase();
@@ -141,8 +194,14 @@ export default function TrialApplicationsPage() {
   // Counts for stat cards
   const totalCount = applications.length;
   const pendingCount = applications.filter((a) => a.status === 'pending').length;
+  const activeCount = applications.filter((a) =>
+    ['active', 'approved_trial', 'paid_active'].includes(a.status)
+  ).length;
   const activeTrialCount = applications.filter((a) => a.status === 'approved_trial').length;
   const paidCount = applications.filter((a) => a.status === 'paid_active').length;
+  const inactiveCount = applications.filter((a) => a.status === 'inactive').length;
+  const expiredCount = applications.filter((a) => a.status === 'expired').length;
+  const rejectedCount = applications.filter((a) => a.status === 'rejected').length;
 
   const handleApprove = async (app: CompanyTrialApplication) => {
     if (
@@ -165,6 +224,151 @@ export default function TrialApplicationsPage() {
       }
     } catch (err: any) {
       setNotification({ type: 'error', message: err.message || 'Approval failed' });
+    }
+  };
+
+  const handleToggleActive = async (app: CompanyTrialApplication) => {
+    const isCurrentlyInactive = app.status === 'inactive';
+    const newStatus = isCurrentlyInactive ? 'active' : 'inactive';
+    const actionText = isCurrentlyInactive ? 'activate' : 'deactivate';
+
+    if (
+      !confirm(
+        `Are you sure you want to ${actionText} "${app.company_name}"? ${
+          isCurrentlyInactive
+            ? 'Their Master Admin portal access will be enabled.'
+            : 'Their Master Admin portal access will be temporarily disabled.'
+        }`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await updateTrialStatus(app.id, newStatus);
+      if (res.success) {
+        setNotification({
+          type: 'success',
+          message: `Company "${app.company_name}" status set to ${isCurrentlyInactive ? 'Active' : 'Inactive'}.`,
+        });
+        loadData();
+        window.dispatchEvent(new Event('company_trials_updated'));
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to update status' });
+    }
+  };
+
+  const handleOpenDurationModal = (app: CompanyTrialApplication) => {
+    setDurationApp(app);
+    setDurationDaysInput(app.trial_days || 3);
+    setPackageDaysInput(app.package_duration_days || 30);
+    if (app.trial_ends_at) {
+      try {
+        const d = new Date(app.trial_ends_at);
+        d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        setCustomEndDateInput(d.toISOString().slice(0, 16));
+      } catch {
+        setCustomEndDateInput('');
+      }
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() + (app.trial_days || 3));
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      setCustomEndDateInput(d.toISOString().slice(0, 16));
+    }
+  };
+
+  const handleSaveDuration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!durationApp) return;
+
+    setIsSavingDuration(true);
+    try {
+      const res = await updateTrialDuration(durationApp.id, {
+        trial_days: durationDaysInput,
+        package_duration_days: packageDaysInput,
+        trial_ends_at: customEndDateInput ? new Date(customEndDateInput).toISOString() : undefined,
+      });
+
+      if (res.success) {
+        setNotification({
+          type: 'success',
+          message: `Duration updated for "${durationApp.company_name}"!`,
+        });
+        setDurationApp(null);
+        loadData();
+        window.dispatchEvent(new Event('company_trials_updated'));
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to update duration' });
+    } finally {
+      setIsSavingDuration(false);
+    }
+  };
+
+  const handleQuickExtend = (days: number) => {
+    setDurationDaysInput((prev) => (prev || 0) + days);
+    if (customEndDateInput) {
+      try {
+        const d = new Date(customEndDateInput);
+        d.setDate(d.getDate() + days);
+        setCustomEndDateInput(d.toISOString().slice(0, 16));
+      } catch {}
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      setCustomEndDateInput(d.toISOString().slice(0, 16));
+    }
+  };
+
+  const handleSetPresetDays = (days: number) => {
+    setDurationDaysInput(days);
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    setCustomEndDateInput(d.toISOString().slice(0, 16));
+  };
+
+  const handleOpenEditModal = (app: CompanyTrialApplication) => {
+    setEditingApp(app);
+    setEditFormData({
+      company_name: app.company_name || '',
+      roc: app.roc || '',
+      sector: app.sector || 'General Business',
+      applicant_name: app.applicant_name || '',
+      email: app.email || '',
+      phone: app.phone || '',
+      address: app.address || '',
+      plan_package: app.plan_package || '1_month',
+      package_price: app.package_price || 199,
+      master_admin_username: app.master_admin_username || '',
+      status: app.status || 'pending',
+      notes: app.notes || '',
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingApp) return;
+
+    setIsSavingEdit(true);
+    try {
+      const res = await updateTrialApplication(editingApp.id, editFormData);
+      if (res.success) {
+        setNotification({
+          type: 'success',
+          message: `Application for "${editFormData.company_name}" updated successfully!`,
+        });
+        setEditingApp(null);
+        loadData();
+        window.dispatchEvent(new Event('company_trials_updated'));
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to update application' });
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -286,6 +490,20 @@ export default function TrialApplicationsPage() {
 
   const renderStatusBadge = (status: CompanyTrialApplication['status']) => {
     switch (status) {
+      case 'active':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Active
+          </span>
+        );
+      case 'inactive':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200 whitespace-nowrap shadow-2xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+            Inactive
+          </span>
+        );
       case 'pending':
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap shadow-2xs">
@@ -297,7 +515,7 @@ export default function TrialApplicationsPage() {
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            3-Day Trial Active
+            Trial Active
           </span>
         );
       case 'paid_active':
@@ -341,7 +559,7 @@ export default function TrialApplicationsPage() {
             <span>Company Trial Applications &amp; Subscriptions</span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl">
-            Review incoming free trial requests. Approve to grant <strong>3 days free trial access</strong> with instant Master Admin credentials. When payment is received, activate their full package.
+            Review incoming free trial requests. Approve to grant free trial access with instant Master Admin credentials. Set or extend duration, toggle active/inactive status, and activate packages upon payment.
           </p>
         </div>
 
@@ -397,7 +615,7 @@ export default function TrialApplicationsPage() {
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         {/* Total Applications */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs">
+        <div className="admin-stat-card bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Total Applications
@@ -413,7 +631,7 @@ export default function TrialApplicationsPage() {
         {/* Pending Review */}
         <div
           onClick={() => setStatusFilter('pending')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
             statusFilter === 'pending'
               ? 'border-amber-400 ring-2 ring-amber-400/20'
               : 'border-slate-200/90 hover:border-amber-300'
@@ -429,50 +647,52 @@ export default function TrialApplicationsPage() {
           </div>
           <div className="text-2xl font-extrabold text-amber-600 mt-2">{pendingCount}</div>
           <div className="text-[11px] text-amber-700 font-semibold mt-0.5">
-            {pendingCount > 0 ? 'Action required: Approve 3-Day Trial' : 'All up to date'}
+            {pendingCount > 0 ? 'Action required: Approve Trial' : 'All up to date'}
           </div>
         </div>
 
-        {/* Active 3-Day Trials */}
+        {/* Active Companies / Trials */}
         <div
-          onClick={() => setStatusFilter('approved_trial')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'approved_trial'
+          onClick={() => setStatusFilter('active')}
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+            statusFilter === 'active'
               ? 'border-emerald-400 ring-2 ring-emerald-400/20'
               : 'border-slate-200/90 hover:border-emerald-300'
           }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
-              Active 3-Day Trials
+              Active Total
             </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
               <Sparkles size={16} />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-emerald-600 mt-2">{activeTrialCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Trial active in Master Admin</div>
+          <div className="text-2xl font-extrabold text-emerald-600 mt-2">{activeCount}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            {activeTrialCount} Trials, {paidCount} Subscribed
+          </div>
         </div>
 
-        {/* Paid & Subscribed */}
+        {/* Inactive Companies */}
         <div
-          onClick={() => setStatusFilter('paid_active')}
-          className={`bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'paid_active'
-              ? 'border-blue-400 ring-2 ring-blue-400/20'
-              : 'border-slate-200/90 hover:border-blue-300'
+          onClick={() => setStatusFilter('inactive')}
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+            statusFilter === 'inactive'
+              ? 'border-rose-400 ring-2 ring-rose-400/20'
+              : 'border-slate-200/90 hover:border-rose-300'
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
-              Paid &amp; Subscribed
+            <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">
+              Inactive
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <ShieldCheck size={16} />
+            <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+              <PowerOff size={16} />
             </div>
           </div>
-          <div className="text-2xl font-extrabold text-[#0b4da2] mt-2">{paidCount}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Package payment received</div>
+          <div className="text-2xl font-extrabold text-rose-600 mt-2">{inactiveCount}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Deactivated access</div>
         </div>
       </div>
 
@@ -524,10 +744,12 @@ export default function TrialApplicationsPage() {
           {[
             { key: 'all', label: `All (${totalCount})` },
             { key: 'pending', label: `Pending (${pendingCount})` },
-            { key: 'approved_trial', label: `3-Day Trial Active (${activeTrialCount})` },
+            { key: 'active', label: `Active (${activeCount})` },
+            { key: 'inactive', label: `Inactive (${inactiveCount})` },
+            { key: 'approved_trial', label: `Trial Active (${activeTrialCount})` },
             { key: 'paid_active', label: `Paid Active (${paidCount})` },
-            { key: 'expired', label: 'Expired' },
-            { key: 'rejected', label: 'Rejected' },
+            { key: 'expired', label: `Expired (${expiredCount})` },
+            { key: 'rejected', label: `Rejected (${rejectedCount})` },
           ].map((st) => {
             const isSelected = statusFilter === st.key;
             return (
@@ -548,10 +770,10 @@ export default function TrialApplicationsPage() {
         </div>
       </div>
 
-      {/* Main Table with Dedicated Columns and Broad Width */}
+      {/* Main Table with Dedicated Columns - Horizontal Scroll Including Actions */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs min-w-[2050px]">
+        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+          <table className="w-full text-left border-collapse text-xs min-w-[2000px]">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-3 text-center w-[55px] min-w-[55px]">#</th>
@@ -567,7 +789,7 @@ export default function TrialApplicationsPage() {
                 <th className="py-3.5 px-4 w-[120px] min-w-[120px]">Trial Period</th>
                 <th className="py-3.5 px-4 w-[180px] min-w-[180px]">Status</th>
                 <th className="py-3.5 px-4 w-[150px] min-w-[150px]">Applied Date</th>
-                <th className="py-3.5 px-4 text-right w-[270px] min-w-[270px] sticky right-0 bg-slate-50/95 backdrop-blur-xs shadow-[-8px_0_12px_rgba(0,0,0,0.03)] z-10">
+                <th className="py-3.5 px-4 text-center w-[250px] min-w-[250px] bg-slate-50/90">
                   Actions
                 </th>
               </tr>
@@ -716,7 +938,7 @@ export default function TrialApplicationsPage() {
                       <td className="py-3.5 px-4 align-middle">
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 whitespace-nowrap">
                           <Sparkles size={11} className="text-emerald-600" />
-                          <span>{app.trial_days || 3} Days Free</span>
+                          <span>{app.trial_days || 3} Days</span>
                         </span>
                       </td>
 
@@ -752,45 +974,74 @@ export default function TrialApplicationsPage() {
                         </div>
                       </td>
 
-                      {/* 14. Actions (Sticky column on the right) */}
-                      <td className="py-3.5 px-4 align-middle text-right sticky right-0 bg-white group-hover:bg-blue-50/35 transition-colors shadow-[-8px_0_12px_rgba(0,0,0,0.03)] z-10">
-                        <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-                          {/* Primary Decision Action */}
+                      {/* 14. Actions (Scrolls smoothly along with table) */}
+                      <td className="py-3.5 px-4 align-middle text-center bg-transparent">
+                        <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                          {/* Primary Accept Action for Pending */}
                           {isPending && (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
                                 onClick={() => handleApprove(app)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer border-0 whitespace-nowrap"
-                                title="Approve 3-Day Free Trial"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] shadow-2xs transition-colors cursor-pointer border-0 whitespace-nowrap"
+                                title="Accept / Approve Trial"
                               >
-                                <Check size={12} />
-                                <span>Approve Trial</span>
+                                <Check size={11} strokeWidth={2.5} />
+                                <span>Accept</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleReject(app.id)}
-                                className="px-2 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs transition-colors cursor-pointer border border-rose-200"
-                                title="Reject application"
+                                className="px-1.5 py-1 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-[11px] transition-colors cursor-pointer border border-rose-200 whitespace-nowrap"
+                                title="Reject Application"
                               >
-                                Reject
+                                <X size={11} strokeWidth={2.5} />
                               </button>
                             </div>
                           )}
 
+                          {/* Quick Payment Action for Active Trial */}
                           {isTrialActive && (
                             <button
                               type="button"
                               onClick={() => handleOpenPaymentModal(app)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0b4da2] hover:bg-[#083877] text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer border-0 whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#0b4da2] hover:bg-[#083877] text-white font-semibold text-[11px] shadow-2xs transition-colors cursor-pointer border-0 whitespace-nowrap"
                               title="Receive payment & activate full package"
                             >
-                              <DollarSign size={13} />
-                              <span>Receive Payment</span>
+                              <DollarSign size={11} />
+                              <span>Payment</span>
                             </button>
                           )}
 
-                          {/* Quick Icon Actions */}
+                          {/* Active / Inactive Status Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleActive(app)}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
+                              app.status === 'inactive'
+                                ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200'
+                                : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
+                            }`}
+                            title={
+                              app.status === 'inactive'
+                                ? 'Status: Inactive (Click to Activate)'
+                                : 'Status: Active (Click to Deactivate)'
+                            }
+                          >
+                            {app.status === 'inactive' ? <PowerOff size={13} /> : <Power size={13} />}
+                          </button>
+
+                          {/* Duration Set / Extend Icon */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDurationModal(app)}
+                            className="p-1.5 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer border border-amber-200 bg-white"
+                            title="Set / Extend Duration"
+                          >
+                            <Clock size={13} />
+                          </button>
+
+                          {/* View Full Application Details Icon */}
                           <button
                             type="button"
                             onClick={() => setViewingApp(app)}
@@ -800,34 +1051,17 @@ export default function TrialApplicationsPage() {
                             <Eye size={13} />
                           </button>
 
-                          <Link
-                            href={`/companies/quotations/create?company_name=${encodeURIComponent(
-                              app.company_name
-                            )}&customer_name=${encodeURIComponent(
-                              app.applicant_name
-                            )}&email=${encodeURIComponent(app.email)}&phone=${encodeURIComponent(
-                              app.phone
-                            )}`}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-blue-50 transition-colors no-underline border border-slate-200 bg-white inline-flex items-center justify-center"
-                            title="Create Quotation"
+                          {/* Edit Application Details Icon */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(app)}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-blue-50 transition-colors cursor-pointer border border-slate-200 bg-white"
+                            title="Edit Application"
                           >
-                            <FileSpreadsheet size={13} />
-                          </Link>
+                            <Edit2 size={13} />
+                          </button>
 
-                          <Link
-                            href={`/companies/invoices/create?company_name=${encodeURIComponent(
-                              app.company_name
-                            )}&customer_name=${encodeURIComponent(
-                              app.applicant_name
-                            )}&email=${encodeURIComponent(app.email)}&phone=${encodeURIComponent(
-                              app.phone
-                            )}&package=${encodeURIComponent(formatPackageName(app.plan_package))}`}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-[#0b4da2] hover:bg-blue-50 transition-colors no-underline border border-slate-200 bg-white inline-flex items-center justify-center"
-                            title="Create Invoice"
-                          >
-                            <FileText size={13} />
-                          </Link>
-
+                          {/* Delete Record Icon */}
                           <button
                             type="button"
                             onClick={() => handleDelete(app.id)}
@@ -846,6 +1080,466 @@ export default function TrialApplicationsPage() {
           </table>
         </div>
       </div>
+
+      {/* Set / Extend Duration Modal */}
+      {durationApp && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-amber-600 font-bold text-base">
+                <Clock size={20} />
+                <span>Set / Extend Duration</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDurationApp(null)}
+                className="text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Company:</span>
+                <strong className="text-slate-900">{durationApp.company_name}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Current Status:</span>
+                {renderStatusBadge(durationApp.status)}
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Trial Period:</span>
+                <span className="font-semibold text-slate-800">{durationApp.trial_days || 3} Days</span>
+              </div>
+              {durationApp.trial_ends_at && (
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Current Expiry:</span>
+                  <span className="font-mono font-bold text-amber-700">
+                    {new Date(durationApp.trial_ends_at).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveDuration} className="space-y-4 text-xs">
+              {/* Quick Preset Days */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Set Trial Days (Presets)
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[3, 7, 14, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => handleSetPresetDays(days)}
+                      className={`py-1.5 px-2 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                        durationDaysInput === days
+                          ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {days} Days
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Quick Extend Buttons */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">
+                  Quick Extend Duration (+ Days)
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[3, 7, 14, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => handleQuickExtend(days)}
+                      className="py-1 px-2 rounded-lg font-semibold text-xs border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+                    >
+                      +{days}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Trial Days input */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Trial Days Count
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    required
+                    value={durationDaysInput}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      handleSetPresetDays(val);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-bold text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Package Days (Subscription)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={730}
+                    value={packageDaysInput}
+                    onChange={(e) => setPackageDaysInput(parseInt(e.target.value) || 30)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Exact Date & Time Picker */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Specific Expiry Date &amp; Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={customEndDateInput}
+                  onChange={(e) => setCustomEndDateInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs font-mono"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  The client will retain access until this exact moment.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setDurationApp(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDuration}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingDuration ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>Save Duration</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Application Modal */}
+      {editingApp && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2.5">
+              <div className="flex items-center gap-2 text-[#0b4da2] font-bold text-base">
+                <Edit2 size={18} />
+                <span>Edit Application Details (#{editingApp.id})</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  href={`/companies/quotations/create?company_name=${encodeURIComponent(
+                    editFormData.company_name || editingApp.company_name
+                  )}&customer_name=${encodeURIComponent(
+                    editFormData.applicant_name || editingApp.applicant_name
+                  )}&email=${encodeURIComponent(
+                    editFormData.email || editingApp.email
+                  )}&phone=${encodeURIComponent(
+                    editFormData.phone || editingApp.phone
+                  )}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold no-underline transition-colors shadow-2xs"
+                  title="Create Quotation for this applicant"
+                >
+                  <FileSpreadsheet size={13} className="text-[#0b4da2]" />
+                  <span>Create Quotation</span>
+                </Link>
+                <Link
+                  href={`/companies/invoices/create?company_name=${encodeURIComponent(
+                    editFormData.company_name || editingApp.company_name
+                  )}&customer_name=${encodeURIComponent(
+                    editFormData.applicant_name || editingApp.applicant_name
+                  )}&email=${encodeURIComponent(
+                    editFormData.email || editingApp.email
+                  )}&phone=${encodeURIComponent(
+                    editFormData.phone || editingApp.phone
+                  )}&package=${encodeURIComponent(
+                    formatPackageName(editFormData.plan_package || editingApp.plan_package)
+                  )}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold no-underline transition-colors shadow-2xs"
+                  title="Create Invoice for this applicant"
+                >
+                  <FileText size={13} className="text-[#0b4da2]" />
+                  <span>Create Invoice</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setEditingApp(null)}
+                  className="text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer p-1 rounded-lg hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Company Name */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Company Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.company_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-semibold"
+                  />
+                </div>
+
+                {/* ROC */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">ROC Number</label>
+                  <input
+                    type="text"
+                    value={editFormData.roc}
+                    onChange={(e) => setEditFormData({ ...editFormData, roc: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-mono"
+                  />
+                </div>
+
+                {/* Sector */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Sector</label>
+                  <input
+                    type="text"
+                    value={editFormData.sector}
+                    onChange={(e) => setEditFormData({ ...editFormData, sector: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
+                  />
+                </div>
+
+                {/* Applicant Name */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Applicant Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.applicant_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, applicant_name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Email Address <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Phone Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-mono"
+                  />
+                </div>
+
+                {/* Admin Username */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Master Admin Username <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.master_admin_username}
+                    onChange={(e) => setEditFormData({ ...editFormData, master_admin_username: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-mono font-bold text-[#0b4da2]"
+                  />
+                </div>
+
+                {/* Status Dropdown (Active, Inactive, etc.) */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Status <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={editFormData.status}
+                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-bold bg-white"
+                  >
+                    <option value="pending">Pending Review</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="approved_trial">3-Day Trial Active</option>
+                    <option value="paid_active">Paid &amp; Subscribed</option>
+                    <option value="expired">Expired</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                {/* Plan Package */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Requested Plan</label>
+                  <select
+                    value={editFormData.plan_package}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const pkg = PLAN_PACKAGES.find((p) => p.key === val);
+                      setEditFormData({
+                        ...editFormData,
+                        plan_package: val,
+                        package_price: pkg?.price || editFormData.package_price,
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs bg-white"
+                  >
+                    <option value="1_month">1 Month Plan</option>
+                    <option value="3_months">3 Months Plan</option>
+                    <option value="6_months">6 Months Plan</option>
+                    <option value="10_months">10 Months Plan</option>
+                    <option value="1_year">1 Year Pro</option>
+                  </select>
+                </div>
+
+                {/* Package Price */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Package Price (RM)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editFormData.package_price}
+                    onChange={(e) => setEditFormData({ ...editFormData, package_price: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Address */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Office Address</label>
+                <textarea
+                  rows={2}
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Notes &amp; Internal Remarks</label>
+                <textarea
+                  rows={2}
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/companies/quotations/create?company_name=${encodeURIComponent(
+                      editFormData.company_name || editingApp.company_name
+                    )}&customer_name=${encodeURIComponent(
+                      editFormData.applicant_name || editingApp.applicant_name
+                    )}&email=${encodeURIComponent(
+                      editFormData.email || editingApp.email
+                    )}&phone=${encodeURIComponent(
+                      editFormData.phone || editingApp.phone
+                    )}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold no-underline transition-colors shadow-2xs"
+                  >
+                    <FileSpreadsheet size={13} className="text-[#0b4da2]" />
+                    <span>Create Quotation</span>
+                  </Link>
+                  <Link
+                    href={`/companies/invoices/create?company_name=${encodeURIComponent(
+                      editFormData.company_name || editingApp.company_name
+                    )}&customer_name=${encodeURIComponent(
+                      editFormData.applicant_name || editingApp.applicant_name
+                    )}&email=${encodeURIComponent(
+                      editFormData.email || editingApp.email
+                    )}&phone=${encodeURIComponent(
+                      editFormData.phone || editingApp.phone
+                    )}&package=${encodeURIComponent(
+                      formatPackageName(editFormData.plan_package || editingApp.plan_package)
+                    )}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold no-underline transition-colors shadow-2xs"
+                  >
+                    <FileText size={13} className="text-[#0b4da2]" />
+                    <span>Create Invoice</span>
+                  </Link>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingApp(null)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-[#0b4da2] hover:bg-[#083877] text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingEdit ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Comprehensive Application Details Modal */}
       {viewingApp && (
@@ -1042,7 +1736,7 @@ export default function TrialApplicationsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Trial Period:</span>
-                  <span className="font-bold text-emerald-700">{viewingApp.trial_days || 3} Days Free</span>
+                  <span className="font-bold text-emerald-700">{viewingApp.trial_days || 3} Days</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Trial Starts:</span>
@@ -1070,7 +1764,7 @@ export default function TrialApplicationsPage() {
                 </div>
               </div>
 
-              {/* Managing Directors List (Full Width) */}
+              {/* Managing Directors List */}
               <div className="md:col-span-2 p-4 rounded-xl border border-slate-200 space-y-3">
                 <div className="font-bold text-slate-900 flex items-center justify-between pb-2 border-b border-slate-100">
                   <div className="flex items-center gap-1.5">
@@ -1202,7 +1896,7 @@ export default function TrialApplicationsPage() {
                     className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer border-0"
                   >
                     <Check size={14} />
-                    <span>Approve 3-Day Trial</span>
+                    <span>Approve Trial</span>
                   </button>
                 )}
 
@@ -1240,7 +1934,7 @@ export default function TrialApplicationsPage() {
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2 text-emerald-600 font-bold text-base">
                 <CheckCircle2 size={20} />
-                <span>3-Day Trial Activated Successfully!</span>
+                <span>Trial Activated Successfully!</span>
               </div>
               <button
                 type="button"
@@ -1328,7 +2022,7 @@ export default function TrialApplicationsPage() {
             </div>
 
             <p className="text-xs text-slate-600">
-              Activating full subscription for <strong className="text-slate-900">{activatingApp.company_name}</strong>. This upgrades their 3-day trial to the complete <strong>{formatPackageName(activatingApp.plan_package)}</strong> ({activatingApp.package_duration_days} days) and generates a paid invoice.
+              Activating full subscription for <strong className="text-slate-900">{activatingApp.company_name}</strong>. This upgrades their trial to the complete <strong>{formatPackageName(activatingApp.plan_package)}</strong> ({activatingApp.package_duration_days} days) and generates a paid invoice.
             </p>
 
             <form onSubmit={handleActivatePackage} className="space-y-4 text-xs">

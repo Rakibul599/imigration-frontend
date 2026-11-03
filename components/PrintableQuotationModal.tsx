@@ -62,8 +62,10 @@ export default function PrintableQuotationModal({
   const companyRoc = company?.roc || (quotation as any).company_roc || '200001018812 (521419-K)';
   const companyAddress = company?.address || (quotation as any).company_address || 'Head Office, Level 3, No. 3, Jalan 7A/62A,\nBandar Menjalara, 52200 Kuala Lumpur.';
   const companyPhone = company?.phone || (quotation as any).company_phone || '(603) 6287 6000';
-  const companyBankName = company?.bankName || (quotation as any).company_bank_name || 'SCB';
-  const companyBankAccountNo = company?.bankAccountNo || (quotation as any).company_bank_account_no || '770578000000816';
+  const companyBankName = company?.bankName || (quotation as any).company_bank_name || 'AmBank Berhad';
+  const companyBankAccountNo = company?.bankAccountNo || (quotation as any).company_bank_account_no || '8881-0022-9911';
+  const contactName = companyName || 'NIDI COMPUTER SP';
+  const contactPhone = companyPhone || '01113310988';
 
   const totalAmount = Number(quotation.total_amount) || 0;
   const subtotal = Number(quotation.subtotal) || 0;
@@ -147,15 +149,13 @@ export default function PrintableQuotationModal({
 
           /* 3. The actual printable sheet begins at top (0, 0) */
           #printable-quotation {
-            position: static !important;
+            position: relative !important;
             display: flex !important;
             flex-direction: column !important;
-            justify-content: flex-start !important;
-            gap: 16px !important;
+            justify-content: space-between !important;
             width: 100% !important;
             max-width: 100% !important;
-            height: auto !important;
-            min-height: 0 !important;
+            min-height: 265mm !important;
             margin: 0 !important;
             padding: 0 !important;
             border: none !important;
@@ -164,9 +164,23 @@ export default function PrintableQuotationModal({
             color: #000000 !important;
           }
 
+          .bottom-footer {
+            margin-top: auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
           #printable-quotation,
           #printable-quotation * {
             visibility: visible !important;
+          }
+
+          /* Corporate heading text in official green color matching letterhead */
+          #printable-quotation .company-top-heading,
+          #printable-quotation .company-top-heading * {
+            color: #166534 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
           /* Ensure table styling is not broken by globals.css */
@@ -298,14 +312,14 @@ export default function PrintableQuotationModal({
 
                   {/* Company Heading Info */}
                   <div className="space-y-0.5 text-slate-800 text-[11px] leading-tight flex-1">
-                    <div className="font-extrabold text-sm sm:text-base text-black uppercase tracking-tight">
-                      {companyName}
+                    <div className="company-top-heading font-extrabold text-sm sm:text-base text-[#166534] uppercase tracking-tight flex flex-wrap items-baseline gap-1.5">
+                      <span>{companyName}</span>
+                      {companyRoc && (
+                        <span className="text-xs font-bold text-[#166534]">
+                          {companyRoc.trim().startsWith('(') ? companyRoc.trim() : `(${companyRoc.trim()})`}
+                        </span>
+                      )}
                     </div>
-                    {companyRoc && (
-                      <div className="font-bold text-xs text-black">
-                        (Registration No. {companyRoc})
-                      </div>
-                    )}
                     {companyAddress && (
                       <div className="text-slate-700 text-[10.5px] whitespace-pre-line leading-relaxed pt-0.5">
                         {companyAddress}
@@ -362,13 +376,6 @@ export default function PrintableQuotationModal({
                         {formatCorporateDate(quotation.quotation_date)}
                       </span>
                     </div>
-                    <div className="grid grid-cols-[70px_10px_1fr] text-[11px]">
-                      <span className="font-bold text-black uppercase">DUE DATE</span>
-                      <span className="font-bold">:</span>
-                      <span className="font-bold text-black">
-                        {formatCorporateDate(quotation.valid_until)}
-                      </span>
-                    </div>
                   </div>
                 </div>
 
@@ -418,7 +425,7 @@ export default function PrintableQuotationModal({
                 </div>
 
                 {/* 4. Totals Block: Subtotal, Tax, and Total with Gray Bar */}
-                <div className="flex justify-end mt-6">
+                <div className="flex justify-end mt-6 mb-6">
                   <div className="w-72 space-y-1 text-xs">
                     <div className="grid grid-cols-[100px_10px_1fr] py-0.5 px-2">
                       <span className="font-bold text-slate-800">Subtotal</span>
@@ -444,21 +451,35 @@ export default function PrintableQuotationModal({
                     </div>
                   </div>
                 </div>
+
+                {/* 5. Payment details & Computer Generated notice (Placed higher up, right after totals) */}
+                <div className="space-y-3 pt-2 text-[10.5px] text-slate-700 leading-relaxed avoid-break">
+                  <div>This quotation is computer generated and does not require any signature.</div>
+
+                  <div className="space-y-0.5">
+                    <div>
+                      Please make payment payable to <strong className="text-black uppercase">{companyName}</strong>
+                    </div>
+                    <div>
+                      Electronic Payments: <strong>{companyBankName || 'AmBank Berhad'}</strong>, Account No. :{' '}
+                      <strong className="font-mono">{companyBankAccountNo || '8881-0022-9911'}</strong>
+                    </div>
+                    <div>Interest at 2% per month shall be levied on overdue accounts.</div>
+                  </div>
+                </div>
               </div>
 
-              {/* 5. Footer Section: Computer Generated notice & Payment Details */}
-              <div className="space-y-4 pt-6 text-[10.5px] text-slate-700 leading-relaxed avoid-break">
-                <div>This quotation is computer generated and does not require any signature.</div>
-
-                <div className="space-y-0.5">
-                  <div>
-                    Please make payment payable to <strong className="text-black uppercase">{companyName}</strong>
-                  </div>
-                  <div>
-                    Electronic Payments: <strong>{companyBankName || 'SCB'}</strong>, Account No. :{' '}
-                    <strong className="font-mono">{companyBankAccountNo || '770578000000816'}</strong>
-                  </div>
-                  <div>Interest at 2% per month shall be levied on overdue accounts.</div>
+              {/* 6. Centered Bottom Footer (Matching screenshot, positioned at the very bottom of the page) */}
+              <div className="bottom-footer pt-6 pb-1 text-center w-full avoid-break mt-auto">
+                <div className="text-[11px] text-slate-700 font-normal">
+                  If you have any questions about this quotation, please contact
+                </div>
+                <div className="text-[11px] font-bold text-slate-900 mt-0.5">
+                  [{contactName}, {contactPhone}]
+                </div>
+                <div className="w-full border-t border-slate-300 my-2" />
+                <div className="text-xs sm:text-sm font-bold italic tracking-wide text-slate-900">
+                  Thank You For Your Business!
                 </div>
               </div>
             </div>
