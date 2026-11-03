@@ -20,6 +20,8 @@ import {
   Navigation,
   Coffee,
   Play,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { verifyAndMarkAttendance, AttendanceRecord } from '@/lib/faceApi';
 import {
@@ -28,6 +30,8 @@ import {
   checkLocationInOfficeArea,
   GeofenceCheckResult,
   detectUserCoordinates,
+  verifyOfficeWifi,
+  WifiVerificationResult,
 } from '@/lib/officeLocationStorage';
 
 interface ScanSuccessData {
@@ -83,6 +87,13 @@ export default function FaceAttendanceModal({
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isRetryingGps, setIsRetryingGps] = useState(false);
 
+  // Wi-Fi Verification State (Prevents downstairs / mobile data attendance)
+  const [wifiStatus, setWifiStatus] = useState<
+    'checking' | 'verified' | 'unverified' | 'cellular_blocked' | 'disabled'
+  >('checking');
+  const [wifiInfo, setWifiInfo] = useState<WifiVerificationResult | null>(null);
+  const [isRetryingWifi, setIsRetryingWifi] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -98,6 +109,39 @@ export default function FaceAttendanceModal({
 
   const geoStatusRef = useRef(geoStatus);
   geoStatusRef.current = geoStatus;
+  const wifiStatusRef = useRef(wifiStatus);
+  wifiStatusRef.current = wifiStatus;
+  const wifiInfoRef = useRef(wifiInfo);
+  wifiInfoRef.current = wifiInfo;
+
+  // Verify Office Wi-Fi connection
+  const verifyWifi = useCallback(async (isRetry = false) => {
+    if (isRetry) setIsRetryingWifi(true);
+    setWifiStatus('checking');
+
+    try {
+      const res = await verifyOfficeWifi();
+      setWifiInfo(res);
+
+      if (!res.require_wifi) {
+        setWifiStatus('disabled');
+      } else if (res.on_cellular) {
+        setWifiStatus('cellular_blocked');
+        setVerificationFeedback('Mobile cellular data detected. Please connect to Office Wi-Fi.');
+      } else if (res.is_wifi_verified) {
+        setWifiStatus('verified');
+      } else {
+        setWifiStatus('unverified');
+        const ssid = res.allowed_ssids?.[0] || 'Office Wi-Fi';
+        setVerificationFeedback(`Please connect to Office Wi-Fi ("${ssid}").`);
+      }
+    } catch (err: any) {
+      console.warn('Wi-Fi check failed:', err);
+      setWifiStatus('disabled');
+    } finally {
+      setIsRetryingWifi(false);
+    }
+  }, []);
 
   // Verify Geofence with Office Locations
   const verifyGeofence = useCallback(async (isRetry = false) => {
@@ -222,13 +266,14 @@ export default function FaceAttendanceModal({
       startCamera();
       setScanResult(null);
       verifyGeofence();
+      verifyWifi();
     } else {
       stopCamera();
     }
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera, verifyGeofence]);
+  }, [isOpen, startCamera, stopCamera, verifyGeofence, verifyWifi]);
 
   // Capture current frame from video as JPEG Base64 (max 480px width for fast CPU dlib recognition)
   const captureFrame = useCallback((): string | null => {
@@ -273,6 +318,21 @@ export default function FaceAttendanceModal({
       return;
     }
 
+    // Strict Office Wi-Fi verification
+    if (wifiStatusRef.current === 'checking') {
+      setVerificationFeedback('Verifying Office Wi-Fi connection...');
+      return;
+    }
+    if (wifiStatusRef.current === 'cellular_blocked') {
+      setVerificationFeedback('Mobile cellular data detected. Please connect to Office Wi-Fi to mark attendance.');
+      return;
+    }
+    if (wifiStatusRef.current === 'unverified') {
+      const ssid = wifiInfoRef.current?.allowed_ssids?.[0] || 'Office Wi-Fi';
+      setVerificationFeedback(`Please connect to "${ssid}" to mark attendance. (Downstairs/Off-floor blocked).`);
+      return;
+    }
+
     const frameBase64 = captureFrame();
     if (!frameBase64) return;
 
@@ -285,7 +345,14 @@ export default function FaceAttendanceModal({
         image: frameBase64,
         action: attendanceModeRef.current,
         employee_code: expectedEmployeeCodeRef.current,
-      });
+        client_ip: wifiInfoRef.current?.client_ip,
+      } as any);
+
+      if ((resp as any).wifi_error) {
+        setWifiStatus('unverified');
+        setVerificationFeedback(resp.message || 'Must connect to Office Wi-Fi to mark attendance.');
+        return;
+      }
 
       if (resp.success && resp.matched) {
         playAudioChime('success');
@@ -311,11 +378,14 @@ export default function FaceAttendanceModal({
 
     const interval = setInterval(() => {
       if (scanResultRef.current?.success) return;
-      // Prevent auto-scan when outside office area, still checking GPS, or when GPS errored
+      // Prevent auto-scan when outside office area, still checking GPS, or when Wi-Fi is unverified
       if (
         geoStatusRef.current === 'outside' ||
         geoStatusRef.current === 'checking' ||
-        geoStatusRef.current === 'error'
+        geoStatusRef.current === 'error' ||
+        wifiStatusRef.current === 'unverified' ||
+        wifiStatusRef.current === 'cellular_blocked' ||
+        wifiStatusRef.current === 'checking'
       ) {
         return;
       }
@@ -338,6 +408,8 @@ export default function FaceAttendanceModal({
   };
 
   const isLocationRestricted = geoStatus === 'outside';
+  const isWifiRestricted = wifiStatus === 'unverified' || wifiStatus === 'cellular_blocked';
+  const isAttendanceBlocked = isLocationRestricted || isWifiRestricted;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
@@ -390,6 +462,34 @@ export default function FaceAttendanceModal({
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
                     <AlertTriangle size={10} />
                     GPS Required
+                  </span>
+                )}
+
+                {/* Live Office Wi-Fi Status Badge */}
+                {wifiStatus === 'verified' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                    <Wifi size={10} />
+                    {wifiInfo?.matched_office?.wifi_ssid
+                      ? `Wi-Fi: ${wifiInfo.matched_office.wifi_ssid}`
+                      : 'Office Wi-Fi Connected'}
+                  </span>
+                )}
+                {wifiStatus === 'unverified' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-300 border border-rose-500/50 flex items-center gap-1 animate-pulse">
+                    <WifiOff size={10} />
+                    Wi-Fi Required
+                  </span>
+                )}
+                {wifiStatus === 'cellular_blocked' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/50 flex items-center gap-1 animate-pulse">
+                    <WifiOff size={10} />
+                    Mobile Data (Blocked)
+                  </span>
+                )}
+                {wifiStatus === 'checking' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 border border-slate-600/60 flex items-center gap-1">
+                    <RefreshCw size={10} className="animate-spin text-blue-400" />
+                    Checking Wi-Fi...
                   </span>
                 )}
               </div>
@@ -505,7 +605,7 @@ export default function FaceAttendanceModal({
                 muted
                 autoPlay
                 className={`absolute inset-0 w-full h-full object-cover transform -scale-x-100 transition duration-300 ${
-                  isLocationRestricted ? 'opacity-40 grayscale-40' : 'opacity-100'
+                  isAttendanceBlocked ? 'opacity-40 grayscale-40' : 'opacity-100'
                 }`}
               />
 
@@ -553,6 +653,46 @@ export default function FaceAttendanceModal({
                 </div>
               )}
 
+              {/* Floating Alert Overlay when Wi-Fi is restricted / mobile cellular */}
+              {!isLocationRestricted && isWifiRestricted && (
+                <div className="absolute top-4 inset-x-4 sm:inset-x-8 z-30 animate-in fade-in slide-in-from-top-3 duration-300">
+                  <div className="p-3.5 rounded-2xl bg-amber-950/95 border-2 border-amber-500/80 backdrop-blur-md shadow-2xl flex items-start gap-3 text-white">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center shrink-0">
+                      <WifiOff size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs sm:text-sm font-extrabold text-white tracking-wide uppercase">
+                          {wifiStatus === 'cellular_blocked'
+                            ? 'Mobile Data Detected (Office Wi-Fi Required)'
+                            : 'Office Wi-Fi Required'}
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-amber-200/90 mt-1 leading-snug">
+                        {wifiStatus === 'cellular_blocked' ? (
+                          <>
+                            Attendance cannot be marked over mobile cellular data (4G/5G). To prevent marking attendance downstairs or outside the floor, you must connect to the <strong>Office Wi-Fi router</strong> ({wifiInfo?.allowed_ssids?.join(', ') || 'Office Wi-Fi'}).
+                          </>
+                        ) : (
+                          <>
+                            You must connect to the <strong>Office Wi-Fi router</strong> ({wifiInfo?.allowed_ssids?.join(', ') || 'Office Wi-Fi'}) to mark attendance. (Current Network IP is outside office network).
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => verifyWifi(true)}
+                      disabled={isRetryingWifi}
+                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 transition cursor-pointer border-0 shadow-md shadow-amber-950 disabled:opacity-50"
+                    >
+                      <RefreshCw size={12} className={isRetryingWifi ? 'animate-spin' : ''} />
+                      Re-check Wi-Fi
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Scanning Reticle & HUD Overlay */}
               <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
                 {/* Circular Reticle with Biometric Corner Brackets */}
@@ -562,6 +702,8 @@ export default function FaceAttendanceModal({
                       ? 'border-emerald-400 shadow-[0_0_50px_rgba(52,211,153,0.7)] scale-102'
                       : isLocationRestricted
                       ? 'border-rose-500 shadow-[0_0_40px_rgba(244,63,94,0.6)] bg-rose-950/20'
+                      : isWifiRestricted
+                      ? 'border-amber-500 shadow-[0_0_40px_rgba(245,158,11,0.6)] bg-amber-950/20'
                       : isVerifying
                       ? 'border-blue-400 shadow-[0_0_40px_rgba(96,165,250,0.5)]'
                       : 'border-white/40'
@@ -570,27 +712,27 @@ export default function FaceAttendanceModal({
                   {/* Outer corner marks */}
                   <div
                     className={`absolute -top-3 -left-3 w-6 h-6 border-t-2 border-l-2 ${
-                      isLocationRestricted ? 'border-rose-500' : 'border-blue-400'
+                      isLocationRestricted ? 'border-rose-500' : isWifiRestricted ? 'border-amber-500' : 'border-blue-400'
                     }`}
                   />
                   <div
                     className={`absolute -top-3 -right-3 w-6 h-6 border-t-2 border-r-2 ${
-                      isLocationRestricted ? 'border-rose-500' : 'border-blue-400'
+                      isLocationRestricted ? 'border-rose-500' : isWifiRestricted ? 'border-amber-500' : 'border-blue-400'
                     }`}
                   />
                   <div
                     className={`absolute -bottom-3 -left-3 w-6 h-6 border-b-2 border-l-2 ${
-                      isLocationRestricted ? 'border-rose-500' : 'border-blue-400'
+                      isLocationRestricted ? 'border-rose-500' : isWifiRestricted ? 'border-amber-500' : 'border-blue-400'
                     }`}
                   />
                   <div
                     className={`absolute -bottom-3 -right-3 w-6 h-6 border-b-2 border-r-2 ${
-                      isLocationRestricted ? 'border-rose-500' : 'border-blue-400'
+                      isLocationRestricted ? 'border-rose-500' : isWifiRestricted ? 'border-amber-500' : 'border-blue-400'
                     }`}
                   />
 
-                  {/* Laser Scanning Line Animation (only active when valid location) */}
-                  {isVerifying && !scanResult?.success && !isLocationRestricted && (
+                  {/* Laser Scanning Line Animation (only active when valid location and Wi-Fi) */}
+                  {isVerifying && !scanResult?.success && !isAttendanceBlocked && (
                     <div className="absolute inset-x-4 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_#22d3ee] animate-pulse top-1/2 transform -translate-y-1/2" />
                   )}
 
@@ -601,10 +743,15 @@ export default function FaceAttendanceModal({
                     </div>
                   )}
 
-                  {/* Blocked icon inside circle if location restricted */}
+                  {/* Blocked icon inside circle if location or Wi-Fi restricted */}
                   {isLocationRestricted && !scanResult?.success && (
                     <div className="w-16 h-16 rounded-full bg-rose-500/30 border border-rose-500/60 text-rose-300 flex items-center justify-center shadow-lg animate-in zoom-in duration-200">
                       <AlertOctagon size={36} />
+                    </div>
+                  )}
+                  {!isLocationRestricted && isWifiRestricted && !scanResult?.success && (
+                    <div className="w-16 h-16 rounded-full bg-amber-500/30 border border-amber-500/60 text-amber-300 flex items-center justify-center shadow-lg animate-in zoom-in duration-200">
+                      <WifiOff size={36} />
                     </div>
                   )}
                 </div>
@@ -616,6 +763,8 @@ export default function FaceAttendanceModal({
                       ? 'bg-slate-900/90 border-slate-700/60 text-white'
                       : isLocationRestricted
                       ? 'bg-rose-950/95 border-rose-500/80 text-rose-200 animate-pulse'
+                      : isWifiRestricted
+                      ? 'bg-amber-950/95 border-amber-500/80 text-amber-200 animate-pulse'
                       : geoStatus === 'error'
                       ? 'bg-amber-950/90 border-amber-600/70 text-amber-200'
                       : 'bg-slate-900/90 border-slate-700/60 text-white'
@@ -631,10 +780,24 @@ export default function FaceAttendanceModal({
                       <AlertOctagon size={14} className="text-rose-400" />
                       <span className="text-rose-200 font-bold">You are not in the office area</span>
                     </>
+                  ) : isWifiRestricted ? (
+                    <>
+                      <WifiOff size={14} className="text-amber-400" />
+                      <span className="text-amber-200 font-bold">
+                        {wifiStatus === 'cellular_blocked'
+                          ? 'Mobile Data Blocked: Connect to Office Wi-Fi'
+                          : `Connect to Office Wi-Fi (${wifiInfo?.allowed_ssids?.[0] || 'Office'})`}
+                      </span>
+                    </>
                   ) : geoStatus === 'checking' ? (
                     <>
                       <RefreshCw size={14} className="animate-spin text-blue-400" />
                       <span className="text-blue-200">Verifying GPS office perimeter...</span>
+                    </>
+                  ) : wifiStatus === 'checking' ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin text-blue-400" />
+                      <span className="text-blue-200">Verifying Office Wi-Fi...</span>
                     </>
                   ) : geoStatus === 'error' ? (
                     <>
@@ -773,6 +936,30 @@ export default function FaceAttendanceModal({
                 </div>
               )}
 
+              {/* Wi-Fi Alert Strip if outside office Wi-Fi */}
+              {!isLocationRestricted && isWifiRestricted && (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-amber-300 text-left">
+                    <WifiOff size={16} className="text-amber-400 shrink-0" />
+                    <span>
+                      <strong className="text-amber-200">Wi-Fi Protection Active:</strong>{' '}
+                      {wifiStatus === 'cellular_blocked'
+                        ? 'Mobile cellular data detected. Please connect to Office Wi-Fi router.'
+                        : `Please connect to Office Wi-Fi (${wifiInfo?.allowed_ssids?.join(', ') || 'Office Wi-Fi'}).`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => verifyWifi(true)}
+                    disabled={isRetryingWifi}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 text-xs font-bold border border-amber-500/40 transition flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    <RefreshCw size={13} className={isRetryingWifi ? 'animate-spin' : ''} />
+                    Check Wi-Fi
+                  </button>
+                </div>
+              )}
+
               {/* Normal status footer */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="text-xs text-slate-400">
@@ -783,6 +970,8 @@ export default function FaceAttendanceModal({
                   <p className="mt-0.5 text-[11px]">
                     {isLocationRestricted
                       ? 'Attendance locked until you enter office radius.'
+                      : isWifiRestricted
+                      ? 'Attendance locked until connected to Office Wi-Fi router.'
                       : 'Look directly at camera. Auto-scan triggers every second.'}
                   </p>
                 </div>
@@ -798,10 +987,20 @@ export default function FaceAttendanceModal({
                       <RefreshCw size={14} className={isRetryingGps ? 'animate-spin' : ''} />
                       Verify Office Area
                     </button>
+                  ) : isWifiRestricted ? (
+                    <button
+                      type="button"
+                      onClick={() => verifyWifi(true)}
+                      disabled={isRetryingWifi}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-700/80 hover:bg-amber-600 text-white text-xs font-bold shadow-lg shadow-amber-900/40 transition flex items-center justify-center gap-2 cursor-pointer border border-amber-600/50 disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={isRetryingWifi ? 'animate-spin' : ''} />
+                      Check Office Wi-Fi
+                    </button>
                   ) : (
                     <button
                       type="button"
-                      disabled={isVerifying || !streamActive || geoStatus === 'checking'}
+                      disabled={isVerifying || !streamActive || geoStatus === 'checking' || wifiStatus === 'checking'}
                       onClick={runVerification}
                       className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 border-0"
                     >
@@ -814,6 +1013,11 @@ export default function FaceAttendanceModal({
                         <>
                           <RefreshCw size={15} className="animate-spin" />
                           Checking GPS...
+                        </>
+                      ) : wifiStatus === 'checking' ? (
+                        <>
+                          <RefreshCw size={15} className="animate-spin" />
+                          Checking Wi-Fi...
                         </>
                       ) : (
                         <>

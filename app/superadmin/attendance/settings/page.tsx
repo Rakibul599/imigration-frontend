@@ -30,6 +30,9 @@ import {
   CalendarCheck,
   Crosshair,
   Shapes,
+  Wifi,
+  WifiOff,
+  Zap,
 } from 'lucide-react';
 
 import {
@@ -42,6 +45,7 @@ import {
   GeofenceCheckResult,
   detectUserCoordinates,
   DetectedCoordinates,
+  fetchClientNetworkIp,
 } from '@/lib/officeLocationStorage';
 import {
   AttendanceSchedule,
@@ -132,6 +136,8 @@ export default function OfficeLocationSettingsPage() {
     return [];
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [currentNetworkIp, setCurrentNetworkIp] = useState<string>('');
+  const wifiProtectedCount = locations.filter((l) => l.require_wifi).length;
 
   // Live Test Geofence Widget states
   const [isTestingLocation, setIsTestingLocation] = useState(false);
@@ -196,6 +202,9 @@ export default function OfficeLocationSettingsPage() {
     try {
       const data = await fetchOfficeLocations();
       setLocations(data);
+      fetchClientNetworkIp().then((ip) => {
+        if (ip) setCurrentNetworkIp(ip);
+      });
     } catch (err: any) {
       console.error('Failed to load office locations:', err);
     } finally {
@@ -1232,7 +1241,7 @@ export default function OfficeLocationSettingsPage() {
           </div>
 
           {/* Overview Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0">
                 <Building2 size={24} />
@@ -1258,15 +1267,32 @@ export default function OfficeLocationSettingsPage() {
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <Wifi size={24} />
+              </div>
+              <div>
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Wi-Fi Floor Lock</div>
+                <div className="text-2xl font-black text-purple-700 mt-0.5">
+                  {wifiProtectedCount} <span className="text-xs text-slate-400 font-normal">/ {locations.length}</span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  {wifiProtectedCount > 0 ? 'Anti-downstairs guard on' : 'Optional (GPS only)'}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                 <Navigation size={24} />
               </div>
               <div>
-                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Geofence Rule</div>
-                <div className="text-sm font-black text-slate-900 mt-0.5">Strict Proximity</div>
+                <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Current Network IP</div>
+                <div className="text-sm font-mono font-black text-slate-900 mt-1 truncate max-w-[160px]" title={currentNetworkIp || 'Checking...'}>
+                  {currentNetworkIp || 'Detecting...'}
+                </div>
                 <div className="text-[11px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
                   <CheckCircle2 size={12} />
-                  <span>&ldquo;You are not in the office area&rdquo; active</span>
+                  <span>Verified connection</span>
                 </div>
               </div>
             </div>
@@ -1461,6 +1487,7 @@ export default function OfficeLocationSettingsPage() {
                     <th className="py-3 px-4">Office Name &amp; Address</th>
                     <th className="py-3 px-4">Coordinates (Lat, Lng)</th>
                     <th className="py-3 px-4 text-center">Permitted Radius</th>
+                    <th className="py-3 px-4 text-center">Wi-Fi Floor Lock</th>
                     <th className="py-3 px-4 text-center">Geofence Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -1468,7 +1495,7 @@ export default function OfficeLocationSettingsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {locations.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
                         <MapPin size={32} className="mx-auto mb-2 opacity-30 text-slate-400" />
                         <p className="font-medium">No office locations configured yet.</p>
                       </td>
@@ -1520,6 +1547,27 @@ export default function OfficeLocationSettingsPage() {
                             ) : (
                               <span className="font-bold font-mono text-slate-800 bg-slate-100 px-2.5 py-1 rounded-full text-xs">
                                 {loc.radius_meters}m
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            {loc.require_wifi ? (
+                              <div className="inline-flex flex-col items-center">
+                                <span className="font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] inline-flex items-center gap-1 shadow-2xs">
+                                  <Wifi size={11} className="text-emerald-600" />
+                                  <span>Wi-Fi Enforced</span>
+                                </span>
+                                {loc.wifi_ssid && (
+                                  <span className="text-[10px] text-slate-500 font-medium mt-0.5 max-w-[140px] truncate" title={loc.wifi_ssid}>
+                                    {loc.wifi_ssid}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 font-medium text-[11px] inline-flex items-center gap-1">
+                                <WifiOff size={11} className="text-slate-300" />
+                                <span>GPS Only</span>
                               </span>
                             )}
                           </td>

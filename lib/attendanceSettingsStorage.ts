@@ -6,6 +6,9 @@ export interface AttendanceSchedule {
   monthly_fixed_holidays: number;
   yearly_annual_leave_days?: number;
   weekly_fixed_days: string[];
+  require_wifi?: boolean;
+  allowed_wifi_ssids?: string;
+  allowed_wifi_ips?: string;
   notes?: string;
   created_at?: string;
   updated_at?: string;

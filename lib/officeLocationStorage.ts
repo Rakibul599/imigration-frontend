@@ -14,10 +14,28 @@ export interface OfficeLocation {
   radius_meters: number;
   geofence_type?: 'circle' | 'polygon';
   polygon_coordinates?: PolygonPoint[] | null;
+  require_wifi?: boolean;
+  wifi_ssid?: string;
+  wifi_ip?: string;
+  wifi_bssid?: string;
   is_active: boolean;
   notes?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface WifiVerificationResult {
+  require_wifi: boolean;
+  is_wifi_verified: boolean;
+  client_ip: string;
+  matched_office?: {
+    id: number | string;
+    name: string;
+    wifi_ssid?: string;
+  } | null;
+  allowed_ssids?: string[];
+  on_cellular?: boolean;
+  message: string;
 }
 
 export interface GeofenceCheckResult {
@@ -315,6 +333,10 @@ export async function fetchOfficeLocations(activeOnly = false): Promise<OfficeLo
           radius_meters: Number(item.radius_meters) || 150,
           geofence_type: (item.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
           polygon_coordinates: Array.isArray(item.polygon_coordinates) ? item.polygon_coordinates : null,
+          require_wifi: Boolean(item.require_wifi),
+          wifi_ssid: item.wifi_ssid || undefined,
+          wifi_ip: item.wifi_ip || undefined,
+          wifi_bssid: item.wifi_bssid || undefined,
           is_active: item.is_active !== undefined ? Boolean(item.is_active) : true,
           notes: item.notes || undefined,
           created_at: item.created_at,
@@ -354,6 +376,10 @@ export async function getOfficeLocationById(id: number | string): Promise<Office
         radius_meters: Number(item.radius_meters) || 150,
         geofence_type: (item.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
         polygon_coordinates: Array.isArray(item.polygon_coordinates) ? item.polygon_coordinates : null,
+        require_wifi: Boolean(item.require_wifi),
+        wifi_ssid: item.wifi_ssid || undefined,
+        wifi_ip: item.wifi_ip || undefined,
+        wifi_bssid: item.wifi_bssid || undefined,
         is_active: Boolean(item.is_active),
         notes: item.notes || undefined,
         created_at: item.created_at,
@@ -390,6 +416,10 @@ export async function createOfficeLocation(
       radius_meters: Number(data.radius_meters) || 150,
       geofence_type: data.geofence_type || 'circle',
       polygon_coordinates: data.polygon_coordinates || null,
+      require_wifi: data.require_wifi !== undefined ? Boolean(data.require_wifi) : false,
+      wifi_ssid: data.wifi_ssid?.trim() || null,
+      wifi_ip: data.wifi_ip?.trim() || null,
+      wifi_bssid: data.wifi_bssid?.trim() || null,
       is_active: data.is_active !== undefined ? Boolean(data.is_active) : true,
       notes: data.notes?.trim() || null,
     }),
@@ -413,6 +443,10 @@ export async function createOfficeLocation(
     radius_meters: Number(created.radius_meters) || 150,
     geofence_type: (created.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
     polygon_coordinates: Array.isArray(created.polygon_coordinates) ? created.polygon_coordinates : null,
+    require_wifi: Boolean(created.require_wifi),
+    wifi_ssid: created.wifi_ssid || undefined,
+    wifi_ip: created.wifi_ip || undefined,
+    wifi_bssid: created.wifi_bssid || undefined,
     is_active: Boolean(created.is_active),
     notes: created.notes || undefined,
     created_at: created.created_at,
@@ -447,6 +481,10 @@ export async function updateOfficeLocation(
       radius_meters: data.radius_meters !== undefined ? Number(data.radius_meters) : undefined,
       geofence_type: data.geofence_type,
       polygon_coordinates: data.polygon_coordinates,
+      require_wifi: data.require_wifi !== undefined ? Boolean(data.require_wifi) : undefined,
+      wifi_ssid: data.wifi_ssid !== undefined ? (data.wifi_ssid ? data.wifi_ssid.trim() : null) : undefined,
+      wifi_ip: data.wifi_ip !== undefined ? (data.wifi_ip ? data.wifi_ip.trim() : null) : undefined,
+      wifi_bssid: data.wifi_bssid !== undefined ? (data.wifi_bssid ? data.wifi_bssid.trim() : null) : undefined,
       is_active: data.is_active,
       notes: data.notes !== undefined ? data.notes.trim() : undefined,
     }),
@@ -470,6 +508,10 @@ export async function updateOfficeLocation(
     radius_meters: Number(updated.radius_meters) || 150,
     geofence_type: (updated.geofence_type === 'polygon' ? 'polygon' : 'circle') as 'circle' | 'polygon',
     polygon_coordinates: Array.isArray(updated.polygon_coordinates) ? updated.polygon_coordinates : null,
+    require_wifi: Boolean(updated.require_wifi),
+    wifi_ssid: updated.wifi_ssid || undefined,
+    wifi_ip: updated.wifi_ip || undefined,
+    wifi_bssid: updated.wifi_bssid || undefined,
     is_active: Boolean(updated.is_active),
     notes: updated.notes || undefined,
     created_at: updated.created_at,
@@ -591,4 +633,89 @@ export function subscribeToOfficeLocations(callback: (locations: OfficeLocation[
   return () => {
     window.removeEventListener('agency_office_locations_updated', handler);
   };
+}
+
+/**
+ * Detect if device browser is strictly on mobile cellular data (3G/4G/5G)
+ */
+export function isDeviceOnCellular(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const conn = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+  if (!conn) return false;
+  return conn.type === 'cellular';
+}
+
+/**
+ * Fetch detected client IP from Laravel backend
+ */
+export async function fetchClientNetworkIp(): Promise<string> {
+  try {
+    const res = await fetch(`${API_BASE}/office-locations/client-ip`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.client_ip) {
+        return data.client_ip;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch client network IP from backend:', err);
+  }
+  return '127.0.0.1';
+}
+
+/**
+ * Verify if client connection is authorized via office Wi-Fi network
+ */
+export async function verifyOfficeWifi(officeLocationId?: number | string): Promise<WifiVerificationResult> {
+  const onCellular = isDeviceOnCellular();
+
+  try {
+    const url = new URL(`${API_BASE}/office-locations/verify-wifi`);
+    if (officeLocationId) {
+      url.searchParams.set('office_location_id', String(officeLocationId));
+    }
+
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+
+    const data = await res.json();
+
+    // If client is on cellular data but Wi-Fi is strictly required
+    if (data.require_wifi && onCellular) {
+      return {
+        require_wifi: true,
+        is_wifi_verified: false,
+        client_ip: data.client_ip || 'Unknown',
+        matched_office: null,
+        allowed_ssids: data.allowed_ssids || [],
+        on_cellular: true,
+        message: 'Mobile cellular data (4G/5G) detected. You must connect to Office Wi-Fi router to mark attendance.',
+      };
+    }
+
+    return {
+      require_wifi: Boolean(data.require_wifi),
+      is_wifi_verified: Boolean(data.is_wifi_verified),
+      client_ip: data.client_ip || 'Unknown',
+      matched_office: data.matched_office || null,
+      allowed_ssids: data.allowed_ssids || [],
+      on_cellular: onCellular,
+      message: data.message || (data.is_wifi_verified ? 'Office Wi-Fi verified' : 'Not on Office Wi-Fi'),
+    };
+  } catch (err: any) {
+    console.warn('verifyOfficeWifi failed:', err);
+    return {
+      require_wifi: false,
+      is_wifi_verified: true,
+      client_ip: 'Unknown',
+      on_cellular: onCellular,
+      message: err.message || 'Network verification bypassed due to connection error',
+    };
+  }
 }

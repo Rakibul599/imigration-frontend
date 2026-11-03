@@ -19,6 +19,9 @@ import {
   Sliders,
   Compass,
   FileText,
+  Wifi,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import {
   OfficeLocation,
@@ -26,6 +29,7 @@ import {
   createOfficeLocation,
   updateOfficeLocation,
   detectUserCoordinates,
+  fetchClientNetworkIp,
   calculatePolygonAreaSqMeters,
   calculatePolygonPerimeterMeters,
 } from '@/lib/officeLocationStorage';
@@ -73,6 +77,12 @@ export default function OfficeLocationForm({
   const [isActive, setIsActive] = useState(
     initialLocation?.is_active !== undefined ? initialLocation.is_active : true
   );
+  const [requireWifi, setRequireWifi] = useState<boolean>(
+    initialLocation?.require_wifi !== undefined ? initialLocation.require_wifi : false
+  );
+  const [wifiSsid, setWifiSsid] = useState<string>(initialLocation?.wifi_ssid || '');
+  const [wifiIp, setWifiIp] = useState<string>(initialLocation?.wifi_ip || '');
+  const [isDetectingIp, setIsDetectingIp] = useState(false);
   const [notes, setNotes] = useState(initialLocation?.notes || '');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,6 +102,9 @@ export default function OfficeLocationForm({
       if (Array.isArray(initialLocation.polygon_coordinates)) {
         setPolygonCoordinates(initialLocation.polygon_coordinates);
       }
+      setRequireWifi(initialLocation.require_wifi !== undefined ? initialLocation.require_wifi : false);
+      setWifiSsid(initialLocation.wifi_ssid || '');
+      setWifiIp(initialLocation.wifi_ip || '');
       setIsActive(initialLocation.is_active);
       setNotes(initialLocation.notes || '');
     }
@@ -100,6 +113,42 @@ export default function OfficeLocationForm({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Auto-Detect Current Network Public IP
+  const handleDetectCurrentIp = async () => {
+    setIsDetectingIp(true);
+    try {
+      const ip = await fetchClientNetworkIp();
+      let targetIp = ip;
+      if (!targetIp || targetIp === '127.0.0.1' || targetIp === '::1') {
+        try {
+          const res = await fetch('https://api.ipify.org?format=json');
+          if (res.ok) {
+            const d = await res.json();
+            if (d.ip) targetIp = d.ip;
+          }
+        } catch {
+          targetIp = ip || '127.0.0.1';
+        }
+      }
+
+      if (targetIp) {
+        if (wifiIp.trim()) {
+          const parts = wifiIp.split(',').map((x) => x.trim());
+          if (!parts.includes(targetIp)) {
+            setWifiIp((prev) => `${prev.trim()}, ${targetIp}`);
+          }
+        } else {
+          setWifiIp(targetIp);
+        }
+        showToast(`Detected Network IP: ${targetIp}`);
+      }
+    } catch (err: any) {
+      console.warn('IP detect error:', err);
+    } finally {
+      setIsDetectingIp(false);
+    }
   };
 
   // Get Current Location handler
@@ -160,6 +209,9 @@ export default function OfficeLocationForm({
         radius_meters: radiusMeters,
         geofence_type: geofenceType,
         polygon_coordinates: geofenceType === 'polygon' ? polygonCoordinates : null,
+        require_wifi: requireWifi,
+        wifi_ssid: wifiSsid.trim() || undefined,
+        wifi_ip: wifiIp.trim() || undefined,
         is_active: isActive,
         notes: notes.trim() || undefined,
       };
@@ -503,6 +555,112 @@ export default function OfficeLocationForm({
                 Enforce Geofence Verification (Active for employee facial scan)
               </label>
             </div>
+          </div>
+
+          {/* Section 2.5: Office Wi-Fi Verification & Anti-Downstairs Attendance Guard */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <Wifi size={18} className="text-[#0b4da2]" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 m-0">Office Wi-Fi Restriction</h2>
+                  <p className="text-[11px] text-slate-500 m-0">Downstairs &amp; Ground Floor Anti-Cheating Guard</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 text-[#0b4da2] border border-blue-100">
+                Floor Lock
+              </span>
+            </div>
+
+            {/* Enable Wi-Fi Toggle */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/70 to-indigo-50/50 border border-blue-100 flex items-start gap-3">
+              <div className="pt-0.5">
+                <input
+                  type="checkbox"
+                  id="form_require_wifi"
+                  checked={requireWifi}
+                  onChange={(e) => setRequireWifi(e.target.checked)}
+                  className="w-5 h-5 rounded text-[#0b4da2] focus:ring-[#0b4da2] cursor-pointer"
+                />
+              </div>
+              <div className="flex-1">
+                <label
+                  htmlFor="form_require_wifi"
+                  className="text-xs font-bold text-slate-900 cursor-pointer select-none flex items-center gap-2"
+                >
+                  <span>Require Office Wi-Fi Connection for Attendance</span>
+                  {requireWifi && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Active Guard
+                    </span>
+                  )}
+                </label>
+                <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                  When enabled, employees <strong>must be connected to this office&apos;s Wi-Fi router</strong>. Attendance cannot be taken from the ground floor, downstairs entrance, cafeteria, or via mobile cellular data (4G/5G).
+                </p>
+              </div>
+            </div>
+
+            {/* Wi-Fi Details Inputs (Shown when enabled) */}
+            {requireWifi && (
+              <div className="space-y-4 pt-1">
+                {/* Wi-Fi SSID (Network Name) */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Office Wi-Fi Name (SSID) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Agency_Office_5G, Agency_Office_Staff"
+                    value={wifiSsid}
+                    onChange={(e) => setWifiSsid(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-semibold text-slate-800 focus:bg-white focus:border-[#0b4da2] focus:outline-hidden"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    The Wi-Fi network name(s) employees see on their phone/laptop (comma-separated if multiple access points).
+                  </p>
+                </div>
+
+                {/* Wi-Fi Router Public IP / Allowed Network IPs */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700">
+                      Office Wi-Fi Public IP / Subnet <span className="text-rose-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleDetectCurrentIp}
+                      disabled={isDetectingIp}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition border border-blue-200 cursor-pointer disabled:opacity-50"
+                    >
+                      {isDetectingIp ? (
+                        <RefreshCw size={12} className="animate-spin" />
+                      ) : (
+                        <Zap size={12} />
+                      )}
+                      <span>Auto-Detect Current IP</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. 103.145.23.45 (or comma-separated IPs)"
+                    value={wifiIp}
+                    onChange={(e) => setWifiIp(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-slate-800 focus:bg-white focus:border-[#0b4da2] focus:outline-hidden"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    All devices connected to this office router share this public IP. Prevents cheating via mobile data on lower floors.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-[11px] text-amber-800 flex items-start gap-2">
+                  <Info size={15} className="shrink-0 text-amber-600 mt-0.5" />
+                  <span>
+                    <strong>Floor-Level Protection:</strong> Office Wi-Fi signal drops downstairs. Requiring Wi-Fi guarantees the employee is physically upstairs inside the office.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Notes / Policy */}
