@@ -53,13 +53,13 @@ interface CardDesignThemeSectionProps {
 }
 
 const WEEKDAYS = [
-  { index: 0, en: 'Sunday', bn: 'রবিবার' },
-  { index: 1, en: 'Monday', bn: 'সোমবার' },
-  { index: 2, en: 'Tuesday', bn: 'মঙ্গলবার' },
-  { index: 3, en: 'Wednesday', bn: 'বুধবার' },
-  { index: 4, en: 'Thursday', bn: 'বৃহস্পতিবার' },
-  { index: 5, en: 'Friday', bn: 'শুক্রবার' },
-  { index: 6, en: 'Saturday', bn: 'শনিবার' },
+  { index: 0, name: 'Sunday' },
+  { index: 1, name: 'Monday' },
+  { index: 2, name: 'Tuesday' },
+  { index: 3, name: 'Wednesday' },
+  { index: 4, name: 'Thursday' },
+  { index: 5, name: 'Friday' },
+  { index: 6, name: 'Saturday' },
 ];
 
 export default function CardDesignThemeSection({
@@ -612,7 +612,7 @@ export default function CardDesignThemeSection({
             }`}
           >
             <CalendarClock size={14} />
-            <span>Auto Schedule (দিন অনুযায়ী / দিন পর পর)</span>
+            <span>Auto Schedule &amp; Rotation</span>
             {currentSchedule.enabled && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
             )}
@@ -1092,7 +1092,7 @@ export default function CardDesignThemeSection({
                     )}
                   </h4>
                   <p className="text-xs text-slate-600 m-0 mt-1 leading-relaxed">
-                    সপ্তাহের বার অনুযায়ী (Sunday to Saturday) অথবা নির্দিষ্ট দিন পর পর (যেমন ২ দিন এটা, ৩ দিন ওটা) গ্লাস কার্ডের থিম রঙ স্বয়ংক্রিয়ভাবে পরিবর্তিত হবে।
+                    Automatically rotate frosted glass card colors based on the day of the week (Sunday to Saturday) or custom multi-day intervals (e.g. every 2 or 3 days).
                   </p>
                 </div>
               </div>
@@ -1167,7 +1167,7 @@ export default function CardDesignThemeSection({
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
-                      +1d (কাল)
+                      Tomorrow (+1d)
                     </button>
                     <button
                       type="button"
@@ -1178,7 +1178,7 @@ export default function CardDesignThemeSection({
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
-                      +2d (২ দিন পর)
+                      +2 Days
                     </button>
                     <button
                       type="button"
@@ -1189,7 +1189,7 @@ export default function CardDesignThemeSection({
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
-                      +3d (৩ দিন পর)
+                      +3 Days
                     </button>
                     <button
                       type="button"
@@ -1200,7 +1200,7 @@ export default function CardDesignThemeSection({
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
-                      +5d
+                      +5 Days
                     </button>
                   </div>
                 </div>
@@ -1208,7 +1208,7 @@ export default function CardDesignThemeSection({
                 {/* 3 Rotation Mode Selector Cards */}
                 <div>
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wide block mb-3">
-                    Select Rotation Strategy (কোন নিয়মে পরিবর্তন হবে):
+                    Select Rotation Strategy:
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                     {/* MODE 1: Day of Week */}
@@ -1233,11 +1233,11 @@ export default function CardDesignThemeSection({
                           )}
                         </div>
                         <p className="text-[11px] text-slate-500 m-0 leading-relaxed">
-                          সপ্তাহের বার অনুযায়ী (Sunday to Saturday) প্রতিদিনের জন্য আলাদা কালার থিম।
+                          Assign a dedicated glass color theme for each day from Sunday to Saturday.
                         </p>
                       </div>
                       <span className="text-[10px] font-bold text-blue-700 mt-2 block">
-                        ৭ দিনের ৭টি থিম সেট করুন &rarr;
+                        Configure 7-Day Schedule &rarr;
                       </span>
                     </div>
 
@@ -1263,11 +1263,11 @@ export default function CardDesignThemeSection({
                           )}
                         </div>
                         <p className="text-[11px] text-slate-500 m-0 leading-relaxed">
-                          নির্দিষ্ট দিন পর পর যেমন প্রতি ২ দিন বা ৩ দিন পর পর স্বয়ংক্রিয়ভাবে পরের রঙে রোটেট হবে।
+                          Automatically advance to the next theme color every N days (e.g. every 2 or 3 days).
                         </p>
                       </div>
                       <span className="text-[10px] font-bold text-blue-700 mt-2 block">
-                        প্রতি N দিন পর পর পরিবর্তন &rarr;
+                        Rotate Every N Days &rarr;
                       </span>
                     </div>
 
@@ -1293,32 +1293,32 @@ export default function CardDesignThemeSection({
                           )}
                         </div>
                         <p className="text-[11px] text-slate-500 m-0 leading-relaxed">
-                          কাস্টম সাইকেল: ২ দিন প্রথম কালার, ৩ দিন দ্বিতীয় কালার, ২ দিন তৃতীয় কালার... এভাবে লুপ হবে।
+                          Custom multi-day sequence: Stage 1 for 2 days, Stage 2 for 3 days, and continuously loop.
                         </p>
                       </div>
                       <span className="text-[10px] font-bold text-blue-700 mt-2 block">
-                        ২ দিন এটা, ৩ দিন ওটা &rarr;
+                        Custom Multi-Day Sequence &rarr;
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* ---------------------------------------------------------- */}
-                {/* MODE PANEL 1: Day of the Week Mapping (সপ্তাহের বার)       */}
+                {/* MODE PANEL 1: Day of the Week Mapping                      */}
                 {/* ---------------------------------------------------------- */}
                 {currentSchedule.mode === 'day_of_week' && (
                   <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide m-0">
-                          Configure Day of Week Palette (বার অনুযায়ী কালার নির্বাচন):
+                          Configure Day of the Week Palette:
                         </h4>
                         <span className="text-[11px] text-slate-500">
-                          আজকে যে দিন, সেই দিনের নির্ধারিত থিম ড্যাশবোর্ডে লাইভ থাকবে।
+                          Cards will automatically display the assigned theme for today's calendar day.
                         </span>
                       </div>
                       <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                        Today: {WEEKDAYS[currentDayOfWeek].en} ({WEEKDAYS[currentDayOfWeek].bn})
+                        Today: {WEEKDAYS[currentDayOfWeek].name}
                       </span>
                     </div>
 
@@ -1339,7 +1339,7 @@ export default function CardDesignThemeSection({
                           >
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-slate-900">
-                                {day.en} ({day.bn})
+                                {day.name}
                               </span>
                               {isToday && (
                                 <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-blue-600 text-white uppercase animate-pulse">
@@ -1378,17 +1378,17 @@ export default function CardDesignThemeSection({
                 )}
 
                 {/* ---------------------------------------------------------- */}
-                {/* MODE PANEL 2: Fixed Interval (প্রতি ২ বা ৩ দিন পর পর)       */}
+                {/* MODE PANEL 2: Fixed Interval                               */}
                 {/* ---------------------------------------------------------- */}
                 {currentSchedule.mode === 'interval' && (
                   <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide m-0">
-                          Fixed Interval Settings (কত দিন পর পর কালার চেঞ্জ হবে):
+                          Fixed Interval Settings:
                         </h4>
                         <span className="text-[11px] text-slate-500">
-                          প্রতি নির্দিষ্ট দিন পর পর পরবর্তী থিমে সাইকেল রোটেট হবে।
+                          The theme automatically advances to the next color in the cycle after the specified number of days.
                         </span>
                       </div>
 
@@ -1406,7 +1406,7 @@ export default function CardDesignThemeSection({
                                 : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                             }`}
                           >
-                            {num} দিন
+                            {num} Days
                           </button>
                         ))}
                       </div>
@@ -1416,7 +1416,7 @@ export default function CardDesignThemeSection({
                       {/* Interval Days Input */}
                       <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
                         <label className="text-xs font-bold text-slate-800 flex items-center justify-between m-0">
-                          <span>Rotation Interval (দিন সংখ্যা)</span>
+                          <span>Rotation Interval (Days)</span>
                           <span className="font-mono text-blue-600 font-extrabold text-sm">
                             Every {currentSchedule.interval_days || 2} Days
                           </span>
@@ -1430,14 +1430,14 @@ export default function CardDesignThemeSection({
                           className="w-full text-xs font-bold px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:border-blue-500"
                         />
                         <p className="text-[11px] text-slate-400 m-0">
-                          উদাহরণ: ২ দিলে প্রতি ২ দিন পর পর এবং ৩ দিলে প্রতি ৩ দিন পর পর কালার পরিবর্তন হবে।
+                          Example: Enter 2 to rotate every 2 days, or 3 to rotate every 3 days.
                         </p>
                       </div>
 
                       {/* Start Reference Date */}
                       <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2">
                         <label className="text-xs font-bold text-slate-800 flex items-center justify-between m-0">
-                          <span>Reference Start Date (শুরুর তারিখ)</span>
+                          <span>Reference Start Date</span>
                           <span className="font-mono text-slate-500 text-xs">
                             {currentSchedule.start_date || 'Today'}
                           </span>
@@ -1449,7 +1449,7 @@ export default function CardDesignThemeSection({
                           className="w-full text-xs font-bold px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:border-blue-500"
                         />
                         <p className="text-[11px] text-slate-400 m-0">
-                          এই তারিখ থেকে দিন হিসাব করে ইন্টারভ্যাল ক্যালকুলেট করা হয়।
+                          Cycle days are calculated starting from this anchor date.
                         </p>
                       </div>
                     </div>
@@ -1457,7 +1457,7 @@ export default function CardDesignThemeSection({
                     {/* Presets in this Cycle */}
                     <div className="space-y-2.5">
                       <label className="text-xs font-bold text-slate-700 uppercase tracking-wide block">
-                        Included Themes in Interval Rotation (সাইকেলে অন্তর্ভুক্ত কালারসমূহ):
+                        Included Themes in Interval Rotation:
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                         {GLASS_COLOR_PRESETS.map((p) => {
@@ -1486,17 +1486,17 @@ export default function CardDesignThemeSection({
                 )}
 
                 {/* ---------------------------------------------------------- */}
-                {/* MODE PANEL 3: Step Rotation (২ দিন এটা, ৩ দিন ওটা)          */}
+                {/* MODE PANEL 3: Step Rotation                                */}
                 {/* ---------------------------------------------------------- */}
                 {currentSchedule.mode === 'step_rotation' && (
                   <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide m-0">
-                          Custom Multi-Day Stages ("২ দিন এটা, ৩ দিন ওটা" কাস্টম সাইকেল):
+                          Custom Multi-Day Stages (Stage Sequence):
                         </h4>
                         <span className="text-[11px] text-slate-500">
-                          পর্যায়ক্রমে প্রতিটি স্টেজের জন্য কালার এবং দিন সংখ্যা নির্ধারণ করুন।
+                          Define custom durations and colors for each stage in the rotation sequence.
                         </span>
                       </div>
 
@@ -1506,7 +1506,7 @@ export default function CardDesignThemeSection({
                         className="px-3 py-1.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-100/80 hover:bg-blue-200 transition-all flex items-center gap-1.5 cursor-pointer border-0 shrink-0"
                       >
                         <Plus size={14} />
-                        <span>Add Stage (নতুন স্টেজ যোগ করুন)</span>
+                        <span>Add Stage</span>
                       </button>
                     </div>
 
@@ -1564,7 +1564,7 @@ export default function CardDesignThemeSection({
                                   }
                                   className="w-16 text-xs font-mono font-bold text-center py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:border-blue-500"
                                 />
-                                <span className="text-xs font-bold text-slate-700">Days (দিন)</span>
+                                <span className="text-xs font-bold text-slate-700">Days</span>
                               </div>
 
                               {(currentSchedule.rotation_steps || []).length > 2 && (
@@ -1614,7 +1614,7 @@ export default function CardDesignThemeSection({
                   Automatic Theme Scheduler is Currently Turned Off
                 </h4>
                 <p className="text-xs text-slate-500 max-w-md mx-auto m-0 leading-relaxed">
-                  Turn on the switch above to enable automatic daily color shifts or multi-day interval rotations (যেমন ২ দিন পর পর বা ৩ দিন পর পর কালার চেঞ্জ)।
+                  Turn on the switch above to enable automatic daily color shifts or multi-day interval rotations (e.g. every 2 or 3 days).
                 </p>
                 <button
                   type="button"

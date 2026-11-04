@@ -764,13 +764,13 @@ export function getActiveScheduledGlassPreset(
   // 1. Day of Week Mode (Sunday to Saturday)
   if (schedule.mode === 'day_of_week') {
     const dayNames = [
-      'Sunday (রবিবার)',
-      'Monday (সোমবার)',
-      'Tuesday (মঙ্গলবার)',
-      'Wednesday (বুধবার)',
-      'Thursday (বৃহস্পতিবার)',
-      'Friday (শুক্রবার)',
-      'Saturday (শনিবার)',
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
     ];
     const day = targetDate.getDay();
     const presetId = schedule.day_mapping?.[day] || 'akashi';
