@@ -12,10 +12,16 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Coins,
+  CreditCard,
+  DollarSign,
   Edit3,
+  ExternalLink,
+  FileText,
   Globe2,
   Hourglass,
   LogOut,
+  Receipt,
   Search,
   Settings,
   ShieldAlert,
@@ -23,11 +29,12 @@ import {
   Sparkles,
   Trash2,
   UserCheck,
+  Wallet,
   X,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Company } from '@/lib/companies';
+import { Company, getCompanyPendingWallet } from '@/lib/companies';
 import {
   AuthUser,
   getCurrentUser,
@@ -42,6 +49,13 @@ import {
   subscribeToCompanyChanges,
   updateStoredCompany,
 } from '@/lib/companyStorage';
+import {
+  fetchInvoices,
+  createInvoice,
+  markInvoicePaid,
+  CompanyInvoice,
+} from '@/lib/companyTrialAndFinanceStorage';
+import { fetchCustomerPendings, CustomerPendingAmountRecord } from '@/lib/customerFinanceStorage';
 
 // Background Constellation & Ambient Mesh Animation
 type Node = { x: number; y: number; vx: number; vy: number };
@@ -151,7 +165,19 @@ export default function CompaniesPage() {
     if (typeof window === 'undefined') return [];
     return getStoredCompanies();
   });
+  const [sortField, setSortField] = useState<'name' | 'due'>('name');
   const [sortAsc, setSortAsc] = useState(true);
+  const [invoices, setInvoices] = useState<CompanyInvoice[]>([]);
+  const [customerPendings, setCustomerPendings] = useState<CustomerPendingAmountRecord[]>([]);
+  const [viewingDueCompany, setViewingDueCompany] = useState<Company | null>(null);
+  const [payingCompany, setPayingCompany] = useState<Company | null>(null);
+  const [payAmount, setPayAmount] = useState<string>('');
+  const [payMethod, setPayMethod] = useState<string>('Bank Transfer');
+  const [payReference, setPayReference] = useState<string>('');
+  const [payBankName, setPayBankName] = useState<string>('Maybank');
+  const [payNotes, setPayNotes] = useState<string>('');
+  const [payDate, setPayDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState<Company | null>(null);
   const [showSubscriptionAlert, setShowSubscriptionAlert] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
@@ -260,6 +286,14 @@ export default function CompaniesPage() {
         setCompanyList(list);
       })
       .catch(() => { });
+
+    fetchInvoices()
+      .then((list) => setInvoices(list))
+      .catch(() => {});
+
+    fetchCustomerPendings()
+      .then((list) => setCustomerPendings(list))
+      .catch(() => {});
 
     const unsubscribe = subscribeToCompanyChanges(() => {
       setCompanyList(getStoredCompanies());
@@ -376,8 +410,165 @@ export default function CompaniesPage() {
     setTimeout(() => setActionFeedback(null), 3500);
   };
 
-  const toggleSort = () => {
-    setSortAsc(!sortAsc);
+  const getCompanyDueInfo = (comp: Company) => {
+    // 1. Direct Invoice Dues (from backend invoices)
+    const compInvs = invoices.filter((inv) => {
+      const matchId =
+        inv.company_id && comp.id && String(inv.company_id).toLowerCase() === String(comp.id).toLowerCase();
+      const matchDbId =
+        inv.company_id && comp.db_id && String(inv.company_id) === String(comp.db_id);
+      const matchName =
+        inv.company_name &&
+        comp.name &&
+        inv.company_name.toLowerCase().trim() === comp.name.toLowerCase().trim();
+      return Boolean(matchId || matchDbId || matchName);
+    });
+
+    const liveInvoiceDue = compInvs
+      .filter((inv) => inv.payment_status !== 'Paid')
+      .reduce((sum, inv) => sum + (Number(inv.balance_due) || 0), 0);
+
+    const invoiceDue = liveInvoiceDue > 0 ? liveInvoiceDue : (Number(comp.invoice_due) || 0);
+
+    // 2. Direct Customer / Worker Pending Ledger
+    const compPendings = customerPendings.filter((rec) => {
+      const matchId =
+        rec.company_id && comp.id && String(rec.company_id).toLowerCase() === String(comp.id).toLowerCase();
+      const matchDbId =
+        rec.company_id && comp.db_id && String(rec.company_id) === String(comp.db_id);
+      const matchName =
+        rec.company_name &&
+        comp.name &&
+        rec.company_name.toLowerCase().trim() === comp.name.toLowerCase().trim();
+      return Boolean(matchId || matchDbId || matchName);
+    });
+
+    const liveCustomerDue = compPendings.reduce((sum, rec) => sum + (Number(rec.pending_amount) || 0), 0);
+    const customerDue = liveCustomerDue > 0 ? liveCustomerDue : (Number(comp.customer_due) || 0);
+
+    // 3. Foreign Worker Pending Wallet
+    const walletPending = getCompanyPendingWallet(comp);
+
+    // 4. Combined / Priority Due
+    const recordedDue = invoiceDue + customerDue;
+    const totalDue = recordedDue > 0 ? recordedDue : walletPending;
+
+    return {
+      invoiceDue,
+      customerDue,
+      walletPending,
+      recordedDue,
+      totalDue,
+      hasDirectDue: recordedDue > 0,
+      invoices: compInvs,
+      pendings: compPendings,
+    };
+  };
+
+  const openPaymentModal = (company: Company) => {
+    const dueInfo = getCompanyDueInfo(company);
+    setPayingCompany(company);
+    setPayAmount(dueInfo.totalDue > 0 ? String(dueInfo.totalDue) : '');
+    setPayMethod('Bank Transfer');
+    setPayReference(`PAY-${Date.now().toString().slice(-6)}`);
+    setPayBankName(company.bankName || 'Maybank');
+    setPayDate(new Date().toISOString().slice(0, 10));
+    setPayNotes(`Due settlement payment for ${company.name}`);
+  };
+
+  const handleConfirmPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingCompany) return;
+
+    const amount = parseFloat(payAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid positive payment amount in RM.');
+      return;
+    }
+
+    setIsSubmittingPayment(true);
+    try {
+      const dueInfo = getCompanyDueInfo(payingCompany);
+
+      // 1. If there are unpaid invoices, settle them first
+      const unpaidInvoices = dueInfo.invoices.filter((i) => i.payment_status !== 'Paid');
+
+      if (unpaidInvoices.length > 0) {
+        let remainingPayment = amount;
+        for (const inv of unpaidInvoices) {
+          if (remainingPayment <= 0) break;
+          const balance = Number(inv.balance_due) || 0;
+          const currentPaid = Number(inv.amount_paid) || 0;
+          const paymentForThisInvoice = Math.min(remainingPayment, balance);
+          const newPaid = currentPaid + paymentForThisInvoice;
+
+          await markInvoicePaid(inv.id, {
+            amount_paid: newPaid,
+            payment_method: payMethod,
+            payment_reference: payReference,
+            bank_name: payBankName,
+            notes: payNotes || `Payment of RM ${paymentForThisInvoice.toFixed(2)} recorded on ${payDate}.`,
+          });
+          remainingPayment -= paymentForThisInvoice;
+        }
+      } else {
+        // 2. If no unpaid invoices exist, create a new settlement invoice in the database
+        await createInvoice({
+          company_id: payingCompany.id,
+          company_name: payingCompany.name,
+          customer_name: payingCompany.name,
+          customer_email: payingCompany.email || undefined,
+          customer_phone: payingCompany.phone || undefined,
+          customer_address: payingCompany.address || undefined,
+          package_name: 'Due Settlement & Agency Services',
+          invoice_date: payDate,
+          items: [
+            {
+              description: `Due Balance Settlement Payment for ${payingCompany.name}`,
+              qty: 1,
+              unit_price: amount,
+              total: amount,
+            },
+          ],
+          total_amount: amount,
+          amount_paid: amount,
+          balance_due: 0,
+          currency: 'MYR',
+          payment_status: 'Paid',
+          payment_method: payMethod,
+          payment_reference: payReference,
+          bank_name: payBankName,
+          notes: payNotes || `Due payment recorded directly from Companies Directory on ${payDate}.`,
+        });
+      }
+
+      // Refresh live invoices and companies from backend
+      const updatedInvoices = await fetchInvoices();
+      setInvoices(updatedInvoices);
+
+      const updatedCompanies = await fetchCompaniesFromBackend();
+      setCompanyList(updatedCompanies);
+
+      setPayingCompany(null);
+      setActionFeedback({
+        type: 'success',
+        message: `Payment of RM ${amount.toFixed(2)} successfully recorded for ${payingCompany.name}!`,
+      });
+      setTimeout(() => setActionFeedback(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Payment settlement failed. Please try again.');
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
+
+  const toggleSort = (field: 'name' | 'due' = 'name') => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(field === 'name');
+    }
   };
 
   const filtered = accessibleCompanies
@@ -388,6 +579,11 @@ export default function CompaniesPage() {
         c.sector.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => {
+      if (sortField === 'due') {
+        const dueA = getCompanyDueInfo(a).totalDue;
+        const dueB = getCompanyDueInfo(b).totalDue;
+        return sortAsc ? dueA - dueB : dueB - dueA;
+      }
       if (sortAsc) return a.name.localeCompare(b.name);
       return b.name.localeCompare(a.name);
     });
@@ -631,24 +827,40 @@ export default function CompaniesPage() {
             <thead>
               <tr className="bg-[#22a34a] text-white text-xs font-bold">
                 <th
-                  onClick={toggleSort}
-                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[38%]"
+                  onClick={() => toggleSort('name')}
+                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[28%]"
+                  title="Click to sort by Company Name"
                 >
                   <div className="flex items-center justify-between">
                     <span>Company Name</span>
                     <span className="text-sm leading-none font-bold">
-                      {sortAsc ? '↑' : '↓'}
+                      {sortField === 'name' ? (sortAsc ? '↑' : '↓') : '↕'}
                     </span>
                   </div>
                 </th>
-                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[20%]">
+                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[14%]">
                   Remark
                 </th>
-                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[28%]">
+                <th
+                  onClick={() => toggleSort('due')}
+                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[22%]"
+                  title="Click to sort by Due Amount"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <CreditCard size={13} className="opacity-90" />
+                      <span>Due Amount</span>
+                    </span>
+                    <span className="text-sm leading-none font-bold">
+                      {sortField === 'due' ? (sortAsc ? '↑' : '↓') : '↕'}
+                    </span>
+                  </div>
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[22%]">
                   Expire Date &amp; Countdown
                 </th>
                 <th className="py-3 px-4 text-center font-bold w-[14%]">
-                  {/* Empty header matching screenshot */}
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -658,6 +870,9 @@ export default function CompaniesPage() {
                 const compCountdown = getCountdownInfo(compExpiry);
                 const compIsTrial = company.subscription_status === 'trial_active';
                 const compPlan = getPlanLabel(company.subscription_plan_key, compIsTrial);
+                const dueInfo = getCompanyDueInfo(company);
+                const isOverdue = dueInfo.invoiceDue > 0;
+                const hasAnyDue = dueInfo.totalDue > 0;
 
                 return (
                   <tr
@@ -688,6 +903,89 @@ export default function CompaniesPage() {
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
+                    </td>
+
+                    {/* Due Amount Column */}
+                    <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[11px] font-semibold text-slate-500 font-mono">RM</span>
+                            <span
+                              className={`font-mono font-bold text-sm tracking-tight ${
+                                isOverdue
+                                  ? 'text-rose-700'
+                                  : hasAnyDue
+                                  ? 'text-slate-900'
+                                  : 'text-emerald-700'
+                              }`}
+                            >
+                              {dueInfo.totalDue.toLocaleString('en-MY', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openPaymentModal(company)}
+                              title={
+                                dueInfo.totalDue > 0
+                                  ? `Pay Due (RM ${dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })})`
+                                  : 'Record Payment'
+                              }
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors shadow-2xs border ${
+                                dueInfo.totalDue > 0
+                                  ? 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-300'
+                                  : 'text-slate-600 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border-slate-200'
+                              }`}
+                            >
+                              Pay Due
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setViewingDueCompany(company)}
+                              title="View Due Breakdown & Details"
+                              className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-transparent border-0 p-0"
+                            >
+                              <span>Breakdown</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Status Badges */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {dueInfo.invoiceDue > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs font-mono">
+                              <AlertCircle size={10} className="text-rose-600 shrink-0" />
+                              <span>Invoice Due: RM {dueInfo.invoiceDue.toLocaleString()}</span>
+                            </span>
+                          )}
+
+                          {dueInfo.customerDue > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs font-mono">
+                              <Clock size={10} className="text-amber-600 shrink-0" />
+                              <span>Worker Due: RM {dueInfo.customerDue.toLocaleString()}</span>
+                            </span>
+                          )}
+
+                          {!dueInfo.hasDirectDue && dueInfo.walletPending > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/90 shadow-2xs">
+                              <Clock size={10} className="text-amber-600 shrink-0" />
+                              <span>Pending Dues</span>
+                            </span>
+                          )}
+
+                          {dueInfo.totalDue === 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                              <CheckCircle2 size={10} className="text-emerald-600 shrink-0" />
+                              <span>Cleared</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
 
                     {/* Expire Date & Countdown Column */}
@@ -736,9 +1034,27 @@ export default function CompaniesPage() {
                       </div>
                     </td>
 
-                    {/* Action Buttons: Details & Settings matching screenshot icons */}
+                    {/* Action Buttons: Due Payment, Details & Settings matching screenshot icons */}
                     <td className="py-3 px-4 align-middle text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Due Payment Action Button */}
+                        <button
+                          type="button"
+                          onClick={() => openPaymentModal(company)}
+                          title={
+                            dueInfo.totalDue > 0
+                              ? `Pay Due (RM ${dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })})`
+                              : 'Record Due Payment / Settle Balance'
+                          }
+                          className={`w-9 h-8 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                            dueInfo.totalDue > 0
+                              ? 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold'
+                              : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          <CreditCard size={15} />
+                        </button>
+
                         <Link
                           href={`/services?company=${encodeURIComponent(company.id)}`}
                           title="View Digital Service Cards"
@@ -786,7 +1102,7 @@ export default function CompaniesPage() {
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="py-12 text-center text-slate-500 font-medium bg-slate-50/50"
                   >
                     {isRestrictedRole && accessibleCompanies.length === 0 ? (
@@ -940,6 +1256,422 @@ export default function CompaniesPage() {
           </div>
         </div>
       )}
+
+      {/* Company Due Breakdown Modal */}
+      {viewingDueCompany && (() => {
+        const dueInfo = getCompanyDueInfo(viewingDueCompany);
+        const hasInvoices = dueInfo.invoices.length > 0;
+        const hasPendings = dueInfo.pendings.length > 0;
+
+        // Determine target routes based on user role
+        const isSuperAdmin = !currentUser?.role || currentUser?.role === 'SuperAdmin';
+        const invoicesHref = isSuperAdmin ? '/superadmin/companies/invoices' : `/services?company=${encodeURIComponent(viewingDueCompany.id)}`;
+        const customerPendingHref = isSuperAdmin
+          ? '/superadmin/customers/pending-amount'
+          : currentUser?.role === 'MasterAdmin'
+          ? '/masteradmin/customers/pending-amount'
+          : '/employee/customers/pending-amount';
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-slate-900 to-[#0b4da2] text-white p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <CreditCard size={18} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold m-0 leading-tight">
+                      {viewingDueCompany.name}
+                    </h3>
+                    <p className="text-[11px] text-white/70 m-0 font-mono">
+                      {viewingDueCompany.roc || 'No ROC'} • Financial Due Ledger
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingDueCompany(null)}
+                  className="text-white/70 hover:text-white p-1 rounded hover:bg-white/10 cursor-pointer bg-transparent border-0"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                {/* Summary Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider block">
+                      Total Outstanding Due
+                    </span>
+                    <div className="text-2xl font-black font-mono text-slate-900 mt-0.5">
+                      RM {dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div>
+                    {dueInfo.invoiceDue > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                        <AlertCircle size={13} className="text-rose-600" />
+                        <span>Action Required</span>
+                      </span>
+                    ) : dueInfo.totalDue > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                        <Clock size={13} className="text-amber-600" />
+                        <span>Pending Settlement</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <CheckCircle2 size={13} className="text-emerald-600" />
+                        <span>Fully Cleared</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 1: Invoices Due */}
+                <div className="border border-slate-200 rounded-lg p-3.5 bg-white">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                      <FileText size={14} className="text-blue-600" />
+                      <span>Company Invoices &amp; Subscriptions</span>
+                    </div>
+                    <span className="font-mono font-bold text-xs text-slate-900">
+                      RM {dueInfo.invoiceDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {hasInvoices ? (
+                    <div className="space-y-2 mt-2">
+                      {dueInfo.invoices.map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="bg-slate-50 border border-slate-100 rounded p-2 text-xs flex items-center justify-between"
+                        >
+                          <div>
+                            <div className="font-semibold text-slate-800">
+                              {inv.invoice_no} • {inv.package_name || 'Service Package'}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Due: {inv.due_date || 'No Date'} • Status: {inv.payment_status}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono font-bold text-rose-600">
+                              RM {Number(inv.balance_due).toFixed(2)}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Total: RM {Number(inv.total_amount).toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 m-0 italic">
+                      {dueInfo.invoiceDue > 0
+                        ? `Recorded balance due: RM ${dueInfo.invoiceDue.toFixed(2)}`
+                        : 'No unpaid invoices logged. All billed subscriptions and packages are settled.'}
+                    </p>
+                  )}
+
+                  {isSuperAdmin && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-end">
+                      <Link
+                        href={invoicesHref}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center gap-1 hover:underline"
+                      >
+                        <span>Manage Company Invoices</span>
+                        <ExternalLink size={12} />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Worker / Customer Pending Ledger */}
+                <div className="border border-slate-200 rounded-lg p-3.5 bg-white">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
+                      <Wallet size={14} className="text-amber-600" />
+                      <span>Foreign Worker Pending Dues</span>
+                    </div>
+                    <span className="font-mono font-bold text-xs text-slate-900">
+                      RM {(dueInfo.customerDue > 0 ? dueInfo.customerDue : dueInfo.walletPending).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {hasPendings ? (
+                    <div className="space-y-2 mt-2">
+                      {dueInfo.pendings.map((rec) => (
+                        <div
+                          key={rec.id}
+                          className="bg-slate-50 border border-slate-100 rounded p-2 text-xs flex items-center justify-between"
+                        >
+                          <div>
+                            <div className="font-semibold text-slate-800">
+                              {rec.customer_name} ({rec.passport_no || 'Worker'})
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Target: RM {Number(rec.target_amount).toFixed(2)} • Deposited: RM {Number(rec.total_deposited).toFixed(2)}
+                            </div>
+                          </div>
+                          <div className="text-right font-mono font-bold text-amber-700">
+                            RM {Number(rec.pending_amount).toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 m-0">
+                      Foreign worker pending ledger allocation based on active/inactive quota and recorded worker metrics (RM {dueInfo.walletPending.toLocaleString()}).
+                    </p>
+                  )}
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-end">
+                    <Link
+                      href={customerPendingHref}
+                      className="text-xs text-amber-700 hover:text-amber-900 font-semibold inline-flex items-center gap-1 hover:underline"
+                    >
+                      <span>Inspect Pending Amounts Ledger</span>
+                      <ExternalLink size={12} />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-between">
+                <div>
+                  {dueInfo.totalDue > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const comp = viewingDueCompany;
+                        setViewingDueCompany(null);
+                        openPaymentModal(comp);
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                    >
+                      <CreditCard size={14} />
+                      <span>Settle Due Payment (RM {dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })})</span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingDueCompany(null)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Due Payment / Settlement Modal */}
+      {payingCompany && (() => {
+        const dueInfo = getCompanyDueInfo(payingCompany);
+        const parsedAmount = parseFloat(payAmount) || 0;
+        const currentTotalDue = dueInfo.totalDue;
+        const remainingDueAfter = Math.max(0, currentTotalDue - parsedAmount);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-900 text-white p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-xs shadow-inner">
+                    <CreditCard size={22} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold m-0 leading-tight">
+                      Record Due Payment
+                    </h3>
+                    <p className="text-xs text-emerald-100/90 m-0 mt-0.5 font-medium">
+                      {payingCompany.name} • {payingCompany.roc || 'Entity'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPayingCompany(null)}
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 cursor-pointer bg-transparent border-0 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Form Content */}
+              <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
+                {/* Live Balance Overview Card */}
+                <div className="bg-gradient-to-br from-slate-50 to-emerald-50/50 border border-emerald-100 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                      Current Outstanding Due
+                    </span>
+                    <span className="text-2xl font-black font-mono text-slate-900">
+                      RM {currentTotalDue.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                      Remaining After Payment
+                    </span>
+                    <span className={`text-sm font-bold font-mono ${remainingDueAfter === 0 ? 'text-emerald-700' : 'text-amber-800'}`}>
+                      RM {remainingDueAfter.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Amount to Pay */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Payment Amount (RM) <span className="text-rose-500">*</span>
+                    </label>
+                    {currentTotalDue > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount(String(currentTotalDue))}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100/80 text-emerald-800 hover:bg-emerald-200 cursor-pointer border-0 transition-colors"
+                        >
+                          Full (RM {currentTotalDue.toFixed(2)})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount((currentTotalDue / 2).toFixed(2))}
+                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer border-0 transition-colors"
+                        >
+                          50%
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
+                      RM
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-11 pr-4 py-2.5 text-sm font-bold font-mono bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Payment Method & Date (2 columns) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Payment Method
+                    </label>
+                    <select
+                      value={payMethod}
+                      onChange={(e) => setPayMethod(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="Bank Transfer">Bank Transfer (FPX / Interbank)</option>
+                      <option value="Cash Deposit">Cash Deposit (CDM)</option>
+                      <option value="Online Payment Gateway">Online Gateway / Card</option>
+                      <option value="Company Cheque">Company Cheque</option>
+                      <option value="Direct Wallet Settlement">Direct Wallet Settlement</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Payment Date
+                    </label>
+                    <input
+                      type="date"
+                      value={payDate}
+                      onChange={(e) => setPayDate(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Reference No & Bank Name (2 columns) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Transaction Ref / Receipt No
+                    </label>
+                    <input
+                      type="text"
+                      value={payReference}
+                      onChange={(e) => setPayReference(e.target.value)}
+                      placeholder="e.g. TRX-20261103"
+                      className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Bank Name
+                    </label>
+                    <input
+                      type="text"
+                      value={payBankName}
+                      onChange={(e) => setPayBankName(e.target.value)}
+                      placeholder="e.g. Maybank, CIMB"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Notes / Remarks */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Settlement Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={payNotes}
+                    onChange={(e) => setPayNotes(e.target.value)}
+                    placeholder="e.g. Monthly subscription due clearance"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setPayingCompany(null)}
+                    disabled={isSubmittingPayment}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingPayment}
+                    className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>
+                      {isSubmittingPayment
+                        ? 'Processing Payment...'
+                        : `Confirm & Record Payment (RM ${parsedAmount > 0 ? parsedAmount.toFixed(2) : '0.00'})`}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Shared Footer */}
       <Footer />

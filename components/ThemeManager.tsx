@@ -41,9 +41,13 @@ import {
   DEFAULT_THEME2_DATA,
   ServiceCardsAnimationType,
   DashboardCardDesignType,
+  GlassThemeColors,
+  DEFAULT_GLASS_THEME_COLORS,
   getStoredThemeSettings,
   fetchThemeSettings,
   saveThemeSettingsToBackend,
+  saveThemeSettingsToLocal,
+  applyGlassThemeColors,
   getServiceCardAnimationClass,
   getServiceCardAnimationStyle,
 } from '@/lib/themeSettings';
@@ -58,8 +62,11 @@ export default function ThemeManager() {
   // Sub-tabs for Home Page Theme
   const [selectedHomeTab, setSelectedHomeTab] = useState<'theme2' | 'theme1'>('theme2');
 
-  // Selected Dashboard Card Design Theme
+  // Selected Dashboard Card Design Theme & Glass Colors
   const [selectedCardDesign, setSelectedCardDesign] = useState<DashboardCardDesignType>('default');
+  const [glassColors, setGlassColors] = useState<GlassThemeColors>(() => {
+    return DEFAULT_GLASS_THEME_COLORS;
+  });
 
   // Selected Service Cards Animation & Timing
   const [selectedCardAnim, setSelectedCardAnim] = useState<ServiceCardsAnimationType>('from-bottom');
@@ -81,6 +88,9 @@ export default function ThemeManager() {
     if (cached.dashboard_card_design) {
       setSelectedCardDesign(cached.dashboard_card_design);
     }
+    if (cached.glass_theme_colors) {
+      setGlassColors(cached.glass_theme_colors);
+    }
     if (cached.service_cards_animation) {
       setSelectedCardAnim(cached.service_cards_animation);
     }
@@ -100,6 +110,10 @@ export default function ThemeManager() {
         }
         if (data.dashboard_card_design) {
           setSelectedCardDesign(data.dashboard_card_design);
+        }
+        if (data.glass_theme_colors) {
+          setGlassColors(data.glass_theme_colors);
+          applyGlassThemeColors(data.glass_theme_colors);
         }
         if (data.service_cards_animation) {
           setSelectedCardAnim(data.service_cards_animation);
@@ -131,6 +145,29 @@ export default function ThemeManager() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to switch card design theme');
+      setTimeout(() => setErrorMessage(null), 4000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGlassColorsChange = async (newColors: GlassThemeColors) => {
+    const updated: ThemeSettings = {
+      ...settings,
+      glass_theme_colors: newColors,
+    };
+    setSettings(updated);
+    setGlassColors(newColors);
+    saveThemeSettingsToLocal(updated);
+    applyGlassThemeColors(newColors);
+
+    try {
+      setSaving(true);
+      await saveThemeSettingsToBackend({ glass_theme_colors: newColors });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to save glass theme colors');
       setTimeout(() => setErrorMessage(null), 4000);
     } finally {
       setSaving(false);
@@ -807,6 +844,8 @@ export default function ThemeManager() {
         <CardDesignThemeSection
           selectedCardDesign={selectedCardDesign}
           onSelectDesign={handleCardDesignChange}
+          glassColors={glassColors}
+          onSaveGlassColors={handleGlassColorsChange}
           saving={saving}
         />
       )}

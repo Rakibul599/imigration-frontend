@@ -12,11 +12,12 @@ import {
   fetchThemeSettings,
   subscribeToThemeChanges,
   DashboardCardDesignType,
+  applyGlassThemeColors,
 } from '@/lib/themeSettings';
 
 export default function SiteSettingsProvider() {
   useEffect(() => {
-    const applyCardDesignTheme = (design?: DashboardCardDesignType) => {
+    const applyCardDesignTheme = (design?: DashboardCardDesignType, colors?: any) => {
       if (typeof document === 'undefined') return;
       if (design === 'glassmorphism') {
         document.documentElement.setAttribute('data-card-design', 'glassmorphism');
@@ -25,6 +26,7 @@ export default function SiteSettingsProvider() {
         document.documentElement.removeAttribute('data-card-design');
         document.body.classList.remove('card-theme-glass');
       }
+      applyGlassThemeColors(colors);
     };
 
     const initial = getStoredSettings();
@@ -35,7 +37,7 @@ export default function SiteSettingsProvider() {
 
     // Apply active card theme immediately
     const initialTheme = getStoredThemeSettings();
-    applyCardDesignTheme(initialTheme.dashboard_card_design);
+    applyCardDesignTheme(initialTheme.dashboard_card_design, initialTheme.glass_theme_colors);
 
     fetchSiteSettings()
       .then((data) => {
@@ -48,7 +50,7 @@ export default function SiteSettingsProvider() {
 
     fetchThemeSettings()
       .then((themeData) => {
-        applyCardDesignTheme(themeData.dashboard_card_design);
+        applyCardDesignTheme(themeData.dashboard_card_design, themeData.glass_theme_colors);
       })
       .catch(() => {});
 
@@ -60,7 +62,7 @@ export default function SiteSettingsProvider() {
     });
 
     const unsubTheme = subscribeToThemeChanges((newTheme) => {
-      applyCardDesignTheme(newTheme.dashboard_card_design);
+      applyCardDesignTheme(newTheme.dashboard_card_design, newTheme.glass_theme_colors);
     });
 
     const handleChunkError = (event: ErrorEvent | PromiseRejectionEvent) => {

@@ -500,18 +500,18 @@ body.card-theme-glass .company-directory-card {
   /* Multi-stop crystal frosted glass with subtle diagonal specular sheen */
   background: 
     linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.05) 40%, transparent 60%),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.82) 0%, rgba(240, 249, 255, 0.58) 50%, rgba(255, 255, 255, 0.75) 100%) !important;
-  backdrop-filter: blur(20px) saturate(190%) contrast(102%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(190%) contrast(102%) !important;
+    linear-gradient(to bottom, var(--glass-base-bg, rgba(255, 255, 255, 0.82)) 0%, var(--glass-base-tint, rgba(240, 249, 255, 0.58)) 50%, rgba(255, 255, 255, 0.75) 100%) !important;
+  backdrop-filter: blur(var(--glass-blur, 20px)) saturate(190%) contrast(102%) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur, 20px)) saturate(190%) contrast(102%) !important;
   /* Initial subtle crisp edge border */
-  border: 1px solid rgba(186, 230, 253, 0.75) !important;
+  border: var(--glass-border-width, 1px) solid var(--glass-border-color, rgba(186, 230, 253, 0.75)) !important;
   border-radius: 1.25rem !important;
   box-shadow: 
     0 4px 20px -2px rgba(15, 23, 42, 0.06),
     0 1px 3px 0 rgba(15, 23, 42, 0.04),
     inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
     inset 0 0 0 1px rgba(255, 255, 255, 0.65),
-    inset 0 -1.5px 3px 0 rgba(186, 230, 253, 0.35) !important;
+    inset 0 -1.5px 3px 0 var(--glass-border-inner, rgba(186, 230, 253, 0.35)) !important;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
   overflow: hidden;
 }
@@ -537,11 +537,11 @@ body.card-theme-glass .company-directory-card::before {
   background: radial-gradient(
     ellipse at center,
     rgba(255, 255, 255, 1) 0%,
-    rgba(186, 230, 253, 0.95) 35%,
-    rgba(56, 189, 248, 0.6) 65%,
+    var(--glass-flare-1, rgba(186, 230, 253, 0.95)) 35%,
+    var(--glass-flare-2, rgba(56, 189, 248, 0.6)) 65%,
     transparent 85%
-  );
-  box-shadow: 0 0 10px 2px rgba(56, 189, 248, 0.5);
+  ) !important;
+  box-shadow: 0 0 10px 2px var(--glass-flare-glow, rgba(56, 189, 248, 0.5)) !important;
   pointer-events: none;
   z-index: 10;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -568,17 +568,17 @@ body.card-theme-glass .company-directory-card::after {
   background: radial-gradient(
     ellipse at center,
     rgba(255, 255, 255, 1) 0%,
-    rgba(186, 230, 253, 0.95) 35%,
-    rgba(56, 189, 248, 0.6) 65%,
+    var(--glass-flare-1, rgba(186, 230, 253, 0.95)) 35%,
+    var(--glass-flare-2, rgba(56, 189, 248, 0.6)) 65%,
     transparent 85%
-  );
-  box-shadow: 0 0 10px 2px rgba(56, 189, 248, 0.5);
+  ) !important;
+  box-shadow: 0 0 10px 2px var(--glass-flare-glow, rgba(56, 189, 248, 0.5)) !important;
   pointer-events: none;
   z-index: 10;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* HOVER EFFECT: Luminous Frosted Glass with delicate even Akashi Sky Blue tint */
+/* HOVER EFFECT: Luminous Frosted Glass with dynamic tint & glow */
 .dashboard-card-glass:hover,
 html[data-card-design="glassmorphism"] .admin-stat-card:hover,
 body.card-theme-glass .admin-stat-card:hover,
@@ -591,21 +591,21 @@ body.card-theme-glass .kpi-card:hover,
 html[data-card-design="glassmorphism"] .company-directory-card:hover,
 body.card-theme-glass .company-directory-card:hover {
   transform: translateY(-4px) !important;
-  border-color: rgba(56, 189, 248, 0.75) !important;
+  border-color: var(--glass-hover-border, rgba(56, 189, 248, 0.75)) !important;
   background: linear-gradient(
     135deg,
-    rgba(56, 189, 248, 0.30) 0%,
-    rgba(14, 165, 233, 0.22) 48%,
-    rgba(56, 189, 248, 0.28) 100%
+    var(--glass-hover-bg-1, rgba(56, 189, 248, 0.30)) 0%,
+    var(--glass-hover-bg-2, rgba(14, 165, 233, 0.22)) 48%,
+    var(--glass-hover-bg-3, rgba(56, 189, 248, 0.28)) 100%
   ) !important;
-  backdrop-filter: blur(24px) saturate(190%) contrast(102%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) contrast(102%) !important;
+  backdrop-filter: blur(var(--glass-hover-blur, 24px)) saturate(190%) contrast(102%) !important;
+  -webkit-backdrop-filter: blur(var(--glass-hover-blur, 24px)) saturate(190%) contrast(102%) !important;
   box-shadow: 
-    0 16px 36px -6px rgba(14, 165, 233, 0.25),
-    0 0 24px 2px rgba(56, 189, 248, 0.25),
+    0 16px 36px -6px var(--glass-hover-shadow-1, rgba(14, 165, 233, 0.25)),
+    0 0 24px 2px var(--glass-hover-shadow-2, rgba(56, 189, 248, 0.25)),
     inset 0 1.5px 2px rgba(255, 255, 255, 0.90),
     inset 0 0 0 1px rgba(255, 255, 255, 0.40),
-    inset 0 0 30px rgba(56, 189, 248, 0.18) !important;
+    inset 0 0 30px var(--glass-hover-inner, rgba(56, 189, 248, 0.18)) !important;
 }
 
 .dashboard-card-glass:hover::before,
@@ -625,11 +625,11 @@ body.card-theme-glass .company-directory-card:hover::before {
   background: radial-gradient(
     ellipse at center,
     rgba(255, 255, 255, 1) 0%,
-    rgba(186, 230, 253, 0.9) 35%,
-    rgba(56, 189, 248, 0.6) 65%,
+    var(--glass-flare-1, rgba(186, 230, 253, 0.9)) 35%,
+    var(--glass-flare-2, rgba(56, 189, 248, 0.6)) 65%,
     transparent 85%
-  );
-  box-shadow: 0 0 14px 3px rgba(56, 189, 248, 0.6);
+  ) !important;
+  box-shadow: 0 0 14px 3px var(--glass-flare-glow-hover, rgba(56, 189, 248, 0.6)) !important;
 }
 
 .dashboard-card-glass:hover::after,
@@ -649,11 +649,11 @@ body.card-theme-glass .company-directory-card:hover::after {
   background: radial-gradient(
     ellipse at center,
     rgba(255, 255, 255, 1) 0%,
-    rgba(186, 230, 253, 0.9) 35%,
-    rgba(56, 189, 248, 0.6) 65%,
+    var(--glass-flare-1, rgba(186, 230, 253, 0.9)) 35%,
+    var(--glass-flare-2, rgba(56, 189, 248, 0.6)) 65%,
     transparent 85%
-  );
-  box-shadow: 0 0 14px 3px rgba(56, 189, 248, 0.6);
+  ) !important;
+  box-shadow: 0 0 14px 3px var(--glass-flare-glow-hover, rgba(56, 189, 248, 0.6)) !important;
 }
 
 /* STRICT ISOLATION: Buttons, forms, inputs, selects, and dialogs are completely protected from card glass styles */

@@ -94,6 +94,9 @@ export type Company = {
   profitWallet?: number; // Total Profit Wallet (MYR)
   workerWallet?: number; // Foreign Worker Wallet (MYR)
   pendingWallet?: number; // Total Foreigner Pending Wallet (MYR)
+  invoice_due?: number; // Total Invoice Balance Due (MYR)
+  customer_due?: number; // Total Customer Pending Amounts (MYR)
+  total_due?: number; // Total Combined Outstanding Due (MYR)
 
   // Additional comprehensive company fields
   address?: string; // Company Address

@@ -234,10 +234,9 @@ export default function TrialApplicationsPage() {
 
     if (
       !confirm(
-        `Are you sure you want to ${actionText} "${app.company_name}"? ${
-          isCurrentlyInactive
-            ? 'Their Master Admin portal access will be enabled.'
-            : 'Their Master Admin portal access will be temporarily disabled.'
+        `Are you sure you want to ${actionText} "${app.company_name}"? ${isCurrentlyInactive
+          ? 'Their Master Admin portal access will be enabled.'
+          : 'Their Master Admin portal access will be temporarily disabled.'
         }`
       )
     ) {
@@ -314,7 +313,7 @@ export default function TrialApplicationsPage() {
         const d = new Date(customEndDateInput);
         d.setDate(d.getDate() + days);
         setCustomEndDateInput(d.toISOString().slice(0, 16));
-      } catch {}
+      } catch { }
     } else {
       const d = new Date();
       d.setDate(d.getDate() + days);
@@ -586,13 +585,12 @@ export default function TrialApplicationsPage() {
       {/* Notification Banner */}
       {notification && (
         <div
-          className={`p-4 rounded-xl text-xs font-medium flex items-center justify-between border ${
-            notification.type === 'success'
+          className={`p-4 rounded-xl text-xs font-medium flex items-center justify-between border ${notification.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : notification.type === 'error'
-              ? 'bg-rose-50 border-rose-200 text-rose-800'
-              : 'bg-blue-50 border-blue-200 text-blue-800'
-          }`}
+                ? 'bg-rose-50 border-rose-200 text-rose-800'
+                : 'bg-blue-50 border-blue-200 text-blue-800'
+            }`}
         >
           <div className="flex items-center gap-2.5">
             {notification.type === 'success' ? (
@@ -631,11 +629,10 @@ export default function TrialApplicationsPage() {
         {/* Pending Review */}
         <div
           onClick={() => setStatusFilter('pending')}
-          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'pending'
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${statusFilter === 'pending'
               ? 'border-amber-400 ring-2 ring-amber-400/20'
               : 'border-slate-200/90 hover:border-amber-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
@@ -654,11 +651,10 @@ export default function TrialApplicationsPage() {
         {/* Active Companies / Trials */}
         <div
           onClick={() => setStatusFilter('active')}
-          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'active'
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${statusFilter === 'active'
               ? 'border-emerald-400 ring-2 ring-emerald-400/20'
               : 'border-slate-200/90 hover:border-emerald-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
@@ -677,11 +673,10 @@ export default function TrialApplicationsPage() {
         {/* Inactive Companies */}
         <div
           onClick={() => setStatusFilter('inactive')}
-          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
-            statusFilter === 'inactive'
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${statusFilter === 'inactive'
               ? 'border-rose-400 ring-2 ring-rose-400/20'
               : 'border-slate-200/90 hover:border-rose-300'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">
@@ -757,11 +752,10 @@ export default function TrialApplicationsPage() {
                 key={st.key}
                 type="button"
                 onClick={() => setStatusFilter(st.key as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
-                  isSelected
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${isSelected
                     ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 {st.label}
               </button>
@@ -1017,11 +1011,10 @@ export default function TrialApplicationsPage() {
                           <button
                             type="button"
                             onClick={() => handleToggleActive(app)}
-                            className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
-                              app.status === 'inactive'
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${app.status === 'inactive'
                                 ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200'
                                 : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
-                            }`}
+                              }`}
                             title={
                               app.status === 'inactive'
                                 ? 'Status: Inactive (Click to Activate)'
@@ -1134,11 +1127,10 @@ export default function TrialApplicationsPage() {
                       key={days}
                       type="button"
                       onClick={() => handleSetPresetDays(days)}
-                      className={`py-1.5 px-2 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
-                        durationDaysInput === days
+                      className={`py-1.5 px-2 rounded-lg font-bold text-xs border transition-all cursor-pointer ${durationDaysInput === days
                           ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                      }`}
+                        }`}
                     >
                       {days} Days
                     </button>
