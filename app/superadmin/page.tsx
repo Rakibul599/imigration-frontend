@@ -90,6 +90,7 @@ export default function SuperAdminDashboard() {
 
   const totalWorkers = companies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0);
   const sectors = Array.from(new Set(companies.map((c) => c.sector)));
+  const activeDashboardCards = cards && cards.length > 0 ? cards : DEFAULT_DASHBOARD_CARDS;
 
   // Extensible Tab List - more tabs can easily be added to this array in the future
   const dashboardTabs: DashboardTabItem[] = useMemo(() => [
@@ -224,9 +225,9 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
 
-          {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config & Theme) */}
+          {/* KPI Cards (Exact Dashboard Card Design, Hardcoded Static Fallback & Theme) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {cards.map((card) => {
+            {activeDashboardCards.map((card) => {
               if (card.id === 'reg_companies') {
                 return (
                   <button
@@ -405,14 +406,15 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
 
-          {/* Card Priority & Customization Modal */}
+          {/* Card Priority & Customization Modal (Add Card Disabled) */}
           <CardPriorityModal
             isOpen={isCardModalOpen}
             onClose={() => setIsCardModalOpen(false)}
-            cards={cards}
+            cards={activeDashboardCards}
             onSave={handleSaveCards}
             onReset={handleResetCards}
             pageTitle="Super Administrator Dashboard"
+            allowAdd={false}
           />
         </div>
       )}

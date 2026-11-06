@@ -256,13 +256,20 @@ export default function SuperAdminCompaniesPage() {
   const totalProfitWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
   const totalPendingWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyPendingWallet(c), 0);
 
+  // Memoized permanent fallback cards ensuring cards never disappear even if DB is deleted
+  const activeStatCards = useMemo(() => {
+    return statCards && statCards.length > 0 ? statCards : DEFAULT_COMPANY_STAT_CARDS;
+  }, [statCards]);
+
   // Additional wallet and profit cards metrics
-  const othersCostCard = statCards.find((c) => c.card_key === 'others_cost' || c.card_key === 'others_expense');
-  const othersProfitCard = statCards.find((c) => c.card_key === 'others_profit');
-  const othersPendingCard = statCards.find((c) => c.card_key === 'others_pending');
-  const totalProfitCard = statCards.find((c) => c.card_key === 'total_profit');
+  const othersCostCard = activeStatCards.find((c) => c.card_key === 'others_cost');
+  const othersExpenseCard = activeStatCards.find((c) => c.card_key === 'others_expense');
+  const othersProfitCard = activeStatCards.find((c) => c.card_key === 'others_profit');
+  const othersPendingCard = activeStatCards.find((c) => c.card_key === 'others_pending');
+  const totalProfitCard = activeStatCards.find((c) => c.card_key === 'total_profit');
 
   const totalOthersCost = othersCostCard?.custom_value !== undefined && othersCostCard.custom_value !== null ? Number(othersCostCard.custom_value) : 45000;
+  const totalOthersExpense = othersExpenseCard?.custom_value !== undefined && othersExpenseCard.custom_value !== null ? Number(othersExpenseCard.custom_value) : 0;
   const totalOthersProfit = othersProfitCard?.custom_value !== undefined && othersProfitCard.custom_value !== null ? Number(othersProfitCard.custom_value) : 32500;
   const totalOthersPending = othersPendingCard?.custom_value !== undefined && othersPendingCard.custom_value !== null ? Number(othersPendingCard.custom_value) : 18200;
 
@@ -365,10 +372,21 @@ export default function SuperAdminCompaniesPage() {
           },
         };
       case 'others_cost':
-      case 'others_expense':
         return {
           value: `RM ${(card.custom_value ?? totalOthersCost).toLocaleString()}`,
-          sub: card.subtitle || 'Miscellaneous & Other Expenses',
+          sub: card.subtitle || 'Miscellaneous / Other Expenses',
+          isLink: false,
+          theme: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-100',
+            valColor: 'text-rose-700',
+          },
+        };
+      case 'others_expense':
+        return {
+          value: `RM ${(card.custom_value ?? totalOthersExpense).toLocaleString()}`,
+          sub: card.subtitle || 'Miscellaneous / Other Expenses',
           isLink: false,
           theme: {
             bg: 'bg-rose-50',
@@ -492,7 +510,7 @@ export default function SuperAdminCompaniesPage() {
 
   // Open Manage Modal
   const openManageModal = () => {
-    setManageCardsList([...statCards]);
+    setManageCardsList([...activeStatCards]);
     setEditingCardIdInModal(null);
     setIsManageModalOpen(true);
   };
@@ -950,23 +968,12 @@ export default function SuperAdminCompaniesPage() {
               Overview & Financial Treasury Cards
             </span>
             <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0b4da2] border border-blue-200 text-[10px] font-bold font-mono">
-              {statCards.length} Cards
+              {activeStatCards.length} Cards
             </span>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Add New Card Button */}
-            <button
-              type="button"
-              onClick={openAddCardModal}
-              title="Add a new custom financial or metric card"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs hover:shadow transition-all cursor-pointer border-0"
-            >
-              <Plus size={14} />
-              <span>Add New Card</span>
-            </button>
-
-            {/* Manage Cards & Priority Button */}
+            {/* Manage Cards & Priority Button (Add Card Disabled) */}
             <button
               type="button"
               onClick={openManageModal}
@@ -979,9 +986,9 @@ export default function SuperAdminCompaniesPage() {
           </div>
         </div>
 
-        {/* 9 Stat & Wallet Cards Grid (Matching Dashboard Card Design) */}
+        {/* 12 Stat & Wallet Cards Grid (Matching Dashboard Card Design, Hardcoded Static Fallback) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((card) => {
+          {activeStatCards.map((card) => {
             const metrics = getCardMetrics(card);
             const isCurrency = metrics.value.startsWith('RM');
 
@@ -1385,15 +1392,6 @@ export default function SuperAdminCompaniesPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={openAddCardModal}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer border-0"
-                  title="Create and add a new card"
-                >
-                  <Plus size={14} />
-                  <span>+ Add Card</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setIsManageModalOpen(false)}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer bg-transparent border-0"
                 >
@@ -1524,16 +1522,6 @@ export default function SuperAdminCompaniesPage() {
                         >
                           <Edit2 size={12} />
                           <span>{isEditing ? 'Close' : 'Edit'}</span>
-                        </button>
-
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCard(card)}
-                          title="Delete card"
-                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-800 cursor-pointer transition-colors border-0"
-                        >
-                          <Trash2 size={13} />
                         </button>
                       </div>
                     </div>

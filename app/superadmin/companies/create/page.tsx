@@ -11,7 +11,6 @@ import {
   Calendar,
   Car,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Coins,
@@ -26,10 +25,10 @@ import {
   Globe2,
   Image as ImageIcon,
   Languages,
-  Layers,
   Mail,
   MapPin,
   Phone,
+  PhoneCall,
   Plus,
   RefreshCw,
   Save,
@@ -44,7 +43,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { Company, CompanyDirector, DirectorDocument, DirectorExcelDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
+import { Company, CompanyDirector, DirectorCar, DirectorDocument, DirectorExcelDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
 import {
   fileToBase64,
   getCompanyById,
@@ -107,6 +106,17 @@ const BANK_PRESETS = [
   'Other Corporate Bank',
 ];
 
+function createEmptyCar(index = 1): DirectorCar {
+  return {
+    id: `car-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    plateNo: '',
+    purchaseType: 'emi',
+    depositAmount: '',
+    amount: '',
+    totalPayment: '',
+  };
+}
+
 function createEmptyDirector(index = 1): CompanyDirector {
   return {
     id: `dir-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -120,8 +130,10 @@ function createEmptyDirector(index = 1): CompanyDirector {
     carPlateNo: '',
     carPlates: [''],
     carPurchaseType: 'emi',
+    carDepositAmount: '',
     carAmount: '',
     carTotalPayment: '',
+    cars: [createEmptyCar(1)],
     basicSalary: '',
     otherDocuments: [],
     excelDocuments: [],
@@ -138,6 +150,7 @@ function CreateCompanyFormContent() {
   const [roc, setRoc] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [telephone, setTelephone] = useState('');
   const [email, setEmail] = useState('');
   const [logo, setLogo] = useState<string>('');
   const [currency, setCurrency] = useState('MYR');
@@ -182,11 +195,6 @@ function CreateCompanyFormContent() {
         .then((list) => {
           if (list && list.length > 0) {
             setSectorsList(list);
-            if (!editId) {
-              const active = list.filter((s) => (s.status || 'active') === 'active');
-              setSector((prev) => prev || active[0]?.name || list[0]?.name || '');
-              setCompanySectors((prev) => (prev.length > 0 ? prev : [active[0]?.name || list[0]?.name || '']));
-            }
           }
         })
         .catch(() => {});
@@ -194,14 +202,7 @@ function CreateCompanyFormContent() {
     loadSectors();
     window.addEventListener('working_sectors_updated', loadSectors);
     return () => window.removeEventListener('working_sectors_updated', loadSectors);
-  }, [editId]);
-
-  // Generate random default ROC on new company
-  useEffect(() => {
-    if (!editId) {
-      setRoc(`ROC-${new Date().getFullYear()}${Math.floor(10000000 + Math.random() * 90000000)}`);
-    }
-  }, [editId]);
+  }, []);
 
   // Load existing data in Edit mode
   useEffect(() => {
@@ -212,6 +213,7 @@ function CreateCompanyFormContent() {
         setRoc(comp.roc);
         setAddress(comp.address || '');
         setPhone(comp.phone || '');
+        setTelephone(comp.telephone || '');
         setEmail(comp.email || '');
         setLogo(comp.logo || '');
         setCurrency(comp.currency || 'MYR');
@@ -232,15 +234,46 @@ function CreateCompanyFormContent() {
 
         if (comp.directors && comp.directors.length > 0) {
           setDirectors(
-            comp.directors.map((d) => ({
-              ...d,
-              carTotalPayment: d.carTotalPayment || '',
-              carPlates:
-                Array.isArray(d.carPlates) && d.carPlates.length > 0
+            comp.directors.map((d) => {
+              let parsedCars: DirectorCar[] = [];
+              if (Array.isArray(d.cars) && d.cars.length > 0) {
+                parsedCars = d.cars.map((c, cIdx) => ({
+                  id: c.id || `car-${cIdx + 1}-${Date.now()}`,
+                  plateNo: c.plateNo || '',
+                  purchaseType: (c.purchaseType || 'emi') as 'cash' | 'emi',
+                  depositAmount: c.depositAmount || '',
+                  amount: c.amount || '',
+                  totalPayment: c.totalPayment || '',
+                }));
+              } else {
+                const legacyPlates = Array.isArray(d.carPlates) && d.carPlates.length > 0
                   ? d.carPlates
-                  : (d.carPlateNo ? d.carPlateNo.split(',').map((p) => p.trim()).filter(Boolean) : ['']),
-              excelDocuments: Array.isArray(d.excelDocuments) ? d.excelDocuments : [],
-            }))
+                  : (d.carPlateNo ? d.carPlateNo.split(',').map((p) => p.trim()).filter(Boolean) : ['']);
+                parsedCars = legacyPlates.map((plate, pIdx) => ({
+                  id: `car-${pIdx + 1}-${Date.now()}`,
+                  plateNo: plate || '',
+                  purchaseType: (pIdx === 0 ? (d.carPurchaseType || 'emi') : 'emi') as 'cash' | 'emi',
+                  depositAmount: pIdx === 0 ? (d.carDepositAmount || '') : '',
+                  amount: pIdx === 0 ? (d.carAmount || '') : '',
+                  totalPayment: pIdx === 0 ? (d.carTotalPayment || '') : '',
+                }));
+              }
+              if (parsedCars.length === 0) {
+                parsedCars = [createEmptyCar(1)];
+              }
+
+              return {
+                ...d,
+                cars: parsedCars,
+                carPurchaseType: parsedCars[0]?.purchaseType || 'emi',
+                carDepositAmount: parsedCars[0]?.depositAmount || '',
+                carAmount: parsedCars[0]?.amount || '',
+                carTotalPayment: parsedCars[0]?.totalPayment || '',
+                carPlates: parsedCars.map((c) => c.plateNo),
+                carPlateNo: parsedCars.map((c) => c.plateNo).filter(Boolean).join(', '),
+                excelDocuments: Array.isArray(d.excelDocuments) ? d.excelDocuments : [],
+              };
+            })
           );
         }
       }
@@ -386,49 +419,69 @@ function CreateCompanyFormContent() {
     });
   };
 
-  // Car Plate Handlers (Multiple Add)
-  const handleAddCarPlate = (directorIndex: number) => {
+  // Car Handlers (Multiple Cars with Plate, Scheme, Amount, Total Payment)
+  const handleAddCar = (directorIndex: number) => {
     setDirectors((prev) => {
       const copy = [...prev];
       const dir = copy[directorIndex];
-      const currentPlates = Array.isArray(dir.carPlates) ? [...dir.carPlates] : [dir.carPlateNo || ''];
+      const currentCars = Array.isArray(dir.cars) ? [...dir.cars] : [];
+      const updatedCars = [...currentCars, createEmptyCar(currentCars.length + 1)];
       copy[directorIndex] = {
         ...dir,
-        carPlates: [...currentPlates, ''],
+        cars: updatedCars,
+        carPlates: updatedCars.map((c) => c.plateNo),
+        carPlateNo: updatedCars.map((c) => c.plateNo).filter(Boolean).join(', '),
       };
       return copy;
     });
   };
 
-  const handleUpdateCarPlate = (directorIndex: number, plateIndex: number, value: string) => {
+  const handleUpdateCar = (
+    directorIndex: number,
+    carIndex: number,
+    field: keyof DirectorCar,
+    value: any
+  ) => {
     setDirectors((prev) => {
       const copy = [...prev];
       const dir = copy[directorIndex];
-      const currentPlates = Array.isArray(dir.carPlates) ? [...dir.carPlates] : [dir.carPlateNo || ''];
-      currentPlates[plateIndex] = value.toUpperCase();
+      const currentCars = Array.isArray(dir.cars) ? [...dir.cars] : [createEmptyCar(1)];
+      const updatedCar = { ...currentCars[carIndex], [field]: value };
+      currentCars[carIndex] = updatedCar;
+
       copy[directorIndex] = {
         ...dir,
-        carPlates: currentPlates,
-        carPlateNo: currentPlates.filter(Boolean).join(', '),
+        cars: currentCars,
+        carPurchaseType: currentCars[0]?.purchaseType || 'emi',
+        carDepositAmount: currentCars[0]?.depositAmount || '',
+        carAmount: currentCars[0]?.amount || '',
+        carTotalPayment: currentCars[0]?.totalPayment || '',
+        carPlates: currentCars.map((c) => c.plateNo),
+        carPlateNo: currentCars.map((c) => c.plateNo).filter(Boolean).join(', '),
       };
       return copy;
     });
   };
 
-  const handleRemoveCarPlate = (directorIndex: number, plateIndex: number) => {
+  const handleRemoveCar = (directorIndex: number, carIndex: number) => {
     setDirectors((prev) => {
       const copy = [...prev];
       const dir = copy[directorIndex];
-      const currentPlates = Array.isArray(dir.carPlates) ? [...dir.carPlates] : [dir.carPlateNo || ''];
-      if (currentPlates.length <= 1) {
-        currentPlates[0] = '';
+      const currentCars = Array.isArray(dir.cars) ? [...dir.cars] : [createEmptyCar(1)];
+      if (currentCars.length <= 1) {
+        currentCars[0] = createEmptyCar(1);
       } else {
-        currentPlates.splice(plateIndex, 1);
+        currentCars.splice(carIndex, 1);
       }
       copy[directorIndex] = {
         ...dir,
-        carPlates: currentPlates,
-        carPlateNo: currentPlates.filter(Boolean).join(', '),
+        cars: currentCars,
+        carPurchaseType: currentCars[0]?.purchaseType || 'emi',
+        carDepositAmount: currentCars[0]?.depositAmount || '',
+        carAmount: currentCars[0]?.amount || '',
+        carTotalPayment: currentCars[0]?.totalPayment || '',
+        carPlates: currentCars.map((c) => c.plateNo),
+        carPlateNo: currentCars.map((c) => c.plateNo).filter(Boolean).join(', '),
       };
       return copy;
     });
@@ -749,6 +802,7 @@ function CreateCompanyFormContent() {
         description: description.trim() || 'Verified registered employer organization within the Malaysian Immigration portal.',
         address: address.trim(),
         phone: phone.trim(),
+        telephone: telephone.trim(),
         email: email.trim(),
         currency,
         language,
@@ -756,11 +810,19 @@ function CreateCompanyFormContent() {
         bankAccountName: bankAccountName.trim(),
         bankAccountNo: bankAccountNo.trim(),
         directors: directors.map((dir) => {
-          const cleanPlates = Array.isArray(dir.carPlates)
-            ? dir.carPlates.map((p) => p.trim()).filter(Boolean)
-            : (dir.carPlateNo ? [dir.carPlateNo.trim()] : []);
+          const cleanCars: DirectorCar[] = (dir.cars && dir.cars.length > 0 ? dir.cars : [createEmptyCar(1)]).map((c) => ({
+            id: c.id,
+            plateNo: (c.plateNo || '').trim(),
+            purchaseType: (c.purchaseType || 'emi') as 'cash' | 'emi',
+            depositAmount: c.depositAmount || '0',
+            amount: c.amount || '0',
+            totalPayment: c.purchaseType === 'emi' ? (c.totalPayment || '0') : '0',
+          }));
+          const cleanPlates = cleanCars.map((c) => c.plateNo).filter(Boolean);
+
           return {
             ...dir,
+            cars: cleanCars,
             name: dir.name.trim(),
             nidNo: dir.nidNo.trim(),
             passportNo: dir.passportNo.trim(),
@@ -768,10 +830,12 @@ function CreateCompanyFormContent() {
             email: dir.email.trim(),
             socsoNo: dir.socsoNo.trim(),
             epfNo: dir.epfNo.trim(),
-            carPlateNo: cleanPlates.length > 0 ? cleanPlates.join(', ') : dir.carPlateNo.trim(),
-            carPlates: cleanPlates.length > 0 ? cleanPlates : (dir.carPlateNo.trim() ? [dir.carPlateNo.trim()] : ['']),
-            carAmount: dir.carAmount || '0',
-            carTotalPayment: dir.carPurchaseType === 'emi' ? (dir.carTotalPayment || '0') : '0',
+            carPlateNo: cleanPlates.length > 0 ? cleanPlates.join(', ') : '',
+            carPlates: cleanPlates.length > 0 ? cleanPlates : [''],
+            carPurchaseType: cleanCars[0]?.purchaseType || 'emi',
+            carDepositAmount: cleanCars[0]?.depositAmount || '0',
+            carAmount: cleanCars[0]?.amount || '0',
+            carTotalPayment: cleanCars[0]?.purchaseType === 'emi' ? (cleanCars[0]?.totalPayment || '0') : '0',
             basicSalary: dir.basicSalary || '0',
             otherDocuments: dir.otherDocuments || [],
             excelDocuments: dir.excelDocuments || [],
@@ -871,140 +935,128 @@ function CreateCompanyFormContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Company Name */}
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. NATASHA CONSTRUCTION SDN. BHD."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all uppercase"
-                />
-              </div>
-            </div>
-
-            {/* Registration No (ROC) */}
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Registration No (ROC) <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <ShieldCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={roc}
-                  onChange={(e) => setRoc(e.target.value)}
-                  placeholder="ROC-202401045921"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Working Sector */}
-            <div className="sm:col-span-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 m-0">
-                    Company Working Sector <span className="text-red-500">*</span>
-                  </label>
-                  <p className="text-[11px] text-slate-500 m-0">
-                    Select the business / industry sector for this company from the configured sectors.
-                  </p>
+          <div className="space-y-4">
+            {/* ROW 1: 3 Fields (Company Name, ROC, Sector) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Company Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Company Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all uppercase"
+                  />
                 </div>
-                <Link
-                  href="/companies/sectors"
-                  target="_blank"
-                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border border-slate-300 no-underline transition-colors"
-                  title="Add or manage sectors in the Company Sectors management page"
-                >
-                  <Layers size={13} />
-                  <span>Manage Sectors</span>
-                </Link>
               </div>
 
-              <div className="relative">
-                <Briefcase size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <select
-                  required
-                  value={sector}
-                  onChange={(e) => handleSectorChange(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all cursor-pointer appearance-none"
-                >
-                  <option value="">-- Choose Company Sector --</option>
-                  {sectorsList
-                    .filter((s) => (s.status || 'active') === 'active')
-                    .map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))}
-                  {/* Keep existing sector visible if editing a legacy company */}
-                  {sector && !sectorsList.some((s) => s.name === sector) && (
-                    <option value={sector}>{sector} (Assigned)</option>
-                  )}
-                </select>
-                <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-
-              {sector && (
-                <div className="mt-2 flex items-center justify-between p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-xs">
-                  <div className="flex items-center gap-2 text-[#0b4da2]">
-                    <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                    <span>
-                      Selected Sector: <strong className="font-bold text-slate-900">{sector}</strong>
-                    </span>
-                  </div>
-                  <span className="text-[10px] bg-blue-100 text-[#0b4da2] font-semibold px-2 py-0.5 rounded-md border border-blue-200">
-                    Active
-                  </span>
+              {/* Registration No (ROC) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Registration No (ROC) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <ShieldCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={roc}
+                    onChange={(e) => setRoc(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Phone No */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Phone Number
-              </label>
-              <div className="relative">
-                <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+60 3-8942 9900"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
+              {/* Working Sector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Company Working Sector <span className="text-red-500">*</span>
+                </label>
+
+                <div className="relative">
+                  <Briefcase size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <select
+                    required
+                    value={sector}
+                    onChange={(e) => handleSectorChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all cursor-pointer appearance-none"
+                  >
+                    <option value="">-- Choose Company Sector --</option>
+                    {sectorsList
+                      .filter((s) => (s.status || 'active') === 'active')
+                      .map((s) => (
+                        <option key={s.id} value={s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                    {/* Keep existing sector visible if editing a legacy company */}
+                    {sector && !sectorsList.some((s) => s.name === sector) && (
+                      <option value={sector}>{sector} (Assigned)</option>
+                    )}
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
               </div>
             </div>
 
-            {/* Email No */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="corporate@company.com.my"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
+            {/* ROW 2: Phone Number, Telephone Number & Email Address (3 Columns) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Phone No */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Telephone No */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Telephone Number
+                </label>
+                <div className="relative">
+                  <PhoneCall size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    value={telephone}
+                    onChange={(e) => setTelephone(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Email No */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Company Address */}
-            <div className="sm:col-span-2">
+            {/* ROW 3: Company Registered Address */}
+            <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
                 Company Registered Address
               </label>
@@ -1014,7 +1066,6 @@ function CreateCompanyFormContent() {
                   rows={2}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Level 18, Menara Gamuda, PJ Trade Centre, No. 8 Jalan PJU 8/8A, Bandar Damansara Perdana, 47820 Petaling Jaya, Selangor."
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                 />
               </div>
@@ -1104,7 +1155,55 @@ function CreateCompanyFormContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Bank Name (Text Input) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Bank Name
+              </label>
+              <div className="relative">
+                <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Company Account Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Account Name
+              </label>
+              <div className="relative">
+                <UserCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={bankAccountName}
+                  onChange={(e) => setBankAccountName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Company Bank Account No */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Bank Account No
+              </label>
+              <div className="relative">
+                <CreditCard size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={bankAccountNo}
+                  onChange={(e) => setBankAccountNo(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                />
+              </div>
+            </div>
+
             {/* Currency Selection (Select2 Searchable) */}
             <div>
               <Select2Search
@@ -1129,57 +1228,6 @@ function CreateCompanyFormContent() {
                 searchPlaceholder="Search language or country..."
                 icon={<Languages size={16} />}
               />
-            </div>
-
-            {/* Bank Name (Text Input) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Bank Name
-              </label>
-              <div className="relative">
-                <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  placeholder="e.g. Maybank, CIMB Bank, Public Bank"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Company Account Name */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Account Name
-              </label>
-              <div className="relative">
-                <UserCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={bankAccountName}
-                  onChange={(e) => setBankAccountName(e.target.value)}
-                  placeholder="e.g. GAMUDA BERHAD HOLDINGS"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Company Bank Account No */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Bank Account No
-              </label>
-              <div className="relative">
-                <CreditCard size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={bankAccountNo}
-                  onChange={(e) => setBankAccountNo(e.target.value)}
-                  placeholder="5140 1234 5678"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -1252,7 +1300,6 @@ function CreateCompanyFormContent() {
                       type="text"
                       value={director.name}
                       onChange={(e) => handleUpdateDirector(dIndex, 'name', e.target.value)}
-                      placeholder="e.g. Tan Sri Dato' Seri Lim"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1266,7 +1313,6 @@ function CreateCompanyFormContent() {
                       type="tel"
                       value={director.phone}
                       onChange={(e) => handleUpdateDirector(dIndex, 'phone', e.target.value)}
-                      placeholder="+60 12-345 6789"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1280,7 +1326,6 @@ function CreateCompanyFormContent() {
                       type="email"
                       value={director.email}
                       onChange={(e) => handleUpdateDirector(dIndex, 'email', e.target.value)}
-                      placeholder="director@company.com"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1294,7 +1339,6 @@ function CreateCompanyFormContent() {
                       type="text"
                       value={director.nidNo}
                       onChange={(e) => handleUpdateDirector(dIndex, 'nidNo', e.target.value)}
-                      placeholder="850101-14-5567"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1345,7 +1389,6 @@ function CreateCompanyFormContent() {
                       type="text"
                       value={director.passportNo}
                       onChange={(e) => handleUpdateDirector(dIndex, 'passportNo', e.target.value)}
-                      placeholder="A52981034"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1396,7 +1439,6 @@ function CreateCompanyFormContent() {
                       type="text"
                       value={director.socsoNo}
                       onChange={(e) => handleUpdateDirector(dIndex, 'socsoNo', e.target.value)}
-                      placeholder="SOCSO-890123"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1410,7 +1452,6 @@ function CreateCompanyFormContent() {
                       type="text"
                       value={director.epfNo}
                       onChange={(e) => handleUpdateDirector(dIndex, 'epfNo', e.target.value)}
-                      placeholder="EPF-23456789"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
@@ -1425,125 +1466,186 @@ function CreateCompanyFormContent() {
                       min="0"
                       value={director.basicSalary}
                       onChange={(e) => handleUpdateDirector(dIndex, 'basicSalary', e.target.value)}
-                      placeholder="18000"
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
                     />
                   </div>
+                </div>
 
-                  {/* Car Plate No - Multiple Add */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-slate-700 m-0">
-                        Car Plate No
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => handleAddCarPlate(dIndex)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded cursor-pointer transition-colors"
-                      >
-                        <Plus size={11} />
-                        <span>+ Add Plate</span>
-                      </button>
+                {/* DIRECTOR ASSIGNED CAR(S) & VEHICLE EMI */}
+                <div className="pt-4 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Car size={15} className="text-[#0b4da2]" />
+                        <h4 className="text-xs font-bold text-slate-800 m-0">Director Assigned Car(s)</h4>
+                      </div>
+                      <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+                        Assigned vehicles with individual registration plate, purchase scheme (EMI/Cash), monthly amount, and total payment.
+                      </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddCar(dIndex)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-[#0b4da2] border border-blue-200 shadow-2xs cursor-pointer transition-colors"
+                    >
+                      <Plus size={13} />
+                      <span>+ Add Car</span>
+                    </button>
+                  </div>
 
-                    <div className="space-y-1.5">
-                      {((director.carPlates && director.carPlates.length > 0)
-                        ? director.carPlates
-                        : [director.carPlateNo || '']
-                      ).map((plate, pIndex, arr) => (
-                        <div key={pIndex} className="flex items-center gap-1.5">
-                          <div className="relative flex-1">
-                            <Car size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <input
-                              type="text"
-                              value={plate}
-                              onChange={(e) => handleUpdateCarPlate(dIndex, pIndex, e.target.value)}
-                              placeholder={pIndex === 0 ? 'e.g. WYY 8888' : `Plate ${pIndex + 1} (e.g. VAA 1234)`}
-                              className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono uppercase text-slate-800 focus:outline-none focus:border-blue-500"
-                            />
+                  <div className="space-y-3">
+                    {((director.cars && director.cars.length > 0)
+                      ? director.cars
+                      : [createEmptyCar(1)]
+                    ).map((car, cIndex) => (
+                      <div
+                        key={car.id || cIndex}
+                        className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-3 relative"
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-[#0b4da2] text-white font-bold text-[10px] flex items-center justify-center">
+                              {cIndex + 1}
+                            </span>
+                            <span className="text-xs font-bold text-slate-800">
+                              Vehicle #{cIndex + 1} {car.plateNo ? `• ${car.plateNo}` : ''}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                car.purchaseType === 'cash'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}
+                            >
+                              {car.purchaseType === 'cash' ? 'Cash Purchase' : 'EMI Scheme'}
+                            </span>
                           </div>
-                          {arr.length > 1 && (
+
+                          {(director.cars && director.cars.length > 1) && (
                             <button
                               type="button"
-                              onClick={() => handleRemoveCarPlate(dIndex, pIndex)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border-0 bg-transparent cursor-pointer transition-colors"
-                              title="Delete Car Plate"
+                              onClick={() => handleRemoveCar(dIndex, cIndex)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded border border-red-200 cursor-pointer transition-colors"
+                              title="Delete Car"
                             >
-                              <X size={14} />
+                              <Trash2 size={12} />
+                              <span>Remove</span>
                             </button>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
 
-                  {/* Car EMI or Cash Selection */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Car Purchase Scheme
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateDirector(dIndex, 'carPurchaseType', 'emi')}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                          director.carPurchaseType === 'emi'
-                            ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
-                            : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        EMI (Installment)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateDirector(dIndex, 'carPurchaseType', 'cash')}
-                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                          director.carPurchaseType === 'cash'
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                            : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        Cash (Paid)
-                      </button>
-                    </div>
-                  </div>
+                        <div className="space-y-3.5">
+                          {/* Row 1: Car Plate No & Purchase Scheme */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            {/* Car Plate No */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Car Plate No
+                              </label>
+                              <div className="relative">
+                                <Car size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={car.plateNo}
+                                  onChange={(e) => handleUpdateCar(dIndex, cIndex, 'plateNo', e.target.value.toUpperCase())}
+                                  className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono uppercase text-slate-800 focus:outline-none focus:border-blue-500"
+                                />
+                              </div>
+                            </div>
 
-                  {/* Car Amount */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {director.carPurchaseType === 'cash' ? `Car Cash Total Amount (${currency})` : `Monthly EMI Amount (${currency})`}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={director.carAmount}
-                      onChange={(e) => handleUpdateDirector(dIndex, 'carAmount', e.target.value)}
-                      placeholder={director.carPurchaseType === 'cash' ? '250000' : '3800'}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
+                            {/* Purchase Scheme */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                Car Purchase Scheme
+                              </label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateCar(dIndex, cIndex, 'purchaseType', 'emi')}
+                                  className={`py-2 px-3 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                                    car.purchaseType === 'emi'
+                                      ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  EMI (Installment)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateCar(dIndex, cIndex, 'purchaseType', 'cash')}
+                                  className={`py-2 px-3 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                                    car.purchaseType === 'cash'
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  Cash (Paid)
+                                </button>
+                              </div>
+                            </div>
+                          </div>
 
-                  {/* Total Payment - ONLY FOR EMI */}
-                  {director.carPurchaseType === 'emi' && (
-                    <div className="animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-slate-700 m-0">
-                          Total Payment ({currency})
-                        </label>
-                        <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
-                          EMI Total
-                        </span>
+                          {/* Row 2: 3 Financial Fields (First Deposit, Monthly EMI, Total Payment) */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                            {/* 1. First Deposit Amount */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                First Deposit Amount ({currency})
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={car.depositAmount || ''}
+                                onChange={(e) => handleUpdateCar(dIndex, cIndex, 'depositAmount', e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+
+                            {/* 2. Monthly EMI Amount or Cash Total */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-700 mb-1 truncate">
+                                {car.purchaseType === 'cash' ? `Car Cash Total Amount (${currency})` : `Monthly EMI Amount (${currency})`}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={car.amount}
+                                onChange={(e) => handleUpdateCar(dIndex, cIndex, 'amount', e.target.value)}
+                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+
+                            {/* 3. Total Payment (EMI Only) */}
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[11px] font-bold text-slate-700 m-0">
+                                  Total Payment ({currency})
+                                </label>
+                                {car.purchaseType === 'emi' && (
+                                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                    EMI Total
+                                  </span>
+                                )}
+                              </div>
+                              {car.purchaseType === 'emi' ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={car.totalPayment || ''}
+                                  onChange={(e) => handleUpdateCar(dIndex, cIndex, 'totalPayment', e.target.value)}
+                                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                                />
+                              ) : (
+                                <div className="h-[34px] flex items-center px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] font-bold text-emerald-700">
+                                  Paid in Full (Cash)
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        type="number"
-                        min="0"
-                        value={director.carTotalPayment || ''}
-                        onChange={(e) => handleUpdateDirector(dIndex, 'carTotalPayment', e.target.value)}
-                        placeholder="e.g. 185000"
-                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
 
                 {/* OTHER DOCUMENTS UPLOAD (MULTIPLE NAME + FILE UPLOAD) */}
@@ -1578,7 +1680,6 @@ function CreateCompanyFormContent() {
                               type="text"
                               value={doc.name}
                               onChange={(e) => handleUpdateOtherDocName(dIndex, docIndex, e.target.value)}
-                              placeholder="Document Title (e.g. Board Resolution)"
                               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none"
                             />
                           </div>

@@ -92,41 +92,51 @@ export const DEFAULT_COMPANY_STAT_CARDS: CompanyStatCard[] = [
   },
   {
     id: 9,
-    card_key: 'others_profit',
-    name: 'TOTAL OTHERS PROFIT',
-    icon: 'Coins',
-    subtitle: 'Auxiliary & Service Profits',
+    card_key: 'others_expense',
+    name: 'OTHERS EXPENSE',
+    icon: 'Receipt',
+    subtitle: 'Miscellaneous / Other Expenses',
     order_num: 9,
-    custom_value: 32500,
-    status: 'active',
-  },
-  {
-    id: 10,
-    card_key: 'pending_wallet',
-    name: 'TOTAL FOREIGNER PENDING WALLET',
-    icon: 'Clock',
-    subtitle: 'Pending Approvals & Dues',
-    order_num: 10,
     custom_value: 0,
     status: 'active',
   },
   {
+    id: 10,
+    card_key: 'others_profit',
+    name: 'TOTAL OTHERS PROFIT',
+    icon: 'Coins',
+    subtitle: 'Auxiliary & Service Profits',
+    order_num: 10,
+    custom_value: 32500,
+    status: 'active',
+  },
+  {
     id: 11,
-    card_key: 'others_pending',
-    name: 'TOTAL OTHERS PENDING WALLET',
-    icon: 'CreditCard',
-    subtitle: 'Other Pending Invoices & Dues',
+    card_key: 'pending_wallet',
+    name: 'TOTAL FOREIGNER PENDING WALLET',
+    icon: 'Clock',
+    subtitle: 'Pending Approvals & Dues',
     order_num: 11,
-    custom_value: 18200,
+    custom_value: 0,
     status: 'active',
   },
   {
     id: 12,
+    card_key: 'others_pending',
+    name: 'TOTAL OTHERS PENDING WALLET',
+    icon: 'CreditCard',
+    subtitle: 'Other Pending Invoices & Dues',
+    order_num: 12,
+    custom_value: 18200,
+    status: 'active',
+  },
+  {
+    id: 13,
     card_key: 'total_profit',
     name: 'TOTAL PROFIT',
     icon: 'Sparkles',
     subtitle: 'Foreigner Profit + Others Profit',
-    order_num: 12,
+    order_num: 13,
     custom_value: 0,
     status: 'active',
   },
@@ -150,9 +160,7 @@ export function getStoredCompanyStatCards(): CompanyStatCard[] {
 
       // Ensure any default card key exists even if upgrading from an older version
       DEFAULT_COMPANY_STAT_CARDS.forEach((def) => {
-        const found = cardList.find(
-          (p) => p.card_key === def.card_key || (def.card_key === 'others_cost' && p.card_key === 'others_expense')
-        );
+        const found = cardList.find((p) => p.card_key === def.card_key);
         if (!found) {
           cardList.push(def);
         }
@@ -169,7 +177,8 @@ export function getStoredCompanyStatCards(): CompanyStatCard[] {
 export function saveStoredCompanyStatCards(cards: CompanyStatCard[]): void {
   if (typeof window === 'undefined') return;
   try {
-    const sorted = [...cards].sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
+    const validCards = Array.isArray(cards) && cards.length > 0 ? cards : DEFAULT_COMPANY_STAT_CARDS;
+    const sorted = [...validCards].sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
     window.dispatchEvent(new Event('companyStatCardsUpdated'));
   } catch (err) {
@@ -194,8 +203,16 @@ export async function fetchCompanyStatCards(): Promise<CompanyStatCard[]> {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        saveStoredCompanyStatCards(data);
-        return data.sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
+        const cardList: CompanyStatCard[] = [...data];
+        // Ensure all default cards are present even if backend DB has missing rows
+        DEFAULT_COMPANY_STAT_CARDS.forEach((def) => {
+          const found = cardList.find((p) => p.card_key === def.card_key);
+          if (!found) {
+            cardList.push(def);
+          }
+        });
+        saveStoredCompanyStatCards(cardList);
+        return cardList.sort((a, b) => (a.order_num ?? 0) - (b.order_num ?? 0));
       }
     }
   } catch (err) {

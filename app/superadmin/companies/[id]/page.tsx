@@ -519,50 +519,107 @@ export default function SuperAdminCompanyDetailsPage() {
                   </div>
 
                   {/* Vehicle Information */}
-                  <div className="bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">Car Plate Number(s)</span>
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {dir.carPlates && dir.carPlates.filter(Boolean).length > 0 ? (
-                        dir.carPlates.filter(Boolean).map((plate, pIdx) => (
-                          <span
-                            key={pIdx}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono font-bold text-xs text-slate-800"
-                          >
-                            <Car size={12} className="text-slate-500" />
-                            {plate}
+                  {dir.cars && dir.cars.length > 0 ? (
+                    <div className="sm:col-span-2 lg:col-span-3 space-y-2">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                        Assigned Vehicle(s) &amp; EMI Commitment ({dir.cars.length})
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {dir.cars.map((car, cIdx) => (
+                          <div key={car.id || cIdx} className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-300 font-mono font-bold text-xs text-slate-800">
+                                <Car size={13} className="text-slate-600" />
+                                {car.plateNo || `Vehicle #${cIdx + 1}`}
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                car.purchaseType === 'cash'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}>
+                                {car.purchaseType === 'cash' ? 'Cash Purchase' : 'EMI Scheme'}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div>
+                                <span className="text-[10px] text-slate-400 block uppercase font-semibold">
+                                  First Deposit
+                                </span>
+                                <span className="text-slate-800 font-bold font-mono">
+                                  {car.depositAmount ? `${currency} ${Number(car.depositAmount).toLocaleString()}` : `${currency} 0`}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-400 block uppercase font-semibold">
+                                  {car.purchaseType === 'cash' ? 'Cash Total' : 'Monthly EMI'}
+                                </span>
+                                <span className="text-slate-800 font-bold font-mono">
+                                  {car.amount ? `${currency} ${Number(car.amount).toLocaleString()}` : 'N/A'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-400 block uppercase font-semibold">
+                                  {car.purchaseType === 'cash' ? 'Payment Status' : 'Total Payment'}
+                                </span>
+                                <span className="text-slate-800 font-bold font-mono">
+                                  {car.purchaseType === 'cash'
+                                    ? 'Paid in Full'
+                                    : (car.totalPayment ? `${currency} ${Number(car.totalPayment).toLocaleString()}` : 'N/A')}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bg-white p-3 rounded-xl border border-slate-200">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase block">Car Plate Number(s)</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {dir.carPlates && dir.carPlates.filter(Boolean).length > 0 ? (
+                            dir.carPlates.filter(Boolean).map((plate, pIdx) => (
+                              <span
+                                key={pIdx}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono font-bold text-xs text-slate-800"
+                              >
+                                <Car size={12} className="text-slate-500" />
+                                {plate}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-800 font-mono font-bold block">{dir.carPlateNo || 'N/A'}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-200">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase block">Car Purchase Type</span>
+                        <span className="text-slate-800 font-semibold capitalize block mt-0.5">
+                          {dir.carPurchaseType === 'cash' ? 'Cash (Paid)' : 'Monthly EMI'}
+                        </span>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-200">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase block">
+                          {dir.carPurchaseType === 'cash' ? 'Car Cash Total' : 'Monthly EMI Amount'}
+                        </span>
+                        <span className="text-slate-800 font-bold font-mono block mt-0.5">
+                          {dir.carAmount ? `${currency} ${Number(dir.carAmount).toLocaleString()}` : 'N/A'}
+                        </span>
+                      </div>
+
+                      {dir.carPurchaseType === 'emi' && (
+                        <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200">
+                          <span className="text-[10px] text-blue-600 font-semibold uppercase block">
+                            Total Payment (EMI Commitment)
                           </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-800 font-mono font-bold block">{dir.carPlateNo || 'N/A'}</span>
+                          <span className="text-blue-900 font-bold font-mono block mt-0.5">
+                            {dir.carTotalPayment ? `${currency} ${Number(dir.carTotalPayment).toLocaleString()}` : 'N/A'}
+                          </span>
+                        </div>
                       )}
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">Car Purchase Type</span>
-                    <span className="text-slate-800 font-semibold capitalize block mt-0.5">
-                      {dir.carPurchaseType === 'cash' ? 'Cash (Paid)' : 'Monthly EMI'}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">
-                      {dir.carPurchaseType === 'cash' ? 'Car Cash Total' : 'Monthly EMI Amount'}
-                    </span>
-                    <span className="text-slate-800 font-bold font-mono block mt-0.5">
-                      {dir.carAmount ? `${currency} ${Number(dir.carAmount).toLocaleString()}` : 'N/A'}
-                    </span>
-                  </div>
-
-                  {dir.carPurchaseType === 'emi' && (
-                    <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-200">
-                      <span className="text-[10px] text-blue-600 font-semibold uppercase block">
-                        Total Payment (EMI Commitment)
-                      </span>
-                      <span className="text-blue-900 font-bold font-mono block mt-0.5">
-                        {dir.carTotalPayment ? `${currency} ${Number(dir.carTotalPayment).toLocaleString()}` : 'N/A'}
-                      </span>
-                    </div>
+                    </>
                   )}
                 </div>
 

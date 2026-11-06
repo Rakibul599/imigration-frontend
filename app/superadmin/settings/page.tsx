@@ -24,6 +24,9 @@ import {
   UserCheck,
   Users,
   X,
+  Database,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   SiteSettings,
@@ -107,8 +110,10 @@ const SIDEBAR_PRESETS = [
 export default function SuperAdminSettingsPage() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
 
-  // Active Tab: 'general' (Site Identity & Branding) vs 'sidebar' (Admin Sidebar Styling)
-  const [activeTab, setActiveTab] = useState<'general' | 'sidebar'>('general');
+  // Active Tab: 'general' (Site Identity & Branding) vs 'sidebar' (Admin Sidebar Styling) vs 'system' (Danger Zone Data Wipe)
+  const [activeTab, setActiveTab] = useState<'general' | 'sidebar' | 'system'>('general');
+  const [isCleaningDatabase, setIsCleaningDatabase] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<any>(null);
 
   // General Settings States
   const [siteName, setSiteName] = useState('');
@@ -350,6 +355,65 @@ export default function SuperAdminSettingsPage() {
     }
   };
 
+  // Clean Entire System Data (Wipes all database tables, storage uploads, and client caches)
+  const handleCleanEntireSystem = async () => {
+    if (
+      !confirm(
+        '⚠️ DANGER: Are you sure you want to delete ALL data across the entire system?\n\nThis will permanently clean all companies, foreign workers, customers, invoices, attendances, and storage files.\n\nOnly Super Admin access credentials (admin / superadmin2026) will be preserved.'
+      )
+    ) {
+      return;
+    }
+
+    setIsCleaningDatabase(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      const res = await fetch(`${apiBase}/clean-database`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await res.json();
+
+      // Clear all browser localStorage keys for agency
+      const agencyKeys = [
+        'agency_companies_data',
+        'agency_companies_updated',
+        'agency_customers_v1',
+        'agency_customer_targets_v1',
+        'agency_customer_deposits_v1',
+        'agency_customer_pendings_v1',
+        'agency_customer_costs_v1',
+        'agency_programs_v1',
+        'agency_agents_v1',
+        'agency_company_trials_v1',
+        'agency_company_quotations_v1',
+        'agency_company_invoices_v1',
+        'agency_attendance_list_v1',
+        'agency_employee_leaves_v1',
+        'agency_employee_resignations_v1',
+        'agency_master_admins_v1',
+        'agency_employees_v1',
+      ];
+      agencyKeys.forEach((k) => {
+        try {
+          localStorage.removeItem(k);
+        } catch {}
+      });
+      try {
+        localStorage.setItem('agency_companies_data', JSON.stringify([]));
+        window.dispatchEvent(new Event('agency_companies_updated'));
+      } catch {}
+
+      setCleanupResult(data);
+      showToast('success', 'Entire system data deleted successfully! Only Super Admin access has been preserved.');
+    } catch (err: any) {
+      console.error('Failed to clean system:', err);
+      showToast('error', 'Failed to clean system data: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsCleaningDatabase(false);
+    }
+  };
+
   const isDarkPreview = isColorDark(sidebarBgColor);
 
   return (
@@ -434,6 +498,22 @@ export default function SuperAdminSettingsPage() {
           <span>Admin Sidebar Styling</span>
           <span className="text-[10px] bg-blue-100 text-[#0b4da2] font-bold px-2 py-0.5 rounded-full">
             Customizer
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('system')}
+          className={`flex items-center gap-2 px-5 py-3 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'system'
+              ? 'border-rose-600 text-rose-700 bg-white rounded-t-xl shadow-2xs'
+              : 'border-transparent text-slate-500 hover:text-rose-600 hover:bg-slate-100/60 rounded-t-xl'
+          }`}
+        >
+          <Database size={16} />
+          <span>System Data Cleanup</span>
+          <span className="text-[10px] bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">
+            Danger Zone
           </span>
         </button>
       </div>
@@ -1189,6 +1269,109 @@ export default function SuperAdminSettingsPage() {
               <Save size={15} />
               <span>{isSavingSidebar ? 'Saving Styling...' : 'Save Sidebar Styling'}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: SYSTEM DATA CLEANUP (DANGER ZONE) */}
+      {activeTab === 'system' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Main Danger Card */}
+          <div className="bg-white border-2 border-rose-200 rounded-2xl p-6 sm:p-8 shadow-md">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="space-y-2 flex-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold uppercase tracking-wider">
+                  <span>Danger Zone • Permanent Action</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 m-0">
+                  Clean Entire System Data (Reset Database &amp; Local Storage)
+                </h2>
+                <p className="text-sm text-slate-600 leading-relaxed m-0">
+                  This action will completely wipe all registered companies, foreign worker records, customers, invoices, quotations, attendances, applications, and uploaded files from the database and storage.
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <ShieldCheck size={15} className="text-emerald-600" />
+                    <span>Super Admin Access Is Guaranteed &amp; Preserved</span>
+                  </div>
+                  <p className="m-0 text-amber-800">
+                    Your Super Administrator login access (<code>admin</code> / <code>superadmin@agency.gov.my</code>) will remain 100% active. Site branding and theme settings are also protected.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Preserved Super Admin Credentials Box */}
+            <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Preserved Role
+                </span>
+                <span className="text-sm font-bold text-slate-900">Super Administrator</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Login Usernames
+                </span>
+                <span className="text-xs font-mono font-bold text-slate-900 block">admin</span>
+                <span className="text-[11px] font-mono text-slate-500">superadmin@agency.gov.my</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  Default Passwords
+                </span>
+                <span className="text-xs font-mono font-bold text-slate-900 block">admin</span>
+                <span className="text-[11px] font-mono text-slate-500">superadmin2026</span>
+              </div>
+            </div>
+
+            {/* Direct Cleanup Trigger Button */}
+            <div className="mt-8 pt-6 border-t border-rose-100 flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <span className="text-xs font-bold text-slate-700 block">
+                  Execute Whole System Wipe
+                </span>
+                <span className="text-xs text-slate-500">
+                  Truncates 34 tables, empties file storage, and resets client cache to 0.
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCleanEntireSystem}
+                disabled={isCleaningDatabase}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md hover:shadow-lg cursor-pointer border-0 disabled:opacity-50"
+              >
+                <Trash2 size={16} />
+                <span>
+                  {isCleaningDatabase ? 'Cleaning Entire System...' : 'Delete Entire System Data'}
+                </span>
+              </button>
+            </div>
+
+            {/* Cleanup Result Summary Box if executed */}
+            {cleanupResult && (
+              <div className="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-2 animate-in fade-in duration-200">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-800 text-sm">
+                  <CheckCircle2 size={16} className="text-emerald-600" />
+                  <span>{cleanupResult.message}</span>
+                </div>
+                <div className="text-[11px] text-emerald-700">
+                  Tables Cleaned: <strong>{cleanupResult.summary?.total_tables_cleaned || 34}</strong> | Preserved: <strong>{cleanupResult.summary?.total_tables_preserved || 4}</strong>
+                </div>
+                <div className="pt-2 flex items-center gap-3">
+                  <Link
+                    href="/superadmin/companies"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-bold text-xs no-underline hover:bg-emerald-800 transition-colors"
+                  >
+                    <span>Go to Company Directory (0 Companies) →</span>
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

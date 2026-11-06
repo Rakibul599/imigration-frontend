@@ -906,9 +906,17 @@ export function getGlassThemeCssVars(
   const blur = typeof c.blur_radius === 'number' ? c.blur_radius : 20;
   const borderWidth = typeof c.border_width === 'number' ? c.border_width : 1;
 
+  // Compute soft idle tint matching the hover gradient palette
+  const idleOp1 = Math.max(0.06, Math.min(0.20, Math.round(((hoverOp + 0.05) * 0.38) * 100) / 100));
+  const idleOp2 = Math.max(0.04, Math.min(0.16, Math.round((hoverOp * 0.30) * 100) / 100));
+  const idleOp3 = Math.max(0.05, Math.min(0.18, Math.round((hoverOp * 0.36) * 100) / 100));
+
   return {
     '--glass-base-bg': hexToRgba('#ffffff', baseOp),
     '--glass-base-tint': hexToRgba(baseTint, Math.max(0.18, baseOp - 0.24)),
+    '--glass-idle-bg-1': hexToRgba(primary, idleOp1),
+    '--glass-idle-bg-2': hexToRgba(secondary, idleOp2),
+    '--glass-idle-bg-3': hexToRgba(primary, idleOp3),
     '--glass-border-color': hexToRgba(border, 0.75),
     '--glass-border-inner': hexToRgba(border, 0.35),
     '--glass-border-width': `${borderWidth}px`,

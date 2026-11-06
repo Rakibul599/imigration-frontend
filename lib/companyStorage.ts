@@ -23,8 +23,13 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
     clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         if (typeof window !== 'undefined') {
+          if (data.length === 0) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+            window.dispatchEvent(new Event(STORAGE_EVENT));
+            return [];
+          }
           const current = getStoredCompanies();
           const merged = data.map((bComp: Company) => {
             const local = current.find((c) => c.id === bComp.id);
@@ -35,6 +40,7 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
                 directors: bComp.directors && bComp.directors.length > 0 ? bComp.directors : (local.directors || []),
                 address: bComp.address || local.address,
                 phone: bComp.phone || local.phone,
+                telephone: bComp.telephone || local.telephone,
                 email: bComp.email || local.email,
                 currency: bComp.currency || local.currency,
                 language: bComp.language || local.language,
@@ -45,40 +51,38 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
             }
             return bComp;
           });
-          const localOnly = current.filter((c) => !data.some((b: Company) => b.id === c.id));
-          const finalList = [...merged, ...localOnly];
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(finalList));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
           window.dispatchEvent(new Event(STORAGE_EVENT));
-          return finalList;
+          return merged;
         }
         return data;
       }
     }
   } catch (err) {
-    console.warn('Backend API not reachable, using cached/default data:', err);
+    console.warn('Backend API not reachable, using cached data:', err);
   }
   return getStoredCompanies();
 }
 
 /**
  * Retrieve the current company list synchronously from localStorage,
- * falling back to default seed companies.
+ * returning empty array if no companies are stored or backend has 0 records.
  */
 export function getStoredCompanies(): Company[] {
   if (typeof window === 'undefined') {
-    return defaultCompanies;
+    return [];
   }
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultCompanies));
-      // Asynchronously sync from backend
-      fetchCompaniesFromBackend().catch(() => {});
-      return defaultCompanies;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 0) {
+        return [];
+      }
       // Auto-check for companies whose auto_deactivate_at timer has passed
       const now = Date.now();
       let changed = false;
@@ -104,10 +108,10 @@ export function getStoredCompanies(): Company[] {
       }
       return checked;
     }
-    return defaultCompanies;
+    return [];
   } catch (err) {
     console.error('Error reading stored companies:', err);
-    return defaultCompanies;
+    return [];
   }
 }
 
@@ -207,6 +211,7 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
         totalWorkers: companyToSave.totalWorkers,
         address: companyToSave.address,
         phone: companyToSave.phone,
+        telephone: companyToSave.telephone,
         email: companyToSave.email,
         currency: companyToSave.currency,
         language: companyToSave.language,
@@ -273,6 +278,7 @@ export async function updateStoredCompany(company: Company): Promise<Company[]> 
         totalWorkers: companyToSave.totalWorkers,
         address: companyToSave.address,
         phone: companyToSave.phone,
+        telephone: companyToSave.telephone,
         email: companyToSave.email,
         currency: companyToSave.currency,
         language: companyToSave.language,

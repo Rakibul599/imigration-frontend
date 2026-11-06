@@ -34,6 +34,7 @@ interface CardPriorityModalProps {
   pageTitle?: string;
   availableMetrics?: MetricSourceOption[];
   initialShowAdd?: boolean;
+  allowAdd?: boolean;
 }
 
 export default function CardPriorityModal({
@@ -45,6 +46,7 @@ export default function CardPriorityModal({
   pageTitle = 'Dashboard Cards',
   availableMetrics,
   initialShowAdd = false,
+  allowAdd = false,
 }: CardPriorityModalProps) {
   const [list, setList] = useState<PageStatCardConfig[]>([]);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
@@ -214,19 +216,23 @@ export default function CardPriorityModal({
                 Manage Cards &amp; Priority — {pageTitle}
               </h2>
               <p className="text-xs text-slate-500 m-0 mt-0.5">
-                Add new cards, customize titles/icons, and reorder card priorities (#1 to #{list.length}).
+                {allowAdd
+                  ? `Add new cards, customize titles/icons, and reorder card priorities (#1 to #${list.length}).`
+                  : `Customize titles/icons and reorder card priorities (#1 to #${list.length}).`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAddForm((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-xs cursor-pointer border-0"
-            >
-              <Plus size={14} />
-              <span>{showAddForm ? 'Close Add Form' : 'Add New Card'}</span>
-            </button>
+            {allowAdd && (
+              <button
+                type="button"
+                onClick={() => setShowAddForm((prev) => !prev)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-xs cursor-pointer border-0"
+              >
+                <Plus size={14} />
+                <span>{showAddForm ? 'Close Add Form' : 'Add New Card'}</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer bg-transparent border-0"
@@ -237,7 +243,7 @@ export default function CardPriorityModal({
         </div>
 
         {/* Collapsible Add New Card Section */}
-        {showAddForm && (
+        {allowAdd && showAddForm && (
           <div className="p-4 sm:p-5 bg-gradient-to-br from-indigo-50/70 via-blue-50/40 to-slate-50 border-b border-indigo-100/80 animate-in slide-in-from-top-3 duration-200 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -489,14 +495,16 @@ export default function CardPriorityModal({
                       <span>{isEditing ? 'Close' : 'Edit'}</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCard(card.id)}
-                      title="Delete / Remove Card"
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {allowAdd && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCard(card.id)}
+                        title="Delete / Remove Card"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
 

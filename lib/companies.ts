@@ -53,6 +53,15 @@ export type DirectorExcelDocument = {
   updatedAt: string;
 };
 
+export type DirectorCar = {
+  id?: string;
+  plateNo: string;
+  purchaseType: 'cash' | 'emi' | '';
+  depositAmount?: string | number; // First Deposit Amount
+  amount: string | number; // EMI/Cash Monthly Amount
+  totalPayment?: string | number; // Total Payment (only for EMI scheme)
+};
+
 export type CompanyDirector = {
   id: string;
   name: string;
@@ -67,8 +76,10 @@ export type CompanyDirector = {
   carPlateNo: string;
   carPlates?: string[]; // Multiple car plate numbers (+add)
   carPurchaseType: 'cash' | 'emi' | ''; // EMI or Cash
+  carDepositAmount?: string | number; // First Deposit Amount
   carAmount: string | number; // EMI/Cash Monthly Amount
   carTotalPayment?: string | number; // Total Payment (only for EMI scheme)
+  cars?: DirectorCar[]; // Multiple assigned cars with individual plate, scheme, EMI, total payment
   basicSalary: string | number; // Basic Salary
   otherDocuments: DirectorDocument[]; // Multiple documents (name + file upload)
   excelDocuments?: DirectorExcelDocument[]; // Excel spreadsheets (upload / create / edit)
@@ -101,6 +112,7 @@ export type Company = {
   // Additional comprehensive company fields
   address?: string; // Company Address
   phone?: string; // Phone number
+  telephone?: string; // Telephone number
   email?: string; // Email address
   currency?: string; // Currency selection (e.g. MYR, USD)
   language?: string; // Language selection (e.g. English, Malay)
