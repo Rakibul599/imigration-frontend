@@ -367,12 +367,28 @@ export default function SuperAdminSettingsPage() {
 
     setIsCleaningDatabase(true);
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
-      const res = await fetch(`${apiBase}/clean-database`, {
+      const rawApi = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      const cleanApi = rawApi.replace(/\/+$/, '');
+      
+      let res = await fetch(`${cleanApi}/clean-database`, {
         method: 'POST',
-        headers: { Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       });
+
+      // If /api/clean-database returned 404, fallback to root /clean-database
+      if (res.status === 404 && cleanApi.endsWith('/api')) {
+        const rootBase = cleanApi.replace(/\/api$/, '');
+        res = await fetch(`${rootBase}/clean-database`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        });
+      }
+
       const data = await res.json();
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || `Server returned error (${res.status})`);
+      }
 
       // Clear all browser localStorage keys for agency
       const agencyKeys = [
