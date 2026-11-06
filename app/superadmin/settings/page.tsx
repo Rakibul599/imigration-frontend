@@ -367,7 +367,12 @@ export default function SuperAdminSettingsPage() {
 
     setIsCleaningDatabase(true);
     try {
-      const rawApi = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+      const rawApi =
+        process.env.NEXT_PUBLIC_BACKEND_API_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+          ? `${window.location.protocol}//api.${window.location.hostname.replace(/^myadmin\./, '')}/api`
+          : 'http://127.0.0.1:8000/api');
       const cleanApi = rawApi.replace(/\/+$/, '');
       
       let res = await fetch(`${cleanApi}/clean-database`, {

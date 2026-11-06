@@ -143,7 +143,10 @@ export const DEFAULT_COMPANY_STAT_CARDS: CompanyStatCard[] = [
 ];
 
 const STORAGE_KEY = 'agency_company_stat_cards_v2';
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://127.0.0.1:8000/api';
 
 export function getStoredCompanyStatCards(): CompanyStatCard[] {
   if (typeof window === 'undefined') return DEFAULT_COMPANY_STAT_CARDS;

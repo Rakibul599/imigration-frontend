@@ -59,7 +59,10 @@ export interface EmployeeDocumentItem {
   number?: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://127.0.0.1:8000/api';
 
 /**
  * Fetch employee leaves and holiday applications
