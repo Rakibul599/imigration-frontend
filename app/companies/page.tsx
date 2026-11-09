@@ -717,6 +717,7 @@ export default function CompaniesPage() {
               <div className="mt-1.5">
                 {primaryCountdown.hasExpiry ? (
                   <div
+                    suppressHydrationWarning
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold font-mono tracking-tight shadow-2xs ${primaryCountdown.isExpired
                         ? 'bg-rose-50 text-rose-700 border border-rose-200'
                         : primaryCountdown.isExpiringSoon
@@ -731,7 +732,7 @@ export default function CompaniesPage() {
                     ) : (
                       <Clock size={13} className="text-emerald-600 shrink-0" />
                     )}
-                    <span>{primaryCountdown.label}</span>
+                    <span suppressHydrationWarning>{primaryCountdown.label}</span>
                   </div>
                 ) : (
                   <span className="font-bold text-emerald-600 text-sm flex items-center gap-1.5">
@@ -1012,6 +1013,7 @@ export default function CompaniesPage() {
 
                         {compCountdown.hasExpiry ? (
                           <div
+                            suppressHydrationWarning
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold font-mono tracking-tight w-fit shadow-2xs ${compCountdown.isExpired
                                 ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                 : compCountdown.isExpiringSoon
@@ -1026,7 +1028,7 @@ export default function CompaniesPage() {
                             ) : (
                               <Clock size={12} className="text-emerald-600 shrink-0" />
                             )}
-                            <span>{compCountdown.label}</span>
+                            <span suppressHydrationWarning>{compCountdown.label}</span>
                           </div>
                         ) : (
                           <span className="text-[10px] text-slate-400 font-medium italic">Active License</span>

@@ -1558,15 +1558,15 @@ export default function SubscriptionPlansPage() {
                         {/* 8. Expire Date */}
                         <td className="py-3.5 px-4 align-middle">
                           {comp.subscription_expires_at ? (
-                            <div>
-                              <div className="font-bold text-slate-800 text-xs">
+                            <div suppressHydrationWarning>
+                              <div className="font-bold text-slate-800 text-xs" suppressHydrationWarning>
                                 {new Date(comp.subscription_expires_at).toLocaleDateString('en-GB', {
                                   day: '2-digit',
                                   month: 'short',
                                   year: 'numeric',
                                 })}
                               </div>
-                              <div className="text-[10px] text-slate-400 font-medium">
+                              <div className="text-[10px] text-slate-400 font-medium" suppressHydrationWarning>
                                 {new Date(comp.subscription_expires_at).toLocaleTimeString('en-MY', {
                                   hour: '2-digit',
                                   minute: '2-digit',
@@ -1579,9 +1579,10 @@ export default function SubscriptionPlansPage() {
                         </td>
 
                         {/* 9. Live Countdown */}
-                        <td className="py-3.5 px-4 align-middle">
+                        <td className="py-3.5 px-4 align-middle" suppressHydrationWarning>
                           {countdown.hasExpiry ? (
                             <div
+                              suppressHydrationWarning
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black shadow-2xs ${
                                 countdown.isExpired
                                   ? 'bg-rose-50 text-rose-700 border border-rose-200'
@@ -1597,7 +1598,7 @@ export default function SubscriptionPlansPage() {
                               ) : (
                                 <Clock size={13} className="text-emerald-600 shrink-0" />
                               )}
-                              <span className="font-mono tracking-tight font-black">
+                              <span className="font-mono tracking-tight font-black" suppressHydrationWarning>
                                 {countdown.label}
                               </span>
                             </div>

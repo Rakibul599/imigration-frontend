@@ -221,6 +221,13 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
         bankAccountNo: companyToSave.bankAccountNo,
         bankAccounts: companyToSave.bankAccounts,
         directors: companyToSave.directors,
+        status: companyToSave.status,
+        subscription_plan_key: companyToSave.subscription_plan_key,
+        subscription_starts_at: companyToSave.subscription_starts_at,
+        subscription_expires_at: companyToSave.subscription_expires_at,
+        subscription_status: companyToSave.subscription_status,
+        subscription_trial_days: companyToSave.subscription_trial_days,
+        subscription_notes: companyToSave.subscription_notes,
       }),
     });
     if (res.ok) {
@@ -289,6 +296,13 @@ export async function updateStoredCompany(company: Company): Promise<Company[]> 
         bankAccountNo: companyToSave.bankAccountNo,
         bankAccounts: companyToSave.bankAccounts,
         directors: companyToSave.directors,
+        status: companyToSave.status,
+        subscription_plan_key: companyToSave.subscription_plan_key,
+        subscription_starts_at: companyToSave.subscription_starts_at,
+        subscription_expires_at: companyToSave.subscription_expires_at,
+        subscription_status: companyToSave.subscription_status,
+        subscription_trial_days: companyToSave.subscription_trial_days,
+        subscription_notes: companyToSave.subscription_notes,
       }),
     });
     if (res.ok) {

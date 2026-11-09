@@ -383,7 +383,7 @@ export default function MasterAdminEmployeesPage() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Staff Members
@@ -398,7 +398,7 @@ export default function MasterAdminEmployeesPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Active Status
@@ -413,7 +413,7 @@ export default function MasterAdminEmployeesPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Permitted Scope

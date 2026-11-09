@@ -50,6 +50,7 @@ import {
   canEmployeeViewCompanyStatistics,
   getEmployeeAllowedCompanyCards,
 } from '@/lib/auth';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -63,6 +64,8 @@ const SECTOR_OPTIONS = [
 ];
 
 export default function EmployeeCompaniesPage() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [mounted, setMounted] = useState(false);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [statCards, setStatCards] = useState<CompanyStatCard[]>(DEFAULT_COMPANY_STAT_CARDS);
@@ -674,13 +677,21 @@ export default function EmployeeCompaniesPage() {
               const isCompanyEntity = metrics.isCompanyEntity && selectedSingleCompany;
               const isSelected = selectedCardKey === card.card_key;
 
-              const cardClasses = `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
-                isSelected && showStatisticsChart
-                  ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10'
-                  : card.card_key === 'total_profit'
-                  ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
-                  : 'border-slate-200 hover:border-blue-400'
-              } ${showStatisticsChart ? 'cursor-pointer' : 'cursor-default'}`;
+              const cardClasses = isGlass
+                ? `dashboard-card-glass admin-stat-card rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+                    showStatisticsChart ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'
+                  } ${
+                    isSelected && showStatisticsChart ? 'ring-2 ring-emerald-400/80 shadow-lg' : ''
+                  } ${
+                    card.card_key === 'total_profit' ? 'ring-1 ring-emerald-300/60' : ''
+                  }`
+                : `bg-white admin-stat-card border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+                    isSelected && showStatisticsChart
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10'
+                      : card.card_key === 'total_profit'
+                      ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
+                      : 'border-slate-200 hover:border-blue-400'
+                  } ${showStatisticsChart ? 'cursor-pointer' : 'cursor-default'}`;
 
               return (
                 <div

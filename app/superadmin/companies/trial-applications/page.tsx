@@ -956,11 +956,11 @@ export default function TrialApplicationsPage() {
                       </td>
 
                       {/* 13. Applied Date */}
-                      <td className="py-3.5 px-4 align-middle whitespace-nowrap">
+                      <td className="py-3.5 px-4 align-middle whitespace-nowrap" suppressHydrationWarning>
                         <div className="text-slate-800 font-medium text-xs">
                           {formatDate(app.created_at)}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
+                        <div className="text-[10px] text-slate-400 font-mono" suppressHydrationWarning>
                           {new Date(app.created_at).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',

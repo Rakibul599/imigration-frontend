@@ -1017,7 +1017,7 @@ function AttendanceReportsContent() {
           </div>
           <div className="text-right text-xs text-slate-700 space-y-0.5">
             <div><span className="font-bold">Period:</span> {activeTab === 'daily' ? (dateFilterType === 'single' ? selectedDate : `${startDate} to ${endDate}`) : activeTab === 'monthly' ? `Month ${selectedMonth}, ${selectedYear}` : `${startDate} to ${endDate}`}</div>
-            <div><span className="font-bold">Generated:</span> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
+            <div suppressHydrationWarning><span className="font-bold">Generated:</span> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</div>
             <div><span className="font-bold">Total Records:</span> {
               activeTab === 'daily' ? filteredRecords.length :
               activeTab === 'monthly' ? monthlySummary.length :

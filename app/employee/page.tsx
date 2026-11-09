@@ -19,6 +19,7 @@ import {
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { getCurrentUser, AuthUser } from '@/lib/auth';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 import EmployeeCompaniesPage from './companies/page';
 
 export type DashboardTabId = 'overview' | 'companies' | string;
@@ -32,6 +33,8 @@ export interface DashboardTabItem {
 }
 
 export default function EmployeeDashboardPage() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [customerCount, setCustomerCount] = useState<number>(0);
@@ -231,7 +234,11 @@ export default function EmployeeDashboardPage() {
             <button
               type="button"
               onClick={() => setActiveTab('companies')}
-              className="bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-5 shadow-xs flex items-center gap-4 text-left cursor-pointer"
+              className={`p-5 shadow-xs flex items-center gap-4 text-left cursor-pointer transition-all active:scale-[0.99] admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 hover:border-blue-300 rounded-2xl'
+              }`}
             >
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100">
                 <Building2 size={24} />
@@ -248,7 +255,13 @@ export default function EmployeeDashboardPage() {
             </button>
 
             {/* Customer Records */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+            <div
+              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 rounded-2xl'
+              }`}
+            >
               <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
                 <UserCheck size={24} />
               </div>
@@ -264,7 +277,13 @@ export default function EmployeeDashboardPage() {
             </div>
 
             {/* Supervisor Master Admin */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+            <div
+              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 rounded-2xl'
+              }`}
+            >
               <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 border border-purple-100">
                 <ShieldCheck size={24} />
               </div>
@@ -280,7 +299,13 @@ export default function EmployeeDashboardPage() {
             </div>
 
             {/* System Access Level */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex items-center gap-4">
+            <div
+              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 rounded-2xl'
+              }`}
+            >
               <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
                 <Sparkles size={24} />
               </div>
@@ -305,7 +330,13 @@ export default function EmployeeDashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Module 1: Companies */}
               {perms.companies?.view !== false && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-blue-300 transition-all">
+                <div
+                  className={`p-5 shadow-xs flex flex-col justify-between transition-all admin-card ${
+                    isGlass
+                      ? 'dashboard-card-glass rounded-2xl'
+                      : 'bg-white border border-slate-200 rounded-2xl hover:border-blue-300'
+                  }`}
+                >
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
@@ -349,7 +380,13 @@ export default function EmployeeDashboardPage() {
 
               {/* Module 2: Customers */}
               {perms.customers?.view !== false && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all">
+                <div
+                  className={`p-5 shadow-xs flex flex-col justify-between transition-all admin-card ${
+                    isGlass
+                      ? 'dashboard-card-glass rounded-2xl'
+                      : 'bg-white border border-slate-200 rounded-2xl hover:border-emerald-300'
+                  }`}
+                >
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -394,7 +431,13 @@ export default function EmployeeDashboardPage() {
 
               {/* Module 3: Services Cards */}
               {perms.services?.view !== false && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-amber-300 transition-all">
+                <div
+                  className={`p-5 shadow-xs flex flex-col justify-between transition-all admin-card ${
+                    isGlass
+                      ? 'dashboard-card-glass rounded-2xl'
+                      : 'bg-white border border-slate-200 rounded-2xl hover:border-amber-300'
+                  }`}
+                >
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">

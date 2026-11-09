@@ -23,7 +23,7 @@ export default function MasterAdminThemePage() {
         </div>
         <h2 className="text-xl font-bold text-slate-800 mb-2">Access Restricted</h2>
         <p className="text-slate-600 text-sm leading-relaxed mb-6">
-          Theme Settings and General Settings are restricted exclusively to the <strong className="text-slate-800">Super Administrator Portal</strong>. Master Admins do not have permission to modify these settings.
+          Theme Settings and General Settings are managed exclusively from the <strong className="text-slate-800">Super Administrator Portal</strong>. Master Admins do not have permission to modify theme settings.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link

@@ -28,9 +28,12 @@ import {
   getServiceCardAnimationClass,
   getServiceCardAnimationStyle,
   ServiceCardsAnimationType,
+  useDashboardCardDesign,
 } from '@/lib/themeSettings';
 
 export default function EmployeeServicesPage() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [services, setServices] = useState<ServiceCard[]>(() => {
     return typeof window !== 'undefined' ? getStoredServices() : [];
   });
@@ -303,7 +306,11 @@ export default function EmployeeServicesPage() {
             <div
               key={card.id}
               style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
-              className={`bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-blue-300 hover:shadow-md transition-all ${animClass}`}
+              className={`p-5 flex flex-col justify-between transition-all admin-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 rounded-2xl shadow-xs hover:border-blue-300 hover:shadow-md'
+              } ${animClass}`}
             >
               <div>
                 <div className="flex items-center justify-between mb-3">

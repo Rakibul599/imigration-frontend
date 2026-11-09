@@ -144,6 +144,7 @@ export default function SuperAdminCompaniesPage() {
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
   const [syncTableWithCardFilter, setSyncTableWithCardFilter] = useState<boolean>(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'rejected'>('all');
+  const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -190,6 +191,7 @@ export default function SuperAdminCompaniesPage() {
 
   // Initial load
   useEffect(() => {
+    setMounted(true);
     setCompanies(getStoredCompanies());
     fetchCompaniesFromBackend().then((list) => {
       setCompanies(list);
@@ -834,7 +836,7 @@ export default function SuperAdminCompaniesPage() {
   };
 
   const getCountdownInfo = (expiresAt?: string | null) => {
-    if (!expiresAt) {
+    if (!expiresAt || expiresAt === 'infinite' || expiresAt === 'infinity' || expiresAt === 'lifetime') {
       return {
         status: 'none' as const,
         label: 'No Expiry',
@@ -852,6 +854,13 @@ export default function SuperAdminCompaniesPage() {
     }
 
     const diffMs = expTime - currentTime;
+    if (!isFinite(diffMs)) {
+      return {
+        status: 'invalid' as const,
+        label: 'Invalid Date',
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
     if (diffMs <= 0) {
       return {
         status: 'expired' as const,
@@ -1372,7 +1381,7 @@ export default function SuperAdminCompaniesPage() {
                 const countdown = getCountdownInfo(company.subscription_expires_at);
 
                 const formatExpiry = (isoStr?: string | null) => {
-                  if (!isoStr) return null;
+                  if (!isoStr || isoStr === 'infinite' || isoStr === 'infinity' || isoStr === 'lifetime') return null;
                   const d = new Date(isoStr);
                   if (isNaN(d.getTime())) return null;
                   const day = String(d.getDate()).padStart(2, '0');
@@ -1416,7 +1425,8 @@ export default function SuperAdminCompaniesPage() {
                             </span>
                           ) : company.auto_deactivate_at ? (
                             <span
-                              title={`Scheduled auto-off: ${new Date(company.auto_deactivate_at).toLocaleString()}`}
+                              suppressHydrationWarning
+                              title={mounted && company.auto_deactivate_at ? `Scheduled auto-off: ${new Date(company.auto_deactivate_at).toLocaleString()}` : undefined}
                               className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-200 shrink-0 cursor-help"
                             >
                               <Clock size={9} />
@@ -1504,14 +1514,14 @@ export default function SuperAdminCompaniesPage() {
                   </td>
 
                   {/* 9. Expire Date */}
-                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap" suppressHydrationWarning>
                     {expiry ? (
-                      <div className="flex flex-col items-center justify-center">
-                        <span className="font-mono font-semibold text-slate-700 text-xs">
-                          {expiry.date}
+                      <div className="flex flex-col items-center justify-center" suppressHydrationWarning>
+                        <span className="font-mono font-semibold text-slate-700 text-xs" suppressHydrationWarning>
+                          {mounted ? expiry.date : '—'}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {expiry.time}
+                        <span className="text-[10px] text-slate-400 font-mono" suppressHydrationWarning>
+                          {mounted ? expiry.time : ''}
                         </span>
                       </div>
                     ) : (
@@ -1520,13 +1530,14 @@ export default function SuperAdminCompaniesPage() {
                   </td>
 
                   {/* 10. Countdown */}
-                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap" suppressHydrationWarning>
                     {company.subscription_expires_at ? (
                       <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border ${countdown.color}`}
+                        suppressHydrationWarning
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border ${mounted ? countdown.color : 'text-slate-400 bg-slate-50 border-slate-200'}`}
                       >
                         <Clock size={12} />
-                        <span>{countdown.label}</span>
+                        <span suppressHydrationWarning>{mounted ? countdown.label : '...'}</span>
                       </span>
                     ) : (
                       <span className="text-slate-400 text-xs italic">—</span>
@@ -1544,7 +1555,7 @@ export default function SuperAdminCompaniesPage() {
                           company.status === 'inactive'
                             ? 'Company is Inactive - Click to Reactivate or manage status'
                             : company.auto_deactivate_at
-                            ? `Active (Scheduled Auto-Off: ${new Date(company.auto_deactivate_at).toLocaleString()}) - Click to manage`
+                            ? (mounted ? `Active (Scheduled Auto-Off: ${new Date(company.auto_deactivate_at).toLocaleString()}) - Click to manage` : 'Active - Auto-Off Timer')
                             : 'Company is Active - Click to Deactivate or Set Auto-Off Timer'
                         }
                         className={`w-8 h-8 rounded border flex items-center justify-center transition-colors cursor-pointer shadow-2xs relative ${

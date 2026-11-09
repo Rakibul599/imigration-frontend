@@ -53,11 +53,21 @@ import {
 } from '@/lib/themeSettings';
 import CardDesignThemeSection from '@/components/CardDesignThemeSection';
 
-export default function ThemeManager() {
+export interface ThemeManagerProps {
+  initialTab?: 'home' | 'service-cards' | 'card-design';
+  portalName?: string;
+  portalLink?: string;
+}
+
+export default function ThemeManager({
+  initialTab = 'home',
+  portalName,
+  portalLink,
+}: ThemeManagerProps = {}) {
   const [settings, setSettings] = useState<ThemeSettings>(DEFAULT_THEME_SETTINGS);
   
   // Top-level tabs: 'home' for Home page theme, 'service-cards' for Service Cards animation, 'card-design' for Dashboard Card theme
-  const [mainTab, setMainTab] = useState<'home' | 'service-cards' | 'card-design'>('home');
+  const [mainTab, setMainTab] = useState<'home' | 'service-cards' | 'card-design'>(initialTab);
 
   // Sub-tabs for Home Page Theme
   const [selectedHomeTab, setSelectedHomeTab] = useState<'theme2' | 'theme1'>('theme2');

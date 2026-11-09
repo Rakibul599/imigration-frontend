@@ -249,7 +249,7 @@ export default function MasterAdminCustomersPage() {
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Permitted Workers
@@ -266,7 +266,7 @@ export default function MasterAdminCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Active Status
@@ -283,7 +283,7 @@ export default function MasterAdminCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Inactive Status
@@ -300,7 +300,7 @@ export default function MasterAdminCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Absent Status
@@ -317,7 +317,7 @@ export default function MasterAdminCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
               Passport Verified

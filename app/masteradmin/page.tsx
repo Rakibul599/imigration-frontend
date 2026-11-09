@@ -33,6 +33,7 @@ import {
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
 import { getMasterAdminUser } from '@/lib/auth';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 import MasterAdminCompaniesPage from './companies/page';
 
 export type DashboardTabId = 'overview' | 'companies' | string;
@@ -46,6 +47,8 @@ export interface DashboardTabItem {
 }
 
 export default function MasterAdminDashboard() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [activeTab, setActiveTab] = useState<DashboardTabId>('companies');
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const currentUser = getMasterAdminUser();
@@ -288,10 +291,14 @@ export default function MasterAdminDashboard() {
             <button
               type="button"
               onClick={() => setActiveTab('companies')}
-              className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all text-left cursor-pointer"
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer active:scale-[0.99] admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl shadow-xs'
+              }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight">
                   Assigned Companies
                 </span>
                 <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center">
@@ -307,9 +314,15 @@ export default function MasterAdminDashboard() {
               </div>
             </button>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+            <div
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl shadow-xs'
+              }`}
+            >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-emerald-700 transition-colors leading-tight">
                   Total Workers
                 </span>
                 <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -324,9 +337,15 @@ export default function MasterAdminDashboard() {
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+            <div
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 hover:border-purple-400 hover:shadow-md rounded-xl shadow-xs'
+              }`}
+            >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-purple-700 transition-colors leading-tight">
                   Industry Sectors
                 </span>
                 <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
@@ -341,9 +360,15 @@ export default function MasterAdminDashboard() {
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+            <div
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl'
+                  : 'bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl shadow-xs'
+              }`}
+            >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-amber-700 transition-colors leading-tight">
                   Wallets Net Profit
                 </span>
                 <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -383,7 +408,11 @@ export default function MasterAdminDashboard() {
               {permittedCompanies.map((comp) => (
                 <div
                   key={comp.id}
-                  className="border border-slate-200 rounded-xl p-4 hover:border-[#0b4da2] hover:shadow-md transition-all bg-white group flex flex-col justify-between"
+                  className={`p-4 transition-all group flex flex-col justify-between company-directory-card ${
+                    isGlass
+                      ? 'dashboard-card-glass rounded-2xl'
+                      : 'border border-slate-200 rounded-xl bg-white hover:border-[#0b4da2] hover:shadow-md'
+                  }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-3">

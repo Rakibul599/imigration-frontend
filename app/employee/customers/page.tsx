@@ -259,7 +259,7 @@ export default function EmployeeCustomersPage() {
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Permitted Workers</span>
             <div className="text-2xl font-bold text-slate-900 mt-1">{filteredCustomers.length}</div>
@@ -270,7 +270,7 @@ export default function EmployeeCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Active Workers</span>
             <div className="text-2xl font-bold text-emerald-600 mt-1">{customers.filter((c) => c.status === 'active').length}</div>
@@ -281,7 +281,7 @@ export default function EmployeeCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Inactive Customers</span>
             <div className="text-2xl font-bold text-rose-600 mt-1">{customers.filter((c) => c.status === 'inactive').length}</div>
@@ -292,7 +292,7 @@ export default function EmployeeCustomersPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Absent Customers</span>
             <div className="text-2xl font-bold text-purple-600 mt-1">{customers.filter((c) => c.status === 'absent').length}</div>
