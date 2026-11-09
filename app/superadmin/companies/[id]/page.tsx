@@ -396,28 +396,36 @@ export default function SuperAdminCompanyDetailsPage() {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200/60">
-                <span className="text-[10px] text-blue-800 font-semibold uppercase block">Company Bank Name</span>
-                <span className="text-sm font-bold text-blue-950 mt-0.5 block">
-                  {company.bankName || 'Not specified'}
-                </span>
-              </div>
-
-              {company.bankAccountName && (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Company Account Name</span>
-                  <span className="text-sm font-bold text-slate-900 mt-0.5 block">
-                    {company.bankAccountName}
-                  </span>
+              {(company.bankAccounts && company.bankAccounts.length > 0 ? company.bankAccounts : [
+                {
+                  bankName: company.bankName,
+                  bankAccountName: company.bankAccountName,
+                  bankAccountNo: company.bankAccountNo,
+                }
+              ]).map((acc, aIdx) => (
+                <div key={(acc as any).id || aIdx} className="p-3 rounded-xl bg-blue-50/60 border border-blue-200/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-blue-800 font-semibold uppercase block">
+                      Bank {company.bankAccounts && company.bankAccounts.length > 1 ? `#${aIdx + 1}` : ''}
+                    </span>
+                    <span className="text-xs font-bold text-blue-950">
+                      {acc.bankName || 'Not specified'}
+                    </span>
+                  </div>
+                  {acc.bankAccountName && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-semibold uppercase block">Account Name</span>
+                      <span className="text-xs font-semibold text-slate-900 block">{acc.bankAccountName}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Account Number</span>
+                    <span className="text-xs font-bold font-mono text-slate-900 block tracking-wider">
+                      {acc.bankAccountNo || 'Not specified'}
+                    </span>
+                  </div>
                 </div>
-              )}
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-semibold uppercase block">Bank Account Number</span>
-                <span className="text-sm font-bold font-mono text-slate-900 mt-0.5 block tracking-wider">
-                  {company.bankAccountNo || 'Not specified'}
-                </span>
-              </div>
+              ))}
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
@@ -628,13 +636,13 @@ export default function SuperAdminCompanyDetailsPage() {
                   <h4 className="text-xs font-bold text-slate-800 m-0">Identity &amp; Supporting Files</h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {/* NID Card */}
+                    {/* National ID Card */}
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2.5 truncate">
                         <FileText size={18} className="text-blue-600 shrink-0" />
                         <div className="truncate">
                           <span className="font-semibold block text-slate-800 truncate">
-                            NID: {dir.nidNo || 'Not specified'}
+                            National ID: {dir.nidNo || 'Not specified'}
                           </span>
                           <span className="text-[11px] text-slate-500 block truncate">
                             {dir.nidFile ? dir.nidFile.fileName : 'No file uploaded'}

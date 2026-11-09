@@ -43,7 +43,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { Company, CompanyDirector, DirectorCar, DirectorDocument, DirectorExcelDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
+import { Company, CompanyBankAccount, CompanyDirector, DirectorCar, DirectorDocument, DirectorExcelDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
 import {
   fileToBase64,
   getCompanyById,
@@ -155,9 +155,9 @@ function CreateCompanyFormContent() {
   const [logo, setLogo] = useState<string>('');
   const [currency, setCurrency] = useState('MYR');
   const [language, setLanguage] = useState('English');
-  const [bankName, setBankName] = useState('');
-  const [bankAccountName, setBankAccountName] = useState('');
-  const [bankAccountNo, setBankAccountNo] = useState('');
+  const [bankAccounts, setBankAccounts] = useState<CompanyBankAccount[]>([
+    { id: `bank-${Date.now()}`, bankName: '', bankAccountName: '', bankAccountNo: '' }
+  ]);
   const [sector, setSector] = useState('');
   const [companySectors, setCompanySectors] = useState<string[]>([]);
   const [sectorsList, setSectorsList] = useState<WorkingSector[]>([]);
@@ -218,9 +218,25 @@ function CreateCompanyFormContent() {
         setLogo(comp.logo || '');
         setCurrency(comp.currency || 'MYR');
         setLanguage(comp.language || 'English');
-        setBankName(comp.bankName || '');
-        setBankAccountName(comp.bankAccountName || '');
-        setBankAccountNo(comp.bankAccountNo || '');
+        if (comp.bankAccounts && comp.bankAccounts.length > 0) {
+          setBankAccounts(
+            comp.bankAccounts.map((b, bIdx) => ({
+              id: b.id || `bank-${bIdx + 1}-${Date.now()}`,
+              bankName: b.bankName || '',
+              bankAccountName: b.bankAccountName || '',
+              bankAccountNo: b.bankAccountNo || '',
+            }))
+          );
+        } else if (comp.bankName || comp.bankAccountNo) {
+          setBankAccounts([
+            {
+              id: `bank-1-${Date.now()}`,
+              bankName: comp.bankName || '',
+              bankAccountName: comp.bankAccountName || '',
+              bankAccountNo: comp.bankAccountNo || '',
+            },
+          ]);
+        }
         const secStr = comp.sector || '';
         const secArr = comp.sectors && Array.isArray(comp.sectors) && comp.sectors.length > 0
           ? comp.sectors
@@ -766,6 +782,39 @@ function CreateCompanyFormContent() {
     });
   };
 
+  // Multiple Bank Accounts Handlers
+  const handleAddBankAccount = () => {
+    setBankAccounts((prev) => [
+      ...prev,
+      {
+        id: `bank-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        bankName: '',
+        bankAccountName: '',
+        bankAccountNo: '',
+      },
+    ]);
+  };
+
+  const handleRemoveBankAccount = (index: number) => {
+    setBankAccounts((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleUpdateBankAccount = (
+    index: number,
+    field: keyof CompanyBankAccount,
+    value: string
+  ) => {
+    setBankAccounts((prev) => {
+      const copy = [...prev];
+      const val = field === 'bankAccountNo' ? value.replace(/\D/g, '') : value;
+      copy[index] = { ...copy[index], [field]: val };
+      return copy;
+    });
+  };
+
   // Submit Handler: Saves to LocalStorage & navigates to list page
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -806,9 +855,15 @@ function CreateCompanyFormContent() {
         email: email.trim(),
         currency,
         language,
-        bankName,
-        bankAccountName: bankAccountName.trim(),
-        bankAccountNo: bankAccountNo.trim(),
+        bankName: bankAccounts[0]?.bankName || '',
+        bankAccountName: (bankAccounts[0]?.bankAccountName || '').trim(),
+        bankAccountNo: (bankAccounts[0]?.bankAccountNo || '').trim(),
+        bankAccounts: bankAccounts.map((b) => ({
+          id: b.id,
+          bankName: b.bankName || '',
+          bankAccountName: (b.bankAccountName || '').trim(),
+          bankAccountNo: (b.bankAccountNo || '').trim(),
+        })),
         directors: directors.map((dir) => {
           const cleanCars: DirectorCar[] = (dir.cars && dir.cars.length > 0 ? dir.cars : [createEmptyCar(1)]).map((c) => ({
             id: c.id,
@@ -1015,8 +1070,9 @@ function CreateCompanyFormContent() {
                   <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="tel"
+                    inputMode="numeric"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                   />
                 </div>
@@ -1031,8 +1087,9 @@ function CreateCompanyFormContent() {
                   <PhoneCall size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="tel"
+                    inputMode="numeric"
                     value={telephone}
-                    onChange={(e) => setTelephone(e.target.value)}
+                    onChange={(e) => setTelephone(e.target.value.replace(/\D/g, ''))}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                   />
                 </div>
@@ -1143,67 +1200,131 @@ function CreateCompanyFormContent() {
           </div>
         </div>
 
-        {/* SECTION 3: BANKING, CURRENCY & LANGUAGE */}
+        {/* SECTION 3: BANKING INFORMATION */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
+                3
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 m-0">Banking Information</h2>
+                <p className="text-[11px] text-slate-500 m-0">Corporate bank name, account name, and bank account number. Multiple bank accounts can be added.</p>
+              </div>
+            </div>
+
+            {/* + Add Bank Account Button */}
+            <button
+              type="button"
+              onClick={handleAddBankAccount}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-[#0b4da2] border border-blue-200 shadow-2xs transition-colors cursor-pointer shrink-0"
+            >
+              <Plus size={14} />
+              <span>+ Add Bank Account</span>
+            </button>
+          </div>
+
+          {/* Bank Accounts List */}
+          <div className="space-y-4">
+            {bankAccounts.map((account, bIndex) => (
+              <div
+                key={account.id || bIndex}
+                className="bg-slate-50/70 border border-slate-200 rounded-2xl p-4 sm:p-5 relative space-y-4"
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-[#0b4da2] text-white text-[10px] font-bold flex items-center justify-center">
+                      {bIndex + 1}
+                    </span>
+                    <span className="text-xs font-bold text-slate-800">
+                      {account.bankName ? account.bankName : `Bank Account #${bIndex + 1}`}
+                    </span>
+                  </div>
+
+                  {bankAccounts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBankAccount(bIndex)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-50 border border-red-200 bg-white transition-colors cursor-pointer"
+                      title="Remove Bank Account"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Bank Name */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Company Bank Name
+                    </label>
+                    <div className="relative">
+                      <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={account.bankName}
+                        onChange={(e) => handleUpdateBankAccount(bIndex, 'bankName', e.target.value)}
+                        placeholder="e.g. Maybank, CIMB Bank"
+                        className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Company Account Name */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Company Account Name
+                    </label>
+                    <div className="relative">
+                      <UserCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={account.bankAccountName}
+                        onChange={(e) => handleUpdateBankAccount(bIndex, 'bankAccountName', e.target.value)}
+                        placeholder="e.g. Enterprise Sdn Bhd"
+                        className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Company Bank Account No (Digits Only) */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Company Bank Account No
+                    </label>
+                    <div className="relative">
+                      <CreditCard size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={account.bankAccountNo}
+                        onChange={(e) => handleUpdateBankAccount(bIndex, 'bankAccountNo', e.target.value.replace(/\D/g, ''))}
+                        placeholder="e.g. 514012345678"
+                        className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* SECTION 4: CURRENCY & LANGUAGE */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
           <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
-              3
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs">
+              4
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900 m-0">Banking, Currency &amp; Language</h2>
-              <p className="text-[11px] text-slate-500 m-0">Corporate bank account number, transactional currency, and operating language.</p>
+              <h2 className="text-sm font-bold text-slate-900 m-0">Currency &amp; Language</h2>
+              <p className="text-[11px] text-slate-500 m-0">Transactional currency and operating language.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Bank Name (Text Input) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Bank Name
-              </label>
-              <div className="relative">
-                <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Company Account Name */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Account Name
-              </label>
-              <div className="relative">
-                <UserCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={bankAccountName}
-                  onChange={(e) => setBankAccountName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Company Bank Account No */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Bank Account No
-              </label>
-              <div className="relative">
-                <CreditCard size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={bankAccountNo}
-                  onChange={(e) => setBankAccountNo(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Currency Selection (Select2 Searchable) */}
             <div>
               <Select2Search
@@ -1232,17 +1353,17 @@ function CreateCompanyFormContent() {
           </div>
         </div>
 
-        {/* SECTION 4: COMPANY DIRECTORS (CEOs) - MULTIPLE ADD */}
+        {/* SECTION 5: COMPANY DIRECTORS (CEOs) - MULTIPLE ADD */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs">
-                4
+                5
               </div>
               <div>
                 <h2 className="text-sm font-bold text-slate-900 m-0">Company Director(s) &amp; CEO(s)</h2>
                 <p className="text-[11px] text-slate-500 m-0">
-                  Multiple directors can be added. Includes NID, Passport, Car, Salary, and other uploaded documents.
+                  Multiple directors can be added. Includes National ID, Passport, Car, Salary, and other uploaded documents.
                 </p>
               </div>
             </div>
@@ -1330,10 +1451,10 @@ function CreateCompanyFormContent() {
                     />
                   </div>
 
-                  {/* NID No */}
+                  {/* National ID No */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      NID / National ID (IC) No
+                      National ID No
                     </label>
                     <input
                       type="text"
@@ -1343,10 +1464,10 @@ function CreateCompanyFormContent() {
                     />
                   </div>
 
-                  {/* NID Upload */}
+                  {/* National ID Upload */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      NID Document Upload
+                      National ID Document Upload
                     </label>
                     <div className="flex items-center gap-2">
                       <button
@@ -1356,7 +1477,7 @@ function CreateCompanyFormContent() {
                       >
                         <FileUp size={14} className="text-blue-600" />
                         <span className="truncate">
-                          {director.nidFile ? director.nidFile.fileName : 'Choose NID File'}
+                          {director.nidFile ? director.nidFile.fileName : 'Choose National ID File'}
                         </span>
                       </button>
                       <input
@@ -1372,7 +1493,7 @@ function CreateCompanyFormContent() {
                           type="button"
                           onClick={() => setPreviewFile({ name: director.nidFile!.fileName, url: director.nidFile!.fileData, type: director.nidFile!.fileType })}
                           className="p-2 rounded-lg bg-blue-50 text-[#0b4da2] hover:bg-blue-100 border border-blue-200 cursor-pointer shrink-0"
-                          title="Preview Uploaded NID"
+                          title="Preview Uploaded National ID"
                         >
                           <Eye size={14} />
                         </button>

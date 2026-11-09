@@ -82,11 +82,9 @@ jobs:
 
             # ৪. প্রোডাকশন এনভায়রনমেন্ট ভ্যারিয়েবল সেট করা (Backend API & Face AI API URL)
             echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.production
-            echo "NEXT_PUBLIC_API_URL=https://api.acco.ink/api" >> .env.production
             echo "NEXT_PUBLIC_FACE_API_URL=${{ secrets.NEXT_PUBLIC_FACE_API_URL || 'https://face.acco.ink' }}" >> .env.production
 
             echo "NEXT_PUBLIC_BACKEND_API_URL=https://api.acco.ink/api" > .env.local
-            echo "NEXT_PUBLIC_API_URL=https://api.acco.ink/api" >> .env.local
             echo "NEXT_PUBLIC_FACE_API_URL=${{ secrets.NEXT_PUBLIC_FACE_API_URL || 'https://face.acco.ink' }}" >> .env.local
 
             # ৫. ডিপেন্ডেন্সি ইন্সটল করা

@@ -85,6 +85,13 @@ export type CompanyDirector = {
   excelDocuments?: DirectorExcelDocument[]; // Excel spreadsheets (upload / create / edit)
 };
 
+export type CompanyBankAccount = {
+  id?: string;
+  bankName: string;
+  bankAccountName: string;
+  bankAccountNo: string;
+};
+
 export type Company = {
   id: string;
   db_id?: number | string;
@@ -119,6 +126,7 @@ export type Company = {
   bankName?: string; // Bank name
   bankAccountName?: string; // Company Account Name
   bankAccountNo?: string; // Company Bank Account No
+  bankAccounts?: CompanyBankAccount[]; // Multiple company bank accounts
   directors?: CompanyDirector[]; // Multiple Directors / CEOs
   status?: 'active' | 'inactive' | 'suspended';
   auto_deactivate_at?: string | null; // ISO datetime when company auto turns inactive

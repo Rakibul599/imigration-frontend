@@ -47,6 +47,7 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
                 bankName: bComp.bankName || local.bankName,
                 bankAccountName: bComp.bankAccountName || local.bankAccountName,
                 bankAccountNo: bComp.bankAccountNo || local.bankAccountNo,
+                bankAccounts: bComp.bankAccounts && bComp.bankAccounts.length > 0 ? bComp.bankAccounts : (local.bankAccounts || []),
               };
             }
             return bComp;
@@ -218,6 +219,7 @@ export async function saveStoredCompany(newCompany: Company): Promise<Company[]>
         bankName: companyToSave.bankName,
         bankAccountName: companyToSave.bankAccountName,
         bankAccountNo: companyToSave.bankAccountNo,
+        bankAccounts: companyToSave.bankAccounts,
         directors: companyToSave.directors,
       }),
     });
@@ -285,6 +287,7 @@ export async function updateStoredCompany(company: Company): Promise<Company[]> 
         bankName: companyToSave.bankName,
         bankAccountName: companyToSave.bankAccountName,
         bankAccountNo: companyToSave.bankAccountNo,
+        bankAccounts: companyToSave.bankAccounts,
         directors: companyToSave.directors,
       }),
     });
