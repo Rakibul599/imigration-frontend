@@ -548,7 +548,7 @@ export default function SuperAdminCompanyDetailsPage() {
                                 {car.purchaseType === 'cash' ? 'Cash Purchase' : 'EMI Scheme'}
                               </span>
                             </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                               <div>
                                 <span className="text-[10px] text-slate-400 block uppercase font-semibold">
                                   First Deposit
@@ -557,6 +557,16 @@ export default function SuperAdminCompanyDetailsPage() {
                                   {car.depositAmount ? `${currency} ${Number(car.depositAmount).toLocaleString()}` : `${currency} 0`}
                                 </span>
                               </div>
+                              {car.purchaseType === 'emi' && (
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">
+                                    EMI Period
+                                  </span>
+                                  <span className="text-slate-800 font-bold font-mono">
+                                    {car.emiPeriod ? `${car.emiPeriod} Months` : 'N/A'}
+                                  </span>
+                                </div>
+                              )}
                               <div>
                                 <span className="text-[10px] text-slate-400 block uppercase font-semibold">
                                   {car.purchaseType === 'cash' ? 'Cash Total' : 'Monthly EMI'}

@@ -112,6 +112,7 @@ function createEmptyCar(index = 1): DirectorCar {
     plateNo: '',
     purchaseType: 'emi',
     depositAmount: '',
+    emiPeriod: '',
     amount: '',
     totalPayment: '',
   };
@@ -131,6 +132,7 @@ function createEmptyDirector(index = 1): CompanyDirector {
     carPlates: [''],
     carPurchaseType: 'emi',
     carDepositAmount: '',
+    carEmiPeriod: '',
     carAmount: '',
     carTotalPayment: '',
     cars: [createEmptyCar(1)],
@@ -258,6 +260,7 @@ function CreateCompanyFormContent() {
                   plateNo: c.plateNo || '',
                   purchaseType: (c.purchaseType || 'emi') as 'cash' | 'emi',
                   depositAmount: c.depositAmount || '',
+                  emiPeriod: c.emiPeriod || '',
                   amount: c.amount || '',
                   totalPayment: c.totalPayment || '',
                 }));
@@ -270,6 +273,7 @@ function CreateCompanyFormContent() {
                   plateNo: plate || '',
                   purchaseType: (pIdx === 0 ? (d.carPurchaseType || 'emi') : 'emi') as 'cash' | 'emi',
                   depositAmount: pIdx === 0 ? (d.carDepositAmount || '') : '',
+                  emiPeriod: pIdx === 0 ? (d.carEmiPeriod || '') : '',
                   amount: pIdx === 0 ? (d.carAmount || '') : '',
                   totalPayment: pIdx === 0 ? (d.carTotalPayment || '') : '',
                 }));
@@ -283,6 +287,7 @@ function CreateCompanyFormContent() {
                 cars: parsedCars,
                 carPurchaseType: parsedCars[0]?.purchaseType || 'emi',
                 carDepositAmount: parsedCars[0]?.depositAmount || '',
+                carEmiPeriod: parsedCars[0]?.emiPeriod || '',
                 carAmount: parsedCars[0]?.amount || '',
                 carTotalPayment: parsedCars[0]?.totalPayment || '',
                 carPlates: parsedCars.map((c) => c.plateNo),
@@ -463,6 +468,20 @@ function CreateCompanyFormContent() {
       const dir = copy[directorIndex];
       const currentCars = Array.isArray(dir.cars) ? [...dir.cars] : [createEmptyCar(1)];
       const updatedCar = { ...currentCars[carIndex], [field]: value };
+
+      // Auto-compute total payment for EMI when deposit, period, or monthly amount changes
+      if (updatedCar.purchaseType === 'emi') {
+        if (field === 'depositAmount' || field === 'emiPeriod' || field === 'amount' || field === 'purchaseType') {
+          const deposit = parseFloat(String(updatedCar.depositAmount || 0)) || 0;
+          const monthly = parseFloat(String(updatedCar.amount || 0)) || 0;
+          const months = parseFloat(String(updatedCar.emiPeriod || 0)) || 0;
+          if (months > 0 || monthly > 0 || deposit > 0) {
+            const computed = deposit + (monthly * months);
+            updatedCar.totalPayment = computed > 0 ? String(computed) : '';
+          }
+        }
+      }
+
       currentCars[carIndex] = updatedCar;
 
       copy[directorIndex] = {
@@ -470,6 +489,7 @@ function CreateCompanyFormContent() {
         cars: currentCars,
         carPurchaseType: currentCars[0]?.purchaseType || 'emi',
         carDepositAmount: currentCars[0]?.depositAmount || '',
+        carEmiPeriod: currentCars[0]?.emiPeriod || '',
         carAmount: currentCars[0]?.amount || '',
         carTotalPayment: currentCars[0]?.totalPayment || '',
         carPlates: currentCars.map((c) => c.plateNo),
@@ -494,6 +514,7 @@ function CreateCompanyFormContent() {
         cars: currentCars,
         carPurchaseType: currentCars[0]?.purchaseType || 'emi',
         carDepositAmount: currentCars[0]?.depositAmount || '',
+        carEmiPeriod: currentCars[0]?.emiPeriod || '',
         carAmount: currentCars[0]?.amount || '',
         carTotalPayment: currentCars[0]?.totalPayment || '',
         carPlates: currentCars.map((c) => c.plateNo),
@@ -870,6 +891,7 @@ function CreateCompanyFormContent() {
             plateNo: (c.plateNo || '').trim(),
             purchaseType: (c.purchaseType || 'emi') as 'cash' | 'emi',
             depositAmount: c.depositAmount || '0',
+            emiPeriod: c.emiPeriod || '0',
             amount: c.amount || '0',
             totalPayment: c.purchaseType === 'emi' ? (c.totalPayment || '0') : '0',
           }));
@@ -889,6 +911,7 @@ function CreateCompanyFormContent() {
             carPlates: cleanPlates.length > 0 ? cleanPlates : [''],
             carPurchaseType: cleanCars[0]?.purchaseType || 'emi',
             carDepositAmount: cleanCars[0]?.depositAmount || '0',
+            carEmiPeriod: cleanCars[0]?.purchaseType === 'emi' ? (cleanCars[0]?.emiPeriod || '0') : '0',
             carAmount: cleanCars[0]?.amount || '0',
             carTotalPayment: cleanCars[0]?.purchaseType === 'emi' ? (cleanCars[0]?.totalPayment || '0') : '0',
             basicSalary: dir.basicSalary || '0',
@@ -1213,14 +1236,14 @@ function CreateCompanyFormContent() {
               </div>
             </div>
 
-            {/* + Add Bank Account Button */}
+            {/* Add Bank Account Button */}
             <button
               type="button"
               onClick={handleAddBankAccount}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-[#0b4da2] border border-blue-200 shadow-2xs transition-colors cursor-pointer shrink-0"
             >
               <Plus size={14} />
-              <span>+ Add Bank Account</span>
+              <span>Add Bank Account</span>
             </button>
           </div>
 
@@ -1375,7 +1398,7 @@ function CreateCompanyFormContent() {
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 shadow-2xs transition-colors cursor-pointer shrink-0"
             >
               <UserPlus size={14} />
-              <span>+ Add Director / CEO</span>
+              <span>Add Director / CEO</span>
             </button>
           </div>
 
@@ -1610,7 +1633,7 @@ function CreateCompanyFormContent() {
                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 hover:bg-blue-100 text-[#0b4da2] border border-blue-200 shadow-2xs cursor-pointer transition-colors"
                     >
                       <Plus size={13} />
-                      <span>+ Add Car</span>
+                      <span>Add Car</span>
                     </button>
                   </div>
 
@@ -1706,63 +1729,123 @@ function CreateCompanyFormContent() {
                             </div>
                           </div>
 
-                          {/* Row 2: 3 Financial Fields (First Deposit, Monthly EMI, Total Payment) */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                            {/* 1. First Deposit Amount */}
-                            <div>
-                              <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                                First Deposit Amount ({currency})
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={car.depositAmount || ''}
-                                onChange={(e) => handleUpdateCar(dIndex, cIndex, 'depositAmount', e.target.value)}
-                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
-                              />
-                            </div>
+                          {/* Financial Fields */}
+                          {car.purchaseType === 'emi' ? (
+                            <div className="space-y-2.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+                                {/* 1. First Deposit Amount */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                    First Deposit Amount ({currency})
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={car.depositAmount || ''}
+                                    onChange={(e) => handleUpdateCar(dIndex, cIndex, 'depositAmount', e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
 
-                            {/* 2. Monthly EMI Amount or Cash Total */}
-                            <div>
-                              <label className="block text-[11px] font-bold text-slate-700 mb-1 truncate">
-                                {car.purchaseType === 'cash' ? `Car Cash Total Amount (${currency})` : `Monthly EMI Amount (${currency})`}
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={car.amount}
-                                onChange={(e) => handleUpdateCar(dIndex, cIndex, 'amount', e.target.value)}
-                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
-                              />
-                            </div>
+                                {/* 2. EMI Period (Months) */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                    EMI Period (Months)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="e.g. 12, 24, 36"
+                                    value={car.emiPeriod || ''}
+                                    onChange={(e) => handleUpdateCar(dIndex, cIndex, 'emiPeriod', e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
 
-                            {/* 3. Total Payment (EMI Only) */}
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <label className="block text-[11px] font-bold text-slate-700 m-0">
-                                  Total Payment ({currency})
-                                </label>
-                                {car.purchaseType === 'emi' && (
-                                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
-                                    EMI Total
-                                  </span>
-                                )}
+                                {/* 3. Monthly EMI Amount */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 mb-1 truncate">
+                                    Monthly EMI Amount ({currency})
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={car.amount}
+                                    onChange={(e) => handleUpdateCar(dIndex, cIndex, 'amount', e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
+
+                                {/* 4. Total Payment (EMI Only) */}
+                                <div>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[11px] font-bold text-slate-700 m-0">
+                                      Total Payment ({currency})
+                                    </label>
+                                    <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                      EMI Total
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="0"
+                                    value={car.totalPayment || ''}
+                                    onChange={(e) => handleUpdateCar(dIndex, cIndex, 'totalPayment', e.target.value)}
+                                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-blue-900 focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
                               </div>
-                              {car.purchaseType === 'emi' ? (
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={car.totalPayment || ''}
-                                  onChange={(e) => handleUpdateCar(dIndex, cIndex, 'totalPayment', e.target.value)}
-                                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
-                                />
-                              ) : (
-                                <div className="h-[34px] flex items-center px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] font-bold text-emerald-700">
-                                  Paid in Full (Cash)
+
+                              {/* Calculation Display / Summary Box */}
+                              {(Number(car.depositAmount) > 0 || Number(car.amount) > 0 || Number(car.emiPeriod) > 0) && (
+                                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs">
+                                  <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                                    <span className="font-bold text-blue-900">EMI Calculation:</span>
+                                    <span>
+                                      Deposit ({Number(car.depositAmount || 0).toLocaleString()} {currency}) + [{Number(car.amount || 0).toLocaleString()} {currency} × {car.emiPeriod || 0} Months]
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-slate-500 text-[11px] mr-1.5">Calculated Total:</span>
+                                    <span className="font-bold font-mono text-blue-900 text-sm">
+                                      {(
+                                        (Number(car.depositAmount) || 0) +
+                                        ((Number(car.amount) || 0) * (Number(car.emiPeriod) || 0))
+                                      ).toLocaleString()} {currency}
+                                    </span>
+                                  </div>
                                 </div>
                               )}
                             </div>
-                          </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1 truncate">
+                                  Car Cash Total Amount ({currency})
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  placeholder="0"
+                                  value={car.amount}
+                                  onChange={(e) => handleUpdateCar(dIndex, cIndex, 'amount', e.target.value)}
+                                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                  Payment Status
+                                </label>
+                                <div className="h-[36px] flex items-center px-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] font-bold text-emerald-700">
+                                  Paid in Full (Cash)
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1784,7 +1867,7 @@ function CreateCompanyFormContent() {
                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs cursor-pointer"
                     >
                       <Plus size={13} />
-                      <span>+ Add Document</span>
+                      <span>Add Document</span>
                     </button>
                   </div>
 

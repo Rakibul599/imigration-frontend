@@ -58,6 +58,7 @@ export type DirectorCar = {
   plateNo: string;
   purchaseType: 'cash' | 'emi' | '';
   depositAmount?: string | number; // First Deposit Amount
+  emiPeriod?: string | number; // EMI Period (Months)
   amount: string | number; // EMI/Cash Monthly Amount
   totalPayment?: string | number; // Total Payment (only for EMI scheme)
 };
@@ -77,6 +78,7 @@ export type CompanyDirector = {
   carPlates?: string[]; // Multiple car plate numbers (+add)
   carPurchaseType: 'cash' | 'emi' | ''; // EMI or Cash
   carDepositAmount?: string | number; // First Deposit Amount
+  carEmiPeriod?: string | number; // EMI Period (Months)
   carAmount: string | number; // EMI/Cash Monthly Amount
   carTotalPayment?: string | number; // Total Payment (only for EMI scheme)
   cars?: DirectorCar[]; // Multiple assigned cars with individual plate, scheme, EMI, total payment
