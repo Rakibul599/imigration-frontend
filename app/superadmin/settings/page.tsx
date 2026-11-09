@@ -1,11 +1,21 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Building2,
   Check,
   CheckCircle2,
+  CheckSquare,
+  Square,
+  Crown,
+  Layers,
+  Receipt,
+  FileText,
+  Clock,
+  ScanFace,
+  FolderArchive,
+  Briefcase,
   ExternalLink,
   Eye,
   Globe2,
@@ -16,6 +26,7 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Search,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -27,6 +38,7 @@ import {
   Database,
   Trash2,
   AlertTriangle,
+  Filter,
 } from 'lucide-react';
 import {
   SiteSettings,
@@ -107,6 +119,39 @@ const SIDEBAR_PRESETS = [
   },
 ];
 
+export type CleanableModule = {
+  key: string;
+  name: string;
+  category: string;
+  icon?: string;
+  description: string;
+  tables: string[];
+  storage_dirs: string[];
+  local_storage_keys: string[];
+  record_count?: number;
+};
+
+function renderModuleIcon(iconName?: string) {
+  switch (iconName) {
+    case 'Building2': return <Building2 size={16} className="text-blue-600" />;
+    case 'Crown': return <Crown size={16} className="text-amber-500" />;
+    case 'Sparkles': return <Sparkles size={16} className="text-purple-600" />;
+    case 'Receipt': return <Receipt size={16} className="text-emerald-600" />;
+    case 'Layers': return <Layers size={16} className="text-indigo-600" />;
+    case 'Users': return <Users size={16} className="text-cyan-600" />;
+    case 'Briefcase': return <Briefcase size={16} className="text-amber-600" />;
+    case 'ShieldAlert': return <ShieldAlert size={16} className="text-rose-600" />;
+    case 'UserCheck': return <UserCheck size={16} className="text-teal-600" />;
+    case 'FileText': return <FileText size={16} className="text-blue-500" />;
+    case 'Clock': return <Clock size={16} className="text-sky-600" />;
+    case 'ScanFace': return <ScanFace size={16} className="text-violet-600" />;
+    case 'FolderArchive': return <FolderArchive size={16} className="text-orange-600" />;
+    case 'Palette': return <Palette size={16} className="text-fuchsia-600" />;
+    case 'Globe2': return <Globe2 size={16} className="text-emerald-600" />;
+    default: return <Database size={16} className="text-slate-600" />;
+  }
+}
+
 export default function SuperAdminSettingsPage() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
 
@@ -114,6 +159,13 @@ export default function SuperAdminSettingsPage() {
   const [activeTab, setActiveTab] = useState<'general' | 'sidebar' | 'system'>('general');
   const [isCleaningDatabase, setIsCleaningDatabase] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<any>(null);
+
+  // Selective Database Cleanup States
+  const [cleanableModules, setCleanableModules] = useState<CleanableModule[]>([]);
+  const [selectedCleanKeys, setSelectedCleanKeys] = useState<string[]>([]);
+  const [isLoadingModules, setIsLoadingModules] = useState(false);
+  const [searchCleanTerm, setSearchCleanTerm] = useState('');
+  const [cleanCategoryFilter, setCleanCategoryFilter] = useState<string>('ALL');
 
   // General Settings States
   const [siteName, setSiteName] = useState('');
@@ -355,13 +407,132 @@ export default function SuperAdminSettingsPage() {
     }
   };
 
-  // Clean Entire System Data (Wipes all database tables, storage uploads, and client caches)
-  const handleCleanEntireSystem = async () => {
-    if (
-      !confirm(
-        '⚠️ DANGER: Are you sure you want to delete ALL data across the entire system?\n\nThis will permanently clean all companies, foreign workers, customers, invoices, attendances, and storage files.\n\nOnly Super Admin access credentials (admin / superadmin2026) will be preserved.'
-      )
-    ) {
+  // Fetch live summary of modules & record counts from backend
+  const fetchModuleSummary = async () => {
+    setIsLoadingModules(true);
+    try {
+      const rawApi =
+        process.env.NEXT_PUBLIC_BACKEND_API_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+          ? `${window.location.protocol}//api.${window.location.hostname.replace(/^myadmin\./, '')}/api`
+          : 'http://127.0.0.1:8000/api');
+      const cleanApi = rawApi.replace(/\/+$/, '');
+
+      let res = await fetch(`${cleanApi}/clean-database/summary`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok && cleanApi.endsWith('/api')) {
+        const rootBase = cleanApi.replace(/\/api$/, '');
+        res = await fetch(`${rootBase}/clean-database/summary`, {
+          headers: { Accept: 'application/json' },
+        });
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.modules)) {
+          setCleanableModules(data.modules);
+          // Pre-select non-settings modules by default if none selected yet
+          setSelectedCleanKeys((prev) => {
+            if (prev.length > 0) return prev;
+            return data.modules
+              .filter((m: CleanableModule) => !['theme_settings', 'site_settings'].includes(m.key))
+              .map((m: CleanableModule) => m.key);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch cleanup modules:', err);
+    } finally {
+      setIsLoadingModules(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'system') {
+      fetchModuleSummary();
+    }
+  }, [activeTab]);
+
+  const toggleModuleSelection = (key: string) => {
+    setSelectedCleanKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleSelectAllModules = () => {
+    setSelectedCleanKeys(cleanableModules.map((m) => m.key));
+  };
+
+  const handleDeselectAllModules = () => {
+    setSelectedCleanKeys([]);
+  };
+
+  const handleSelectBusinessOnly = () => {
+    setSelectedCleanKeys([
+      'companies',
+      'customers',
+      'company_trial_applications',
+      'company_quotations_invoices',
+      'company_stat_cards',
+    ]);
+  };
+
+  const handleSelectPlansOnly = () => {
+    setSelectedCleanKeys(['subscription_plans']);
+  };
+
+  const totalSelectedRecords = useMemo(() => {
+    return cleanableModules
+      .filter((m) => selectedCleanKeys.includes(m.key))
+      .reduce((acc, m) => acc + (m.record_count || 0), 0);
+  }, [cleanableModules, selectedCleanKeys]);
+
+  const cleanCategories = useMemo(() => {
+    const cats = ['ALL'];
+    cleanableModules.forEach((m) => {
+      if (m.category && !cats.includes(m.category)) {
+        cats.push(m.category);
+      }
+    });
+    return cats;
+  }, [cleanableModules]);
+
+  const filteredCleanModules = useMemo(() => {
+    return cleanableModules.filter((m) => {
+      const q = (searchCleanTerm || '').toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        m.name.toLowerCase().includes(q) ||
+        m.description.toLowerCase().includes(q) ||
+        m.category.toLowerCase().includes(q) ||
+        m.tables.some((t) => t.toLowerCase().includes(q));
+
+      const matchesCat =
+        cleanCategoryFilter === 'ALL' || m.category === cleanCategoryFilter;
+
+      return matchesSearch && matchesCat;
+    });
+  }, [cleanableModules, searchCleanTerm, cleanCategoryFilter]);
+
+  // Clean Selected Modules Data (Selectable Database Cleanup)
+  const handleCleanSelectedData = async (overrideKeys?: string[]) => {
+    const targetKeys = overrideKeys || selectedCleanKeys;
+    if (targetKeys.length === 0) {
+      showToast('error', 'Please select at least one module to clean.');
+      return;
+    }
+
+    const selectedModuleNames = cleanableModules
+      .filter((m) => targetKeys.includes(m.key))
+      .map((m) => m.name);
+
+    const isAll = targetKeys.length === cleanableModules.length;
+    const confirmMessage = isAll
+      ? '⚠️ DANGER: You have selected ALL modules across the entire database!\n\nThis will permanently delete all records.\n\nOnly Super Admin access credentials (admin / superadmin2026) will be preserved.\n\nAre you sure you want to proceed?'
+      : `⚠️ Confirm Selective Database Cleanup:\n\nYou have selected ${targetKeys.length} module(s) to permanently delete:\n• ${selectedModuleNames.join('\n• ')}\n\nAll non-selected database tables will remain completely safe.\n\nProceed with deleting the selected data?`;
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -374,65 +545,71 @@ export default function SuperAdminSettingsPage() {
           ? `${window.location.protocol}//api.${window.location.hostname.replace(/^myadmin\./, '')}/api`
           : 'http://127.0.0.1:8000/api');
       const cleanApi = rawApi.replace(/\/+$/, '');
-      
+
       let res = await fetch(`${cleanApi}/clean-database`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ selected_keys: targetKeys }),
       });
 
-      // If /api/clean-database returned 404, fallback to root /clean-database
       if (res.status === 404 && cleanApi.endsWith('/api')) {
         const rootBase = cleanApi.replace(/\/api$/, '');
         res = await fetch(`${rootBase}/clean-database`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ selected_keys: targetKeys }),
         });
       }
 
       const data = await res.json();
-
       if (!res.ok || data.success === false) {
         throw new Error(data.message || `Server returned error (${res.status})`);
       }
 
-      // Clear all browser localStorage keys for agency
-      const agencyKeys = [
-        'agency_companies_data',
-        'agency_companies_updated',
-        'agency_customers_v1',
-        'agency_customer_targets_v1',
-        'agency_customer_deposits_v1',
-        'agency_customer_pendings_v1',
-        'agency_customer_costs_v1',
-        'agency_programs_v1',
-        'agency_agents_v1',
-        'agency_company_trials_v1',
-        'agency_company_quotations_v1',
-        'agency_company_invoices_v1',
-        'agency_attendance_list_v1',
-        'agency_employee_leaves_v1',
-        'agency_employee_resignations_v1',
-        'agency_master_admins_v1',
-        'agency_employees_v1',
-      ];
-      agencyKeys.forEach((k) => {
+      // Clear client localStorage keys returned by backend or determined by selected modules
+      const keysToClear = Array.isArray(data.local_storage_keys) && data.local_storage_keys.length > 0
+        ? data.local_storage_keys
+        : cleanableModules
+            .filter((m) => targetKeys.includes(m.key))
+            .flatMap((m) => m.local_storage_keys || []);
+
+      keysToClear.forEach((k: string) => {
         try {
           localStorage.removeItem(k);
         } catch {}
       });
-      try {
-        localStorage.setItem('agency_companies_data', JSON.stringify([]));
-        window.dispatchEvent(new Event('agency_companies_updated'));
-      } catch {}
+
+      if (targetKeys.includes('companies')) {
+        try {
+          localStorage.setItem('agency_companies_data', JSON.stringify([]));
+          window.dispatchEvent(new Event('agency_companies_updated'));
+        } catch {}
+      }
+      if (targetKeys.includes('company_trial_applications')) {
+        window.dispatchEvent(new Event('company_trials_updated'));
+      }
+      if (targetKeys.includes('subscription_plans')) {
+        window.dispatchEvent(new Event('agency_subscription_plans_updated'));
+      }
 
       setCleanupResult(data);
-      showToast('success', 'Entire system data deleted successfully! Only Super Admin access has been preserved.');
+      showToast(
+        'success',
+        `Successfully cleaned ${data.cleaned_modules?.length || targetKeys.length} selected module(s)!`
+      );
+
+      // Re-fetch live record counts from backend
+      fetchModuleSummary();
     } catch (err: any) {
-      console.error('Failed to clean system:', err);
-      showToast('error', 'Failed to clean system data: ' + (err.message || 'Unknown error'));
+      console.error('Failed to clean selected data:', err);
+      showToast('error', 'Failed to clean selected data: ' + (err.message || 'Unknown error'));
     } finally {
       setIsCleaningDatabase(false);
     }
+  };
+
+  const handleCleanEntireSystem = () => {
+    handleCleanSelectedData(cleanableModules.map((m) => m.key));
   };
 
   const isDarkPreview = isColorDark(sidebarBgColor);
@@ -1294,101 +1471,319 @@ export default function SuperAdminSettingsPage() {
         </div>
       )}
 
-      {/* TAB 3: SYSTEM DATA CLEANUP (DANGER ZONE) */}
+      {/* TAB 3: SYSTEM DATA CLEANUP (SELECTIVE CLEANUP) */}
       {activeTab === 'system' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Main Danger Card */}
-          <div className="bg-white border-2 border-rose-200 rounded-2xl p-6 sm:p-8 shadow-md">
+          <div className="bg-white border-2 border-rose-200 rounded-2xl p-6 sm:p-7 shadow-sm space-y-5">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
                 <AlertTriangle size={24} />
               </div>
-              <div className="space-y-2 flex-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold uppercase tracking-wider">
-                  <span>Danger Zone • Permanent Action</span>
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[11px] font-bold uppercase tracking-wider">
+                    Danger Zone • Selectable Cleanup
+                  </span>
+                  <span className="text-xs text-slate-400">•</span>
+                  <span className="text-xs text-slate-600 font-semibold">
+                    Delete only what you select — unselected tables remain 100% safe
+                  </span>
                 </div>
-                <h2 className="text-xl font-bold text-slate-900 m-0">
-                  Clean Entire System Data (Reset Database &amp; Local Storage)
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 m-0">
+                  Selective Database &amp; System Data Cleanup
                 </h2>
-                <p className="text-sm text-slate-600 leading-relaxed m-0">
-                  This action will completely wipe all registered companies, foreign worker records, customers, invoices, quotations, attendances, applications, and uploaded files from the database and storage.
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed m-0">
+                  Select the specific modules or tables you wish to clean below. Only the checked items will be permanently deleted from the MySQL database and file storage.
                 </p>
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <ShieldCheck size={15} className="text-emerald-600" />
-                    <span>Super Admin Access Is Guaranteed &amp; Preserved</span>
+              </div>
+            </div>
+
+            {/* Preserved Super Admin Notice */}
+            <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                <span>Super Admin Access Is Guaranteed &amp; Preserved</span>
+              </div>
+              <p className="m-0 text-amber-800 text-[11px] leading-relaxed">
+                Your Super Administrator credentials (<code>admin</code> / <code>superadmin@agency.gov.my</code>) and core Laravel migrations are permanently protected and will never be deleted.
+              </p>
+            </div>
+
+            {/* Quick Action & Filter Toolbar */}
+            <div className="pt-2 flex flex-col md:flex-row md:items-center justify-between gap-3 border-t border-slate-100">
+              {/* Search Bar */}
+              <div className="relative w-full md:w-72">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchCleanTerm}
+                  onChange={(e) => setSearchCleanTerm(e.target.value)}
+                  placeholder="Filter modules or tables..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white focus:ring-1 focus:ring-blue-200"
+                />
+                {searchCleanTerm && (
+                  <button
+                    onClick={() => setSearchCleanTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer p-0"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Select Preset Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleSelectAllModules}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200"
+                >
+                  Select All ({cleanableModules.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeselectAllModules}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200"
+                >
+                  Deselect All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSelectBusinessOnly}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-[#0b4da2] hover:bg-blue-100 transition-colors cursor-pointer border border-blue-200"
+                >
+                  Employers &amp; Workers
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSelectPlansOnly}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer border border-amber-200"
+                >
+                  Plans Only
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchModuleSummary}
+                  disabled={isLoadingModules}
+                  title="Refresh record counts"
+                  className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200 bg-white"
+                >
+                  <RotateCcw size={13} className={isLoadingModules ? 'animate-spin text-[#0b4da2]' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+                Category:
+              </span>
+              {cleanCategories.map((cat: string) => {
+                const isSelected = cleanCategoryFilter === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCleanCategoryFilter(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-all border ${
+                      isSelected
+                        ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selection Overview Banner */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800">
+                  Selected for Deletion:
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-mono font-bold text-xs">
+                  {selectedCleanKeys.length} of {cleanableModules.length} Modules
+                </span>
+                <span className="text-slate-400">•</span>
+                <span className="font-mono font-semibold text-slate-700">
+                  ~{totalSelectedRecords.toLocaleString()} Records
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 italic">
+                {selectedCleanKeys.length === 0
+                  ? 'No modules selected (Nothing will be deleted)'
+                  : `${cleanableModules.length - selectedCleanKeys.length} modules will remain untouched`}
+              </div>
+            </div>
+
+            {/* Grid of Cleanable Module Cards with Checkboxes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {filteredCleanModules.map((mod: CleanableModule) => {
+                const isSelected = selectedCleanKeys.includes(mod.key);
+                const hasRecords = (mod.record_count ?? 0) > 0;
+
+                return (
+                  <div
+                    key={mod.key}
+                    onClick={() => toggleModuleSelection(mod.key)}
+                    className={`relative rounded-xl p-4 border-2 transition-all cursor-pointer flex flex-col justify-between select-none ${
+                      isSelected
+                        ? 'border-rose-400 bg-rose-50/40 shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Row: Checkbox + Icon + Title + Count Badge */}
+                      <div className="flex items-start justify-between gap-2.5 mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="pt-0.5">
+                            {isSelected ? (
+                              <CheckSquare size={18} className="text-rose-600 shrink-0" />
+                            ) : (
+                              <Square size={18} className="text-slate-400 shrink-0" />
+                            )}
+                          </div>
+                          <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            {renderModuleIcon(mod.icon)}
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 m-0 leading-tight">
+                              {mod.name}
+                            </h4>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              {mod.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Live Record Count Badge */}
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 border ${
+                            hasRecords
+                              ? isSelected
+                                ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}
+                        >
+                          {mod.record_count ?? 0} records
+                        </span>
+                      </div>
+
+                      {/* Description */}
+                      <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed m-0 mb-3 pl-7">
+                        {mod.description}
+                      </p>
+                    </div>
+
+                    {/* Bottom: Affected Tables Tags */}
+                    <div className="pt-2 border-t border-slate-100/80 flex flex-wrap gap-1 items-center pl-7">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mr-0.5">
+                        Tables:
+                      </span>
+                      {mod.tables.length === 0 ? (
+                        <span className="text-[10px] text-slate-400 italic">Storage files</span>
+                      ) : (
+                        mod.tables.map((t: string) => (
+                          <span
+                            key={t}
+                            className="text-[9px] font-mono font-semibold bg-white text-slate-700 border border-slate-200 px-1.5 py-0.2 rounded"
+                          >
+                            {t}
+                          </span>
+                        ))
+                      )}
+                    </div>
                   </div>
-                  <p className="m-0 text-amber-800">
-                    Your Super Administrator login access (<code>admin</code> / <code>superadmin@agency.gov.my</code>) will remain 100% active. Site branding and theme settings are also protected.
-                  </p>
-                </div>
-              </div>
+                );
+              })}
             </div>
 
-            {/* Preserved Super Admin Credentials Box */}
-            <div className="mt-6 pt-6 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Preserved Role
-                </span>
-                <span className="text-sm font-bold text-slate-900">Super Administrator</span>
+            {filteredCleanModules.length === 0 && (
+              <div className="py-12 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                <Database size={32} className="mx-auto text-slate-300 mb-2" />
+                <p className="text-xs font-semibold text-slate-600 m-0">No modules match &quot;{searchCleanTerm}&quot;</p>
+                <button
+                  type="button"
+                  onClick={() => { setSearchCleanTerm(''); setCleanCategoryFilter('ALL'); }}
+                  className="mt-2 text-xs font-bold text-[#0b4da2] hover:underline bg-transparent border-0 cursor-pointer"
+                >
+                  Clear search filters
+                </button>
               </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Login Usernames
-                </span>
-                <span className="text-xs font-mono font-bold text-slate-900 block">admin</span>
-                <span className="text-[11px] font-mono text-slate-500">superadmin@agency.gov.my</span>
-              </div>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Default Passwords
-                </span>
-                <span className="text-xs font-mono font-bold text-slate-900 block">admin</span>
-                <span className="text-[11px] font-mono text-slate-500">superadmin2026</span>
-              </div>
-            </div>
+            )}
 
-            {/* Direct Cleanup Trigger Button */}
-            <div className="mt-8 pt-6 border-t border-rose-100 flex items-center justify-between flex-wrap gap-4">
+            {/* Bottom Execution Bar */}
+            <div className="pt-5 border-t border-rose-200 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <span className="text-xs font-bold text-slate-700 block">
-                  Execute Whole System Wipe
+                <span className="text-xs font-bold text-slate-800 block">
+                  Execute Selected Cleanup
                 </span>
                 <span className="text-xs text-slate-500">
-                  Truncates 34 tables, empties file storage, and resets client cache to 0.
+                  {selectedCleanKeys.length === 0
+                    ? 'Check one or more modules above to enable the cleanup trigger.'
+                    : `Will wipe ${selectedCleanKeys.length} selected module(s) (~${totalSelectedRecords.toLocaleString()} records).`}
                 </span>
               </div>
 
-              <button
-                type="button"
-                onClick={handleCleanEntireSystem}
-                disabled={isCleaningDatabase}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-md hover:shadow-lg cursor-pointer border-0 disabled:opacity-50"
-              >
-                <Trash2 size={16} />
-                <span>
-                  {isCleaningDatabase ? 'Cleaning Entire System...' : 'Delete Entire System Data'}
-                </span>
-              </button>
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleCleanEntireSystem}
+                  disabled={isCleaningDatabase}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                  title="Wipes all cleanable modules at once"
+                >
+                  <span>Wipe All Modules</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCleanSelectedData()}
+                  disabled={isCleaningDatabase || selectedCleanKeys.length === 0}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm hover:shadow-md cursor-pointer border-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={15} />
+                  <span>
+                    {isCleaningDatabase
+                      ? 'Deleting Selected Data...'
+                      : selectedCleanKeys.length === 0
+                      ? 'Select Modules to Clean'
+                      : `Delete Selected (${selectedCleanKeys.length} Modules)`}
+                  </span>
+                </button>
+              </div>
             </div>
 
             {/* Cleanup Result Summary Box if executed */}
             {cleanupResult && (
-              <div className="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-2 animate-in fade-in duration-200">
+              <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-2 animate-in fade-in duration-200">
                 <div className="font-bold flex items-center gap-1.5 text-emerald-800 text-sm">
                   <CheckCircle2 size={16} className="text-emerald-600" />
                   <span>{cleanupResult.message}</span>
                 </div>
-                <div className="text-[11px] text-emerald-700">
-                  Tables Cleaned: <strong>{cleanupResult.summary?.total_tables_cleaned || 34}</strong> | Preserved: <strong>{cleanupResult.summary?.total_tables_preserved || 4}</strong>
+                {Array.isArray(cleanupResult.cleaned_modules) && cleanupResult.cleaned_modules.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-emerald-800">Cleaned Modules:</span>
+                    {cleanupResult.cleaned_modules.map((m: string) => (
+                      <span key={m} className="px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-emerald-800 font-semibold text-[10px]">
+                        ✓ {m}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="text-[11px] text-emerald-700 pt-1">
+                  Tables Cleaned: <strong>{cleanupResult.cleaned_tables?.length || 0}</strong> | Super Admin Access: <strong>Active &amp; Preserved</strong>
                 </div>
                 <div className="pt-2 flex items-center gap-3">
                   <Link
-                    href="/superadmin/companies"
+                    href="/companies"
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-bold text-xs no-underline hover:bg-emerald-800 transition-colors"
                   >
-                    <span>Go to Company Directory (0 Companies) →</span>
+                    <span>Go to Company Directory →</span>
                   </Link>
                 </div>
               </div>
