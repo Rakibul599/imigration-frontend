@@ -120,6 +120,28 @@ export default function SubscriptionPlansPage() {
     }
   };
 
+  const handleSeedDefaults = async () => {
+    setLoading(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      const res = await fetch(`${apiBase}/subscription-plans/seed-defaults`, {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotification({ type: 'success', message: 'Standard 4 subscription packages restored!' });
+        loadPlans();
+      } else {
+        setNotification({ type: 'error', message: data.message || 'Failed to restore packages' });
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Failed to restore packages' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadCompanies = async () => {
     setLoadingCompanies(true);
     try {
@@ -862,13 +884,22 @@ export default function SubscriptionPlansPage() {
           </div>
           <h3 className="text-sm font-bold text-slate-800 mb-1">No Subscription Plans Found</h3>
           <p className="text-xs text-slate-500 mb-4">Click below to create your first package.</p>
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0b4da2] text-white text-xs font-bold cursor-pointer"
-          >
-            <Plus size={14} /> Create Plan
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0b4da2] hover:bg-[#083877] text-white text-xs font-bold cursor-pointer transition-colors"
+            >
+              <Plus size={14} /> Create Plan
+            </button>
+            <button
+              type="button"
+              onClick={handleSeedDefaults}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold cursor-pointer transition-colors"
+            >
+              <Sparkles size={14} className="text-emerald-600" /> Restore Standard 4 Packages
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">

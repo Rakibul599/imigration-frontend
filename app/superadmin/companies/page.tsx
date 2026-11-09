@@ -83,6 +83,10 @@ import {
 import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
 import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
 import { useDashboardCardDesign } from '@/lib/themeSettings';
+import {
+  SubscriptionPlan,
+  fetchSubscriptionPlans,
+} from '@/lib/companyTrialAndFinanceStorage';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -139,6 +143,9 @@ export default function SuperAdminCompaniesPage() {
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
   const [syncTableWithCardFilter, setSyncTableWithCardFilter] = useState<boolean>(true);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'rejected'>('all');
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -199,12 +206,21 @@ export default function SuperAdminCompaniesPage() {
       setStatCards(cards);
     }).catch(() => {});
 
+    fetchSubscriptionPlans(true).then((plans) => {
+      if (Array.isArray(plans)) setSubscriptionPlans(plans);
+    }).catch(() => {});
+
     const unsubComp = subscribeToCompanyChanges(() => {
       setCompanies(getStoredCompanies());
     });
     const unsubCards = subscribeToCompanyStatCardsChange(() => {
       setStatCards(getStoredCompanyStatCards());
     });
+
+    // Live countdown ticker every 1 second
+    const countdownInterval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
 
     // Periodic check every 15s for auto-deactivation timer expiration
     const timerInterval = setInterval(() => {
@@ -214,6 +230,7 @@ export default function SuperAdminCompaniesPage() {
     return () => {
       unsubComp();
       unsubCards();
+      clearInterval(countdownInterval);
       clearInterval(timerInterval);
     };
   }, []);
@@ -799,6 +816,94 @@ export default function SuperAdminCompaniesPage() {
     return list;
   }, [dbWorkingSectors]);
 
+  const isCompanyRejected = (c: Company) => {
+    const st = String(c.status || '').toLowerCase();
+    const subSt = String(c.subscription_status || '').toLowerCase();
+    return st === 'rejected' || subSt === 'rejected';
+  };
+
+  const isCompanyInactive = (c: Company) => {
+    if (isCompanyRejected(c)) return false;
+    const st = String(c.status || '').toLowerCase();
+    const subSt = String(c.subscription_status || '').toLowerCase();
+    return st === 'inactive' || st === 'suspended' || subSt === 'inactive' || subSt === 'expired';
+  };
+
+  const isCompanyActive = (c: Company) => {
+    return !isCompanyRejected(c) && !isCompanyInactive(c);
+  };
+
+  const getCountdownInfo = (expiresAt?: string | null) => {
+    if (!expiresAt) {
+      return {
+        status: 'none' as const,
+        label: 'No Expiry',
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
+
+    const expTime = new Date(expiresAt).getTime();
+    if (isNaN(expTime)) {
+      return {
+        status: 'invalid' as const,
+        label: 'Invalid Date',
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
+
+    const diffMs = expTime - currentTime;
+    if (diffMs <= 0) {
+      return {
+        status: 'expired' as const,
+        label: 'Expired',
+        color: 'text-rose-700 bg-rose-50 border-rose-200',
+      };
+    }
+
+    const totalSecs = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    let label = '';
+    if (days > 0) {
+      label = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    } else if (hours > 0) {
+      label = `${hours}h ${minutes}m ${seconds}s`;
+    } else {
+      label = `${minutes}m ${seconds}s`;
+    }
+
+    const isUrgent = days === 0 && hours < 24;
+
+    return {
+      status: 'active' as const,
+      label,
+      days,
+      color: isUrgent
+        ? 'text-amber-700 bg-amber-50 border-amber-300 animate-pulse'
+        : 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    };
+  };
+
+  const statusCounts = useMemo(() => {
+    let active = 0;
+    let inactive = 0;
+    let rejected = 0;
+    companies.forEach((c) => {
+      if (isCompanyRejected(c)) rejected++;
+      else if (isCompanyInactive(c)) inactive++;
+      else active++;
+    });
+    return {
+      all: companies.length,
+      active,
+      inactive,
+      rejected,
+    };
+  }, [companies]);
+
   // Filtered List for Table
   const filteredCompanies = companies.filter((c) => {
     if (!c) return false;
@@ -812,7 +917,14 @@ export default function SuperAdminCompaniesPage() {
 
     const matchesSector = selectedSector === 'ALL' || c.sector === selectedSector;
     const matchesCardCompany = !syncTableWithCardFilter || selectedCompanyCardId === 'ALL' || c.id === selectedCompanyCardId;
-    return matchesSearch && matchesSector && matchesCardCompany;
+
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && isCompanyActive(c)) ||
+      (statusFilter === 'inactive' && isCompanyInactive(c)) ||
+      (statusFilter === 'rejected' && isCompanyRejected(c));
+
+    return matchesSearch && matchesSector && matchesCardCompany && matchesStatus;
   });
 
   const companyCardFilterOptions: Select2Option[] = useMemo(() => [
@@ -1110,52 +1222,92 @@ export default function SuperAdminCompaniesPage() {
       />
 
       {/* Filter and Search Bar for Company Registry Table */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="relative w-full md:w-80">
-          <Search
-            size={16}
-            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by company, ROC, sector..."
-            className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all shadow-xs"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 bg-transparent border-0 cursor-pointer"
-            >
-              <X size={13} />
-            </button>
-          )}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3.5">
+        {/* Status Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { key: 'all', label: 'All Company', count: statusCounts.all },
+              { key: 'active', label: 'Active Company', count: statusCounts.active },
+              { key: 'inactive', label: 'Inactive Company', count: statusCounts.inactive },
+              { key: 'rejected', label: 'Rejected Company', count: statusCounts.rejected },
+            ].map((st) => {
+              const isSelected = statusFilter === st.key;
+              return (
+                <button
+                  key={st.key}
+                  type="button"
+                  onClick={() => setStatusFilter(st.key as any)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
+                    isSelected
+                      ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{st.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-white text-slate-700 border border-slate-200'
+                    }`}
+                  >
+                    {st.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {selectedSingleCompany && syncTableWithCardFilter && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 text-[#0b4da2] border border-blue-200 text-xs font-semibold">
-              <span className="truncate max-w-[160px] sm:max-w-[220px]">Company: {selectedSingleCompany.name}</span>
-              <button
-                type="button"
-                onClick={() => setSyncTableWithCardFilter(false)}
-                title="Show all companies in table while keeping cards filtered"
-                className="text-blue-500 hover:text-blue-700 bg-transparent border-0 cursor-pointer p-0 ml-1"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          <div className="w-full sm:w-56">
-            <Select2Search
-              options={sectorFilterOptions}
-              value={selectedSector}
-              onChange={(val) => setSelectedSector(val)}
-              placeholder="Filter Sector..."
-              searchPlaceholder="Search sectors..."
-              icon={<Filter size={14} className="text-slate-400" />}
+        {/* Search Bar & Sector Filter */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="relative w-full md:w-80">
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
             />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by company, ROC, sector..."
+              className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all shadow-xs"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 bg-transparent border-0 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {selectedSingleCompany && syncTableWithCardFilter && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 text-[#0b4da2] border border-blue-200 text-xs font-semibold">
+                <span className="truncate max-w-[160px] sm:max-w-[220px]">Company: {selectedSingleCompany.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setSyncTableWithCardFilter(false)}
+                  title="Show all companies in table while keeping cards filtered"
+                  className="text-blue-500 hover:text-blue-700 bg-transparent border-0 cursor-pointer p-0 ml-1"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            <div className="w-full sm:w-56">
+              <Select2Search
+                options={sectorFilterOptions}
+                value={selectedSector}
+                onChange={(val) => setSelectedSector(val)}
+                placeholder="Filter Sector..."
+                searchPlaceholder="Search sectors..."
+                icon={<Filter size={14} className="text-slate-400" />}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1187,17 +1339,55 @@ export default function SuperAdminCompaniesPage() {
                 <th className="py-3 px-4 border-r border-green-600/60 text-right min-w-[135px]">
                   Total Profit Wallet
                 </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-center min-w-[145px]">
+                  Subscription
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-center min-w-[135px]">
+                  Expire Date
+                </th>
+                <th className="py-3 px-4 border-r border-green-600/60 text-center min-w-[150px]">
+                  Countdown
+                </th>
                 <th className="py-3 px-4 text-right min-w-[145px]">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-xs">
-              {filteredCompanies.map((company) => (
-                <tr
-                  key={company.id}
-                  className="hover:bg-blue-50/40 transition-colors group"
-                >
+              {filteredCompanies.map((company) => {
+                const assignedPlan = subscriptionPlans.find(
+                  (p) =>
+                    p.plan_key === company.subscription_plan_key ||
+                    p.name?.toLowerCase() === company.subscription_plan_key?.toLowerCase()
+                );
+                const planName =
+                  assignedPlan?.name ||
+                  (company.subscription_plan_key
+                    ? company.subscription_plan_key
+                        .split('_')
+                        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                        .join(' ')
+                    : 'Unassigned');
+
+                const countdown = getCountdownInfo(company.subscription_expires_at);
+
+                const formatExpiry = (isoStr?: string | null) => {
+                  if (!isoStr) return null;
+                  const d = new Date(isoStr);
+                  if (isNaN(d.getTime())) return null;
+                  const day = String(d.getDate()).padStart(2, '0');
+                  const month = d.toLocaleString('en-US', { month: 'short' });
+                  const year = d.getFullYear();
+                  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                  return { date: `${day} ${month} ${year}`, time };
+                };
+                const expiry = formatExpiry(company.subscription_expires_at);
+
+                return (
+                  <tr
+                    key={company.id}
+                    className="hover:bg-blue-50/40 transition-colors group"
+                  >
                   {/* 1. Company Name with Logo */}
                   <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
                     <div className="flex items-center gap-2.5">
@@ -1280,7 +1470,70 @@ export default function SuperAdminCompaniesPage() {
                     RM {getCompanyProfitWallet(company).toLocaleString()}
                   </td>
 
-                  {/* 8. Action Buttons */}
+                  {/* 8. Subscription */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                          company.subscription_plan_key
+                            ? 'bg-blue-50 text-[#0b4da2] border-blue-200'
+                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}
+                      >
+                        <Crown size={11} className={company.subscription_plan_key ? 'text-amber-500' : 'text-slate-400'} />
+                        <span>{planName}</span>
+                      </span>
+                      {company.subscription_status && (
+                        <span
+                          className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.2 rounded border ${
+                            company.subscription_status === 'trial_active'
+                              ? 'bg-amber-100 text-amber-800 border-amber-200'
+                              : company.subscription_status === 'active' || company.subscription_status === 'paid_active'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                              : company.subscription_status === 'expired'
+                              ? 'bg-rose-100 text-rose-800 border-rose-200'
+                              : company.subscription_status === 'rejected'
+                              ? 'bg-red-100 text-red-800 border-red-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {company.subscription_status.replace('_', ' ')}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* 9. Expire Date */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                    {expiry ? (
+                      <div className="flex flex-col items-center justify-center">
+                        <span className="font-mono font-semibold text-slate-700 text-xs">
+                          {expiry.date}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {expiry.time}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 text-xs italic">No Expiry</span>
+                    )}
+                  </td>
+
+                  {/* 10. Countdown */}
+                  <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                    {company.subscription_expires_at ? (
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border ${countdown.color}`}
+                      >
+                        <Clock size={12} />
+                        <span>{countdown.label}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs italic">—</span>
+                    )}
+                  </td>
+
+                  {/* 11. Action Buttons */}
                   <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1.5">
                       {/* Manage Status & Auto-Deactivation Timer */}
@@ -1353,11 +1606,12 @@ export default function SuperAdminCompaniesPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+            })}
 
               {filteredCompanies.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-400 font-medium">
+                  <td colSpan={11} className="py-10 text-center text-slate-400 font-medium">
                     No company found matching &quot;{searchTerm}&quot;.
                   </td>
                 </tr>

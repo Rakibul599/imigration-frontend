@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -39,8 +39,8 @@ import {
   X,
 } from 'lucide-react';
 import {
-  PLAN_PACKAGES,
-  PlanPackageKey,
+  SubscriptionPlan,
+  fetchSubscriptionPlans,
   submitTrialApplication,
   CompanyTrialApplication,
 } from '@/lib/companyTrialAndFinanceStorage';
@@ -130,7 +130,7 @@ function createEmptyDirector(index = 1): ModalDirector {
 interface CompanyTrialApplicationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialPackage?: PlanPackageKey;
+  initialPackage?: string;
 }
 
 export default function CompanyTrialApplicationModal({
@@ -139,7 +139,21 @@ export default function CompanyTrialApplicationModal({
   initialPackage = '3_months',
 }: CompanyTrialApplicationModalProps) {
   // Plan selection
-  const [selectedPlan, setSelectedPlan] = useState<PlanPackageKey>(initialPackage);
+  const [selectedPlan, setSelectedPlan] = useState<string>(initialPackage);
+  const [dynamicPlans, setDynamicPlans] = useState<SubscriptionPlan[]>([]);
+
+  useEffect(() => {
+    fetchSubscriptionPlans()
+      .then((res) => {
+        if (Array.isArray(res)) {
+          setDynamicPlans(res);
+          if (res.length > 0 && !res.some((p) => p.plan_key === selectedPlan)) {
+            setSelectedPlan(res[0].plan_key);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [selectedPlan]);
 
   // Company core
   const [companyName, setCompanyName] = useState('');
@@ -179,7 +193,13 @@ export default function CompanyTrialApplicationModal({
 
   if (!isOpen) return null;
 
-  const currentPkg = PLAN_PACKAGES.find((p) => p.key === selectedPlan) || PLAN_PACKAGES[1];
+  const activePlan = dynamicPlans.find((p) => p.plan_key === selectedPlan) || dynamicPlans[0];
+  const currentPkg = {
+    label: activePlan ? activePlan.name : (selectedPlan || 'Default Plan'),
+    durationDays: activePlan ? activePlan.duration_days : 30,
+    price: activePlan ? activePlan.price : 0,
+    currency: activePlan ? activePlan.currency : 'RM',
+  };
 
   const generatePassword = () => {
     const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789!@#$%';
@@ -453,51 +473,61 @@ export default function CompanyTrialApplicationModal({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 items-stretch">
-                  {PLAN_PACKAGES.map((pkg) => {
-                    const isSelected = selectedPlan === pkg.key;
-                    const isOneMonth = pkg.key === '1_month';
-                    return (
-                      <button
-                        key={pkg.key}
-                        type="button"
-                        onClick={() => setSelectedPlan(pkg.key)}
-                        className={`relative p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between h-full min-w-0 ${
-                          isSelected
-                            ? 'border-[#0b4da2] bg-blue-50/60 ring-2 ring-blue-500/20 shadow-xs'
-                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {pkg.badge && (
-                          <span
-                            className={`absolute -top-2 right-2 text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-full shadow-2xs ${
-                              pkg.popular
-                                ? 'bg-amber-500 text-white'
-                                : 'bg-emerald-600 text-white'
-                            }`}
-                          >
-                            {pkg.badge}
-                          </span>
-                        )}
-                        <div>
-                          <div className="font-black text-slate-900 text-xs flex items-center gap-1 flex-wrap">
-                            <span>{pkg.label}</span>
-                            <span className="text-slate-300">/</span>
-                            <span className="text-emerald-700 font-extrabold text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                              {isOneMonth ? '1-Mo Free' : '3 Days Free'}
+                  {dynamicPlans.length > 0 ? (
+                    dynamicPlans.map((pkg) => {
+                      const isSelected = selectedPlan === pkg.plan_key;
+                      const isPopular = pkg.is_popular;
+                      return (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => setSelectedPlan(pkg.plan_key)}
+                          className={`relative p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between h-full min-w-0 ${
+                            isSelected
+                              ? 'border-[#0b4da2] bg-blue-50/60 ring-2 ring-blue-500/20 shadow-xs'
+                              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {pkg.badge && (
+                            <span
+                              className={`absolute -top-2 right-2 text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-full shadow-2xs ${
+                                isPopular
+                                  ? 'bg-amber-500 text-white'
+                                  : 'bg-emerald-600 text-white'
+                              }`}
+                            >
+                              {pkg.badge}
                             </span>
+                          )}
+                          <div>
+                            <div className="font-black text-slate-900 text-xs flex items-center gap-1 flex-wrap">
+                              <span>{pkg.name}</span>
+                              <span className="text-slate-300">/</span>
+                              <span className="text-emerald-700 font-extrabold text-[10px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                {pkg.trial_days || 3} Days Free
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-[#0b4da2] font-black mt-1">
+                              {pkg.currency} {pkg.price}
+                            </div>
                           </div>
-                          <div className="text-[11px] text-[#0b4da2] font-black mt-1">
-                            {pkg.currency} {pkg.price}
-                          </div>
-                        </div>
 
-                        <div className="mt-2 pt-2 border-t border-slate-200/80 flex items-center justify-between gap-1 text-[10px]">
-                          <span className="text-slate-500 font-medium truncate">{pkg.durationDays} Days</span>
-                          <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded truncate">{pkg.savings}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                          <div className="mt-2 pt-2 border-t border-slate-200/80 flex items-center justify-between gap-1 text-[10px]">
+                            <span className="text-slate-500 font-medium truncate">{pkg.duration_days} Days</span>
+                            {pkg.savings_text && (
+                              <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded truncate">
+                                {pkg.savings_text}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="col-span-full py-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      No subscription packages available.
+                    </div>
+                  )}
                 </div>
               </div>
 

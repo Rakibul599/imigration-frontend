@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   Copy,
+  Crown,
   Edit2,
   ExternalLink,
   Eye,
@@ -42,6 +43,10 @@ import {
   saveStoredPageCards,
   resetStoredPageCards,
 } from '@/lib/pageCardStorage';
+import {
+  SubscriptionPlan,
+  fetchSubscriptionPlans,
+} from '@/lib/companyTrialAndFinanceStorage';
 
 export type MasterAdminRecord = {
   id: number;
@@ -51,6 +56,10 @@ export type MasterAdminRecord = {
   plain_password?: string;
   assigned_companies: string[];
   status: 'active' | 'inactive';
+  subscription_package?: string | null;
+  subscription_ends_at?: string | null;
+  trial_status?: string | null;
+  trial_ends_at?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -98,6 +107,10 @@ export default function MasterAdminPermissionPage() {
     setNotification({ type: 'info', message: 'Cards reset to default layout.' });
   };
 
+  // Subscription Plans
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
+  const [formSubscriptionPackage, setFormSubscriptionPackage] = useState<string>('');
+
   // Copy Link Modal States
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const [copyModalData, setCopyModalData] = useState<{
@@ -106,6 +119,7 @@ export default function MasterAdminPermissionPage() {
     username: string;
     password?: string;
     assigned_companies: string[];
+    subscription_package?: string | null;
   } | null>(null);
   const [copiedRowId, setCopiedRowId] = useState<number | null>(null);
   const [modalCopiedField, setModalCopiedField] = useState<'link' | 'all' | 'password' | null>(null);
@@ -138,6 +152,9 @@ export default function MasterAdminPermissionPage() {
     setCompanies(getStoredCompanies());
     fetchCompaniesFromBackend().then((list) => {
       setCompanies(list);
+    }).catch(() => {});
+    fetchSubscriptionPlans(true).then((plans) => {
+      if (Array.isArray(plans)) setSubscriptionPlans(plans);
     }).catch(() => {});
   }, []);
 
@@ -180,6 +197,7 @@ export default function MasterAdminPermissionPage() {
       username: admin.username,
       password: admin.plain_password || '',
       assigned_companies: Array.isArray(admin.assigned_companies) ? admin.assigned_companies : [],
+      subscription_package: admin.subscription_package || null,
     });
     setModalCopiedField(null);
     setShowModalPassword(Boolean(admin.plain_password));
@@ -221,6 +239,11 @@ export default function MasterAdminPermissionPage() {
       })
       .join('\n  • ');
 
+    const matchedPlan = subscriptionPlans.find((p) => p.plan_key === copyModalData.subscription_package);
+    const planLabel = matchedPlan
+      ? `${matchedPlan.name} (${matchedPlan.duration_days || 30} Days)`
+      : copyModalData.subscription_package || '';
+
     const text = [
       `🌟 Master Admin Portal Access Details`,
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
@@ -229,6 +252,7 @@ export default function MasterAdminPermissionPage() {
       `Username: ${copyModalData.username}`,
       `Email: ${copyModalData.email}`,
       copyModalData.password ? `Temporary Password: ${copyModalData.password}` : '',
+      planLabel ? `Subscription Plan: ${planLabel}` : '',
       `Assigned Companies (${copyModalData.assigned_companies.length}):`,
       assignedCompanyNames ? `  • ${assignedCompanyNames}` : '  • No companies assigned',
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
@@ -277,6 +301,9 @@ export default function MasterAdminPermissionPage() {
     setFormPassword('password123');
     // Pre-select first 2 companies if available
     setFormAssignedCompanies(companies.slice(0, 2).map((c) => c.id));
+    setFormSubscriptionPackage(
+      subscriptionPlans.find((p) => p.is_popular)?.plan_key || (subscriptionPlans[0]?.plan_key ?? '')
+    );
     setFormStatus('active');
     setShowPassword(false);
     setIsModalOpen(true);
@@ -289,6 +316,7 @@ export default function MasterAdminPermissionPage() {
     setFormUsername(admin.username);
     setFormPassword(admin.plain_password || '');
     setFormAssignedCompanies(Array.isArray(admin.assigned_companies) ? admin.assigned_companies : []);
+    setFormSubscriptionPackage(admin.subscription_package || '');
     setFormStatus(admin.status);
     setShowPassword(false);
     setIsModalOpen(true);
@@ -314,6 +342,7 @@ export default function MasterAdminPermissionPage() {
       username: formUsername.trim(),
       assigned_companies: formAssignedCompanies,
       status: formStatus,
+      subscription_package: formSubscriptionPackage || null,
     };
 
     if (formPassword.trim()) {
@@ -351,6 +380,7 @@ export default function MasterAdminPermissionPage() {
           username: formUsername.trim(),
           password: formPassword.trim(),
           assigned_companies: formAssignedCompanies,
+          subscription_package: formSubscriptionPackage || null,
         };
         setCopyModalData(createdAdminData);
         setModalCopiedField(null);
@@ -618,6 +648,7 @@ export default function MasterAdminPermissionPage() {
                 <th className="py-3 px-4">Email</th>
                 <th className="py-3 px-4">Password</th>
                 <th className="py-3 px-4">Permitted Companies (Multi)</th>
+                <th className="py-3 px-4 text-center">Subscription</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -625,7 +656,7 @@ export default function MasterAdminPermissionPage() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredAdmins.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <ShieldAlert size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-600 m-0">
                       No Master Administrators Found
@@ -727,6 +758,21 @@ export default function MasterAdminPermissionPage() {
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Subscription Plan */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        {admin.subscription_package ? (
+                          <span className="inline-flex items-center gap-1 bg-blue-50 text-[#0b4da2] border border-blue-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                            <Crown size={11} className="text-amber-500 shrink-0" />
+                            <span>
+                              {subscriptionPlans.find((p) => p.plan_key === admin.subscription_package)?.name ||
+                                admin.subscription_package.replace(/_/g, ' ').toUpperCase()}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">No Plan</span>
+                        )}
                       </td>
 
                       {/* Status */}
@@ -949,6 +995,49 @@ export default function MasterAdminPermissionPage() {
                   searchPlaceholder="Search company by name or ROC..."
                   helpText="Only the selected companies will be visible and manageable by this Master Admin in their panel."
                 />
+              </div>
+
+              {/* Subscription Plan Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Crown size={14} className="text-amber-500" />
+                    <span>Subscription Plan</span>
+                  </span>
+                  <span className="text-[11px] font-normal text-slate-500">
+                    Assign plan package &amp; validity
+                  </span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={formSubscriptionPackage}
+                    onChange={(e) => setFormSubscriptionPackage(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:outline-hidden focus:border-[#0b4da2] focus:bg-white focus:ring-2 focus:ring-blue-100 cursor-pointer"
+                  >
+                    <option value="">No Plan Assigned (Standard Access)</option>
+                    {subscriptionPlans.map((plan) => (
+                      <option key={plan.plan_key} value={plan.plan_key}>
+                        {plan.name} — RM {Number(plan.price || 0).toLocaleString()} / {plan.duration_days || 30} Days {plan.is_popular ? '★ Popular' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {formSubscriptionPackage && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-blue-50/70 border border-blue-100 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                      <span className="font-bold text-[#0b4da2]">
+                        {subscriptionPlans.find((p) => p.plan_key === formSubscriptionPackage)?.name || formSubscriptionPackage}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[11px] font-bold text-slate-600">
+                      RM {Number(subscriptionPlans.find((p) => p.plan_key === formSubscriptionPackage)?.price || 0).toLocaleString()} • {subscriptionPlans.find((p) => p.plan_key === formSubscriptionPackage)?.duration_days || 30} Days
+                    </span>
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-400 mt-1 m-0">
+                  Selecting a plan will automatically apply the subscription and countdown to all assigned companies.
+                </p>
               </div>
 
               {/* Status */}
@@ -1180,6 +1269,19 @@ export default function MasterAdminPermissionPage() {
                         {modalCopiedField === 'password' ? 'Copied!' : 'Copy'}
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {copyModalData.subscription_package && (
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-semibold">Subscription Plan</span>
+                    <span className="inline-flex items-center gap-1 bg-blue-50 text-[#0b4da2] border border-blue-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                      <Crown size={11} className="text-amber-500" />
+                      <span>
+                        {subscriptionPlans.find((p) => p.plan_key === copyModalData.subscription_package)?.name ||
+                          copyModalData.subscription_package}
+                      </span>
+                    </span>
                   </div>
                 )}
 
