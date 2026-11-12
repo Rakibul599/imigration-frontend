@@ -28,6 +28,11 @@ import {
   Plus,
   Trash2,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  Shuffle,
+  PlayCircle,
 } from 'lucide-react';
 import {
   DashboardCardDesignType,
@@ -42,6 +47,11 @@ import {
   resolveEffectiveGlassColors,
   applyGlassThemeColors,
   getGlassThemeCssVars,
+  ServiceCardsAnimationType,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+  saveThemeSettingsToBackend,
+  getStoredThemeSettings,
 } from '@/lib/themeSettings';
 
 interface CardDesignThemeSectionProps {
@@ -50,6 +60,12 @@ interface CardDesignThemeSectionProps {
   glassColors?: GlassThemeColors;
   onSaveGlassColors?: (colors: GlassThemeColors) => Promise<void> | void;
   saving?: boolean;
+  selectedCardAnim?: ServiceCardsAnimationType;
+  onSelectCardAnim?: (anim: ServiceCardsAnimationType) => void;
+  cardDuration?: number;
+  onChangeCardDuration?: (duration: number) => void;
+  cardStagger?: number;
+  onChangeCardStagger?: (stagger: number) => void;
 }
 
 const WEEKDAYS = [
@@ -68,16 +84,89 @@ export default function CardDesignThemeSection({
   glassColors,
   onSaveGlassColors,
   saving = false,
+  selectedCardAnim,
+  onSelectCardAnim,
+  cardDuration,
+  onChangeCardDuration,
+  cardStagger,
+  onChangeCardStagger,
 }: CardDesignThemeSectionProps) {
   // Local state for glass colors
   const [colors, setColors] = useState<GlassThemeColors>(() => {
     return glassColors || DEFAULT_GLASS_THEME_COLORS;
   });
 
+  const [internalCardAnim, setInternalCardAnim] = useState<ServiceCardsAnimationType>(() => {
+    return (
+      selectedCardAnim ||
+      (typeof window !== 'undefined'
+        ? getStoredThemeSettings().service_cards_animation
+        : 'from-bottom') ||
+      'from-bottom'
+    );
+  });
+  const [internalDuration, setInternalDuration] = useState<number>(() => {
+    return typeof cardDuration === 'number'
+      ? cardDuration
+      : (typeof window !== 'undefined'
+          ? getStoredThemeSettings().service_cards_duration
+          : 1000) || 1000;
+  });
+  const [internalStagger, setInternalStagger] = useState<number>(() => {
+    return typeof cardStagger === 'number'
+      ? cardStagger
+      : (typeof window !== 'undefined'
+          ? getStoredThemeSettings().service_cards_stagger
+          : 120) || 120;
+  });
+  const [demoReplayKey, setDemoReplayKey] = useState<number>(0);
+
+  useEffect(() => {
+    if (selectedCardAnim) setInternalCardAnim(selectedCardAnim);
+  }, [selectedCardAnim]);
+
+  useEffect(() => {
+    if (typeof cardDuration === 'number') setInternalDuration(cardDuration);
+  }, [cardDuration]);
+
+  useEffect(() => {
+    if (typeof cardStagger === 'number') setInternalStagger(cardStagger);
+  }, [cardStagger]);
+
+  const handleSelectAnimation = (anim: ServiceCardsAnimationType) => {
+    setInternalCardAnim(anim);
+    setDemoReplayKey((k) => k + 1);
+    if (onSelectCardAnim) {
+      onSelectCardAnim(anim);
+    } else {
+      saveThemeSettingsToBackend({ service_cards_animation: anim }).catch(() => {});
+    }
+  };
+
+  const handleDurationChange = (val: number) => {
+    setInternalDuration(val);
+    setDemoReplayKey((k) => k + 1);
+    if (onChangeCardDuration) {
+      onChangeCardDuration(val);
+    } else {
+      saveThemeSettingsToBackend({ service_cards_duration: val }).catch(() => {});
+    }
+  };
+
+  const handleStaggerChange = (val: number) => {
+    setInternalStagger(val);
+    setDemoReplayKey((k) => k + 1);
+    if (onChangeCardStagger) {
+      onChangeCardStagger(val);
+    } else {
+      saveThemeSettingsToBackend({ service_cards_stagger: val }).catch(() => {});
+    }
+  };
+
   const [isDirty, setIsDirty] = useState<boolean>(false);
   const [localSaving, setLocalSaving] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'presets' | 'custom' | 'optics' | 'schedule'>('presets');
+  const [activeTab, setActiveTab] = useState<'presets' | 'custom' | 'optics' | 'schedule' | 'animation'>('presets');
 
   // Date simulator for testing future scheduled themes
   const [simulatedDayOffset, setSimulatedDayOffset] = useState<number>(0);
@@ -616,6 +705,23 @@ export default function CardDesignThemeSection({
             {currentSchedule.enabled && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
             )}
+          </button>
+
+          {/* TAB 5: CARD ANIMATIONS & MOTION */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('animation')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border-0 ${
+              activeTab === 'animation'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <PlayCircle size={14} />
+            <span>Card Animations &amp; Motion</span>
+            <span className="text-[10px] uppercase font-bold bg-white/20 px-1.5 py-0.2 rounded-full">
+              {internalCardAnim}
+            </span>
           </button>
         </div>
 
@@ -1627,6 +1733,165 @@ export default function CardDesignThemeSection({
             )}
           </div>
         )}
+
+        {/* ------------------------------------------------------------------ */}
+        {/* SUBTAB 5: Card Animations & Motion Controls                       */}
+        {/* ------------------------------------------------------------------ */}
+        {activeTab === 'animation' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50/50 border border-blue-100">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 m-0 flex items-center gap-2">
+                  <PlayCircle size={17} className="text-[#0b4da2]" />
+                  <span>Dashboard &amp; Service Cards Entrance Animation</span>
+                </h4>
+                <p className="text-xs text-slate-600 m-0 mt-0.5">
+                  Applies entrance transitions to all cards across Central Management, Master Admin, Employee Portal, and Public Services.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setDemoReplayKey((k) => k + 1)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                >
+                  <RotateCw size={13} className="text-blue-600" />
+                  <span>Replay Animation</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 5 Selectable Direction Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              {[
+                {
+                  id: 'from-top' as ServiceCardsAnimationType,
+                  title: 'From Top',
+                  badge: 'Top Dropdown',
+                  desc: 'Cards drop down elegantly from above into position.',
+                  icon: ArrowDown,
+                },
+                {
+                  id: 'from-bottom' as ServiceCardsAnimationType,
+                  title: 'From Bottom',
+                  badge: 'Upward Rise',
+                  desc: 'Cards rise up smoothly into the grid position.',
+                  icon: ArrowUp,
+                },
+                {
+                  id: 'from-left' as ServiceCardsAnimationType,
+                  title: 'From Left',
+                  badge: 'Left to Right',
+                  desc: 'Cards glide in from the left side with stagger.',
+                  icon: ArrowRight,
+                },
+                {
+                  id: 'from-right' as ServiceCardsAnimationType,
+                  title: 'From Right',
+                  badge: 'Right to Left',
+                  desc: 'Cards slide in from the right edge into position.',
+                  icon: ArrowLeft,
+                },
+                {
+                  id: 'random' as ServiceCardsAnimationType,
+                  title: 'Random 4-Way',
+                  badge: 'Dynamic Shuffle',
+                  desc: 'Enter dynamically from all 4 directions staggered.',
+                  icon: Shuffle,
+                },
+              ].map((opt) => {
+                const Icon = opt.icon;
+                const isSelected = internalCardAnim === opt.id;
+                return (
+                  <div
+                    key={opt.id}
+                    onClick={() => handleSelectAnimation(opt.id)}
+                    className={`cursor-pointer rounded-xl border-2 p-3.5 flex flex-col justify-between transition-all relative select-none ${
+                      isSelected
+                        ? 'border-[#0b4da2] bg-blue-50/60 ring-2 ring-blue-100 shadow-sm'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                    }`}
+                  >
+                    {isSelected && (
+                      <div className="absolute top-2.5 right-2.5 bg-[#0b4da2] text-white rounded-full p-0.5 shadow-xs">
+                        <Check size={11} strokeWidth={3} />
+                      </div>
+                    )}
+                    <div>
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2.5 ${
+                          isSelected
+                            ? 'bg-[#0b4da2] text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        <Icon size={16} />
+                      </div>
+                      <h5 className="text-xs font-bold text-slate-900 m-0">{opt.title}</h5>
+                      <span className="text-[10px] text-blue-600 font-semibold block mt-0.5">{opt.badge}</span>
+                      <p className="text-[11px] text-slate-500 m-0 mt-1.5 leading-snug">{opt.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Sliders: Duration & Stagger */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Clock size={14} className="text-slate-500" />
+                    <span>Animation Duration</span>
+                  </label>
+                  <span className="text-xs font-mono font-bold text-[#0b4da2]">
+                    {internalDuration} ms
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="200"
+                  max="2500"
+                  step="50"
+                  value={internalDuration}
+                  onChange={(e) => handleDurationChange(Number(e.target.value))}
+                  className="w-full accent-[#0b4da2] cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <span>Fast (200ms)</span>
+                  <span>Normal (1000ms)</span>
+                  <span>Cinematic (2500ms)</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Layers size={14} className="text-slate-500" />
+                    <span>Card Stagger Delay</span>
+                  </label>
+                  <span className="text-xs font-mono font-bold text-[#0b4da2]">
+                    {internalStagger} ms / card
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="500"
+                  step="10"
+                  value={internalStagger}
+                  onChange={(e) => handleStaggerChange(Number(e.target.value))}
+                  className="w-full accent-[#0b4da2] cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <span>Simultaneous (20ms)</span>
+                  <span>Cascading (120ms)</span>
+                  <span>Wave (500ms)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ==================================================================== */}
@@ -1651,34 +1916,46 @@ export default function CardDesignThemeSection({
               </span>
             </h3>
             <p className="text-xs text-slate-500 m-0 mt-0.5">
-              Live representation of how cards render across Central Management, Master Admin, and Company Directory.
+              Live representation of how cards animate and render across Central Management, Master Admin, and Company Directory.
             </p>
           </div>
-          <div
-            className="text-[11px] px-3 py-1 rounded-full font-medium flex items-center gap-1.5 border shadow-2xs"
-            style={{
-              backgroundColor: `${effectiveColors.primary_glow}15`,
-              borderColor: `${effectiveColors.primary_glow}40`,
-              color: effectiveColors.text_accent,
-            }}
-          >
-            <Sparkles size={12} style={{ color: effectiveColors.primary_glow }} />
-            <span>
-              {colors.schedule?.enabled
-                ? `✨ Auto-Schedule: Showing ${activePreset?.name || 'Active Theme'} (Hover to test glow)`
-                : '✨ Hover on any card below to experience the live glowing aura!'}
-            </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setDemoReplayKey((k) => k + 1)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer border-0"
+            >
+              <RotateCw size={13} className="text-blue-600" />
+              <span>Replay Entrance Animation</span>
+            </button>
+            <div
+              className="text-[11px] px-3 py-1 rounded-full font-medium flex items-center gap-1.5 border shadow-2xs"
+              style={{
+                backgroundColor: `${effectiveColors.primary_glow}15`,
+                borderColor: `${effectiveColors.primary_glow}40`,
+                color: effectiveColors.text_accent,
+              }}
+            >
+              <Sparkles size={12} style={{ color: effectiveColors.primary_glow }} />
+              <span>
+                {colors.schedule?.enabled
+                  ? `✨ Auto: ${activePreset?.name || 'Active'}`
+                  : '✨ Hover to test glow'}
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-2xl bg-gradient-to-br from-slate-100/90 via-sky-50/40 to-slate-100/90 border border-slate-200/90">
           {/* Card 1 */}
           <div
-            className={
+            key={`demo-card-0-${internalCardAnim}-${demoReplayKey}-${selectedCardDesign}`}
+            style={getServiceCardAnimationStyle(0, internalDuration, internalStagger)}
+            className={`admin-stat-card ${getServiceCardAnimationClass(internalCardAnim, 0)} ${
               selectedCardDesign === 'glassmorphism'
                 ? 'dashboard-card-glass rounded-2xl p-5 flex flex-col justify-between group min-h-[120px] cursor-pointer'
                 : 'no-glass bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px] cursor-pointer'
-            }
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-xs text-slate-500 font-bold uppercase tracking-wide group-hover:text-blue-700 transition-colors leading-tight">
@@ -1710,11 +1987,13 @@ export default function CardDesignThemeSection({
 
           {/* Card 2 */}
           <div
-            className={
+            key={`demo-card-1-${internalCardAnim}-${demoReplayKey}-${selectedCardDesign}`}
+            style={getServiceCardAnimationStyle(1, internalDuration, internalStagger)}
+            className={`admin-stat-card ${getServiceCardAnimationClass(internalCardAnim, 1)} ${
               selectedCardDesign === 'glassmorphism'
                 ? 'dashboard-card-glass rounded-2xl p-5 flex flex-col justify-between group min-h-[120px] cursor-pointer'
                 : 'no-glass bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px] cursor-pointer'
-            }
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-xs text-slate-500 font-bold uppercase tracking-wide transition-colors leading-tight">
@@ -1745,11 +2024,13 @@ export default function CardDesignThemeSection({
 
           {/* Card 3 */}
           <div
-            className={
+            key={`demo-card-2-${internalCardAnim}-${demoReplayKey}-${selectedCardDesign}`}
+            style={getServiceCardAnimationStyle(2, internalDuration, internalStagger)}
+            className={`admin-stat-card ${getServiceCardAnimationClass(internalCardAnim, 2)} ${
               selectedCardDesign === 'glassmorphism'
                 ? 'dashboard-card-glass rounded-2xl p-5 flex flex-col justify-between group min-h-[120px] cursor-pointer'
                 : 'no-glass bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px] cursor-pointer'
-            }
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-xs text-slate-500 font-bold uppercase tracking-wide transition-colors leading-tight">
@@ -1780,11 +2061,13 @@ export default function CardDesignThemeSection({
 
           {/* Card 4 */}
           <div
-            className={
+            key={`demo-card-3-${internalCardAnim}-${demoReplayKey}-${selectedCardDesign}`}
+            style={getServiceCardAnimationStyle(3, internalDuration, internalStagger)}
+            className={`admin-stat-card ${getServiceCardAnimationClass(internalCardAnim, 3)} ${
               selectedCardDesign === 'glassmorphism'
                 ? 'dashboard-card-glass rounded-2xl p-5 flex flex-col justify-between group min-h-[120px] cursor-pointer'
                 : 'no-glass bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px] cursor-pointer'
-            }
+            }`}
           >
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-xs text-slate-500 font-bold uppercase tracking-wide transition-colors leading-tight">

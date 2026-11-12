@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -22,6 +22,8 @@ import { WorkingSector, fetchAllWorkingSectors, createWorkingSector } from '@/li
 function EditProgramForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
   const programId = searchParams.get('id');
 
   const [loading, setLoading] = useState(true);
@@ -163,7 +165,7 @@ function EditProgramForm() {
         setFeedback({ type: 'success', message: 'Program updated successfully! Redirecting...' });
         window.dispatchEvent(new CustomEvent('superadmin_programs_updated'));
         setTimeout(() => {
-          router.push('/superadmin/programs');
+          router.push(`${rootPath}/programs`);
         }, 800);
       } else {
         setFeedback({ type: 'error', message: 'Failed to update program.' });
@@ -189,7 +191,7 @@ function EditProgramForm() {
       {/* Top Breadcrumb & Action bar */}
       <div className="flex items-center justify-between gap-4">
         <Link
-          href="/superadmin/programs"
+          href={`${rootPath}/programs`}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft size={14} />
@@ -364,7 +366,7 @@ function EditProgramForm() {
           {/* Form Actions */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             <Link
-              href="/superadmin/programs"
+              href={`${rootPath}/programs`}
               className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
             >
               Cancel

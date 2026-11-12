@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import {
   AlertCircle,
   Camera,
@@ -47,6 +48,8 @@ const DEFAULT_AGENT_CARDS: PageStatCardConfig[] = [
 ];
 
 export default function SuperAdminAgentManagementPage() {
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -293,7 +296,7 @@ export default function SuperAdminAgentManagementPage() {
 
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
             <Link
-              href="/superadmin/agents/customers"
+              href={`${rootPath}/agents/customers`}
               className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs px-3.5 py-2.5 rounded-xl border border-white/20 transition-all no-underline whitespace-nowrap"
             >
               <Users size={14} />
@@ -319,7 +322,7 @@ export default function SuperAdminAgentManagementPage() {
             </button>
 
             <Link
-              href="/superadmin/agents/create"
+              href={`${rootPath}/agents/create`}
               className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all no-underline whitespace-nowrap"
             >
               <Plus size={16} />
@@ -454,7 +457,7 @@ export default function SuperAdminAgentManagementPage() {
                     </p>
                     {!searchTerm && (
                       <Link
-                        href="/superadmin/agents/create"
+                        href={`${rootPath}/agents/create`}
                         className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#22a34a] hover:bg-[#1b843c] text-white text-xs font-bold transition-colors no-underline"
                       >
                         <Plus size={14} />
@@ -557,7 +560,7 @@ export default function SuperAdminAgentManagementPage() {
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <Link
-                            href={`/superadmin/agents/customers?agent_id=${agent.id}`}
+                            href={`${rootPath}/agents/customers?agent_id=${agent.id}`}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition-all cursor-pointer bg-white no-underline"
                             title="View Agent Wise Customers"
                           >

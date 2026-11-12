@@ -30,6 +30,7 @@ import {
   deleteEmployeeLeave,
   EmployeeLeaveItem,
 } from '@/lib/employeeRequestsApi';
+import { getMasterAdminUser } from '@/lib/auth';
 
 interface AdminLeavesManagementProps {
   portalType: 'superadmin' | 'masteradmin';
@@ -138,9 +139,34 @@ export default function AdminLeavesManagement({
     };
   }, [loadData]);
 
+  // Scoped employee codes for masteradmin
+  const effectiveScope = useMemo(() => {
+    if (portalType !== 'masteradmin') return [];
+    if (assignedScope && assignedScope.length > 0) return assignedScope;
+    const user = getMasterAdminUser();
+    return Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+  }, [portalType, assignedScope]);
+
+  const permittedEmployeeCodes = useMemo(() => {
+    if (portalType !== 'masteradmin' || effectiveScope.length === 0 || effectiveScope.includes('*')) return null;
+    const set = new Set<string>();
+    employees.forEach((emp: any) => {
+      const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+      if (assigned.some((cId: string) => effectiveScope.some((sId) => sId.toLowerCase() === cId.toLowerCase()))) {
+        set.add((emp.employee_code || '').toUpperCase());
+      }
+    });
+    return set;
+  }, [employees, portalType, effectiveScope]);
+
   // Filtered leaves
   const filteredLeaves = useMemo(() => {
     return leaves.filter((item) => {
+      // Company scoping for masteradmin
+      if (permittedEmployeeCodes && !permittedEmployeeCodes.has((item.employee_code || '').toUpperCase())) {
+        return false;
+      }
+
       // Type filter
       if (typeFilter !== 'all' && item.leave_type !== typeFilter) return false;
 
@@ -169,10 +195,15 @@ export default function AdminLeavesManagement({
     });
   }, [leaves, typeFilter, statusFilter, startDate, endDate, searchQuery]);
 
-  // Metrics
-  const pendingCount = leaves.filter((l) => l.status === 'pending').length;
-  const approvedHolidayCount = leaves.filter((l) => l.leave_type === 'holiday' && l.status === 'approved').length;
-  const approvedAnnualCount = leaves.filter((l) => l.leave_type === 'annual_leave' && l.status === 'approved').length;
+  // Metrics scoped to permitted employees
+  const scopedLeaves = useMemo(() => {
+    if (!permittedEmployeeCodes) return leaves;
+    return leaves.filter((l) => permittedEmployeeCodes.has((l.employee_code || '').toUpperCase()));
+  }, [leaves, permittedEmployeeCodes]);
+
+  const pendingCount = scopedLeaves.filter((l) => l.status === 'pending').length;
+  const approvedHolidayCount = scopedLeaves.filter((l) => l.leave_type === 'holiday' && l.status === 'approved').length;
+  const approvedAnnualCount = scopedLeaves.filter((l) => l.leave_type === 'annual_leave' && l.status === 'approved').length;
 
   const handleApprove = async (item: EmployeeLeaveItem) => {
     setIsProcessing(true);

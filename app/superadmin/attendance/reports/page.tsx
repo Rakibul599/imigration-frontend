@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   AlertTriangle,
@@ -61,6 +61,7 @@ import CardPriorityModal from '@/components/CardPriorityModal';
 import { DynamicCardIcon } from '@/components/DynamicCardIcon';
 import { getEmployeeLeaves, EmployeeLeaveItem } from '@/lib/employeeRequestsApi';
 import { fetchAttendanceSettings, AttendanceSchedule } from '@/lib/attendanceSettingsStorage';
+import { getMasterAdminUser } from '@/lib/auth';
 
 // Report Tabs definition with new dedicated Rest Time Report
 type ReportTab = 'daily' | 'rest_time' | 'monthly' | 'punctuality' | 'overtime' | 'individual' | 'leaves';
@@ -85,6 +86,8 @@ const DEFAULT_REPORT_CARDS: PageStatCardConfig[] = [
 function AttendanceReportsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
 
   // Active Tab
   const initialTab = (searchParams.get('tab') as ReportTab) || 'daily';
@@ -206,9 +209,32 @@ function AttendanceReportsContent() {
         fetchAttendanceSettings().catch(() => null),
       ]);
 
-      setAttendances(attList || []);
-      setCompanies(compList || []);
-      setLeaves(leavesRes?.leaves || []);
+      let finalComps = compList || [];
+      let finalAtts = attList || [];
+      let finalLeaves = leavesRes?.leaves || [];
+
+      if (rootPath === '/masteradmin') {
+        const user = getMasterAdminUser();
+        const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+        if (scope.length > 0 && !scope.includes('*')) {
+          finalComps = finalComps.filter((c: Company) =>
+            scope.some((sId) => sId.toLowerCase() === c.id.toLowerCase())
+          );
+          finalAtts = finalAtts.filter((att: AttendanceRecord) =>
+            Boolean(att.company_id && scope.some((sId) => sId.toLowerCase() === att.company_id?.toLowerCase()))
+          );
+          const allowedCompNames = new Set(finalComps.map((c) => (c.name || '').toLowerCase()));
+          finalLeaves = finalLeaves.filter((l: any) => {
+            const cId = (l.company_id || '').toLowerCase();
+            const cName = (l.company_name || '').toLowerCase();
+            return scope.some((sId) => sId.toLowerCase() === cId) || allowedCompNames.has(cName);
+          });
+        }
+      }
+
+      setAttendances(finalAtts);
+      setCompanies(finalComps);
+      setLeaves(finalLeaves);
       if (schedRes?.schedule) {
         setScheduleRules(schedRes.schedule);
       }
@@ -696,7 +722,7 @@ function AttendanceReportsContent() {
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
             <Clock size={14} />
-            <Link href="/superadmin/attendance" className="hover:underline">
+            <Link href={`${rootPath}/attendance`} className="hover:underline">
               Attendance Management
             </Link>
             <span>/</span>
@@ -767,7 +793,7 @@ function AttendanceReportsContent() {
                   setActiveTab(tab.id);
                   const p = new URLSearchParams(window.location.search);
                   p.set('tab', tab.id);
-                  router.push(`/superadmin/attendance/reports?${p.toString()}`);
+                  router.push(`${rootPath}/attendance/reports?${p.toString()}`);
                 }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
                   isActive

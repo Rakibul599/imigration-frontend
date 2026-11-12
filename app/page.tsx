@@ -4,7 +4,7 @@ import {
   DEFAULT_THEME_SETTINGS,
   DEFAULT_THEME1_DATA,
   DEFAULT_THEME2_DATA,
-} from '@/lib/themeSettings';
+} from '@/lib/themeSettingsDefaults';
 
 // Force dynamic SSR so every page refresh gets the latest active theme directly from database
 export const dynamic = 'force-dynamic';

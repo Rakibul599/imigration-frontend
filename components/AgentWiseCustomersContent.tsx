@@ -48,9 +48,10 @@ import {
   getStoredCustomerDeposits,
   CustomerFinanceBalance,
 } from '@/lib/customerFinanceStorage';
+import { getMasterAdminUser } from '@/lib/auth';
 
 interface AgentWiseCustomersContentProps {
-  portalType: 'superadmin' | 'frontend_superadmin';
+  portalType: 'superadmin' | 'frontend_superadmin' | 'masteradmin';
   backUrl: string;
 }
 
@@ -93,13 +94,24 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         ]);
 
         if (isMounted) {
-          setCompanies(comps);
+          let finalComps = comps;
+          let finalCusts = custs;
+          if (portalType === 'masteradmin') {
+            const user = getMasterAdminUser();
+            const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+            if (scope.length > 0 && !scope.includes('*')) {
+              finalComps = comps.filter((c: Company) => scope.some((sId) => sId.toLowerCase() === c.id.toLowerCase()));
+              finalCusts = custs.filter((c: CustomerRecord) => Boolean(c.company_id && scope.some((sId) => sId.toLowerCase() === c.company_id?.toLowerCase())));
+            }
+          }
+
+          setCompanies(finalComps);
           setAgents(agts);
-          setCustomers(custs);
+          setCustomers(finalCusts);
 
           // If no specific company was passed, default to first company if available
-          if (!queryCompanyId && comps.length > 0 && selectedCompanyId === 'ALL') {
-            setSelectedCompanyId(comps[0].id);
+          if (!queryCompanyId && finalComps.length > 0 && selectedCompanyId === 'ALL') {
+            setSelectedCompanyId(finalComps[0].id);
           }
           // If no specific agent was passed, default to first agent if available
           if (!queryAgentId && agts.length > 0 && selectedAgentId === 'ALL') {
@@ -127,7 +139,15 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         fetchAgents(),
         fetchAllCustomerFinances().catch(() => {}),
       ]);
-      setCustomers(custs);
+      let finalCusts = custs;
+      if (portalType === 'masteradmin') {
+        const user = getMasterAdminUser();
+        const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+        if (scope.length > 0 && !scope.includes('*')) {
+          finalCusts = custs.filter((c: CustomerRecord) => Boolean(c.company_id && scope.some((sId) => sId.toLowerCase() === c.company_id?.toLowerCase())));
+        }
+      }
+      setCustomers(finalCusts);
       setAgents(agts);
       setNotification({ type: 'success', message: 'Data refreshed successfully!' });
       setTimeout(() => setNotification(null), 3000);
@@ -215,9 +235,11 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
   }, [agentWiseCustomers, searchTerm, statusFilter]);
 
   const viewBaseUrl =
-    portalType === 'frontend_superadmin'
-      ? '/superadmin/customers/create'
-      : '/customers/create';
+    portalType === 'masteradmin'
+      ? '/masteradmin/customers/create'
+      : portalType === 'frontend_superadmin'
+        ? '/superadmin/customers/create'
+        : '/customers/create';
 
   return (
     <div className="space-y-6 pb-16 max-w-7xl mx-auto">

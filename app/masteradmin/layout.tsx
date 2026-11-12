@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  Briefcase,
+  BookOpen,
   Building2,
   Calendar,
   Camera,
@@ -12,10 +14,13 @@ import {
   Clock,
   DollarSign,
   ExternalLink,
+  FileCheck,
+  FileSignature,
   FileSpreadsheet,
   FileText,
   Globe2,
   KeyRound,
+  Layers,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -23,12 +28,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PlusCircle,
+  Receipt,
   Settings,
   Shield,
   ShieldAlert,
   Sparkles,
   Target,
   UserCheck,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -60,14 +67,21 @@ export default function MasterAdminLayout({
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [companyMenuOpen, setCompanyMenuOpen] = useState(true);
+  const [accountsMenuOpen, setAccountsMenuOpen] = useState(true);
   const [employeeMenuOpen, setEmployeeMenuOpen] = useState(true);
   const [customerMenuOpen, setCustomerMenuOpen] = useState(true);
   const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
+  const [programMenuOpen, setProgramMenuOpen] = useState(true);
+  const [agentMenuOpen, setAgentMenuOpen] = useState(true);
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [permittedCompanyCount, setPermittedCompanyCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
+  const [serviceCount, setServiceCount] = useState<number>(0);
+  const [agentCount, setAgentCount] = useState<number>(0);
+  const [programCount, setProgramCount] = useState<number>(0);
   const [pendingLeaveCount, setPendingLeaveCount] = useState<number>(0);
   const [pendingResignationCount, setPendingResignationCount] = useState<number>(0);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SIDEBAR_STYLING as any);
@@ -155,6 +169,7 @@ export default function MasterAdminLayout({
   useEffect(() => {
     if (isLoginPage) return;
     const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+    // Fetch employees count in scope
     fetch(`${apiBase}/employees`)
       .then((r) => r.json())
       .then((data) => {
@@ -163,9 +178,39 @@ export default function MasterAdminLayout({
           const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
           const inScope = data.filter((emp) => {
             const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
-            return emp.role === 'Admin' || assigned.some((cId: string) => scope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
+            return assigned.some((cId: string) => scope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
           });
           setEmployeeCount(inScope.length);
+
+          // Get permitted employee codes to scope requests
+          const permittedCodes = new Set(inScope.map((e) => (e.employee_code || '').toUpperCase()));
+
+          // Fetch leaves & resignations count strictly in scope
+          fetch(`${apiBase}/employee-leaves`)
+            .then((r) => r.json())
+            .then((res) => {
+              const leavesList = Array.isArray(res) ? res : res.leaves || [];
+              const pending = leavesList.filter(
+                (item: any) =>
+                  (item.status === 'Pending' || item.status === 'pending') &&
+                  permittedCodes.has((item.employee_code || '').toUpperCase())
+              ).length;
+              setPendingLeaveCount(pending);
+            })
+            .catch(() => { });
+
+          fetch(`${apiBase}/employee-resignations`)
+            .then((r) => r.json())
+            .then((resList) => {
+              const resArr = Array.isArray(resList) ? resList : resList.resignations || [];
+              const pending = resArr.filter(
+                (item: any) =>
+                  (item.status === 'Pending' || item.status === 'pending') &&
+                  permittedCodes.has((item.employee_code || '').toUpperCase())
+              ).length;
+              setPendingResignationCount(pending);
+            })
+            .catch(() => { });
         }
       })
       .catch(() => { });
@@ -186,39 +231,101 @@ export default function MasterAdminLayout({
       })
       .catch(() => { });
 
-    // Fetch leaves & resignations count
-    const fetchRequestsCounts = () => {
-      fetch(`${apiBase}/employee-leaves`)
+    // Fetch service cards count
+    fetch(`${apiBase}/service-cards`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setServiceCount(data.length);
+        }
+      })
+      .catch(() => { });
+
+    // Fetch agents count
+    const handleAgentsUpdate = () => {
+      fetch(`${apiBase}/agents`)
         .then((r) => r.json())
         .then((data) => {
-          if (Array.isArray(data)) {
-            const pending = data.filter((item) => item.status === 'Pending').length;
-            setPendingLeaveCount(pending);
-          }
+          if (Array.isArray(data)) setAgentCount(data.length);
         })
         .catch(() => { });
+    };
+    handleAgentsUpdate();
 
-      fetch(`${apiBase}/employee-resignations`)
+    // Fetch programs count
+    const handleProgramsUpdate = () => {
+      fetch(`${apiBase}/programs`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) setProgramCount(data.length);
+        })
+        .catch(() => { });
+    };
+    handleProgramsUpdate();
+
+    const reloadScopedCounts = () => {
+      fetch(`${apiBase}/employees`)
         .then((r) => r.json())
         .then((data) => {
           if (Array.isArray(data)) {
-            const pending = data.filter((item) => item.status === 'Pending').length;
-            setPendingResignationCount(pending);
+            const user = getMasterAdminUser();
+            const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+            const inScope = data.filter((emp) => {
+              const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+              return assigned.some((cId: string) => scope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
+            });
+            const permittedCodes = new Set(inScope.map((e) => (e.employee_code || '').toUpperCase()));
+
+            fetch(`${apiBase}/employee-leaves`)
+              .then((r) => r.json())
+              .then((res) => {
+                const leavesList = Array.isArray(res) ? res : res.leaves || [];
+                const pending = leavesList.filter(
+                  (item: any) =>
+                    (item.status === 'Pending' || item.status === 'pending') &&
+                    permittedCodes.has((item.employee_code || '').toUpperCase())
+                ).length;
+                setPendingLeaveCount(pending);
+              })
+              .catch(() => { });
+
+            fetch(`${apiBase}/employee-resignations`)
+              .then((r) => r.json())
+              .then((resList) => {
+                const resArr = Array.isArray(resList) ? resList : resList.resignations || [];
+                const pending = resArr.filter(
+                  (item: any) =>
+                    (item.status === 'Pending' || item.status === 'pending') &&
+                    permittedCodes.has((item.employee_code || '').toUpperCase())
+                ).length;
+                setPendingResignationCount(pending);
+              })
+              .catch(() => { });
           }
         })
         .catch(() => { });
     };
 
-    fetchRequestsCounts();
-
-    window.addEventListener('employee_requests_updated', fetchRequestsCounts);
+    window.addEventListener('superadmin_agents_updated', handleAgentsUpdate);
+    window.addEventListener('superadmin_programs_updated', handleProgramsUpdate);
+    window.addEventListener('employee_requests_updated', reloadScopedCounts);
     return () => {
-      window.removeEventListener('employee_requests_updated', fetchRequestsCounts);
+      window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
+      window.removeEventListener('superadmin_programs_updated', handleProgramsUpdate);
+      window.removeEventListener('employee_requests_updated', reloadScopedCounts);
     };
   }, [isLoginPage]);
 
-  // Auto-expand employee and customer menus when navigating
+  // Auto-expand menus when navigating
   useEffect(() => {
+    if (
+      pathname.startsWith('/masteradmin/companies/quotations') ||
+      pathname.startsWith('/masteradmin/companies/invoices')
+    ) {
+      setAccountsMenuOpen(true);
+    } else if (pathname.startsWith('/masteradmin/companies')) {
+      setCompanyMenuOpen(true);
+    }
     if (pathname.startsWith('/masteradmin/employees')) {
       setEmployeeMenuOpen(true);
     }
@@ -227,6 +334,12 @@ export default function MasterAdminLayout({
     }
     if (pathname.startsWith('/masteradmin/customers')) {
       setCustomerMenuOpen(true);
+    }
+    if (pathname.startsWith('/masteradmin/programs')) {
+      setProgramMenuOpen(true);
+    }
+    if (pathname.startsWith('/masteradmin/agents')) {
+      setAgentMenuOpen(true);
     }
   }, [pathname]);
 
@@ -279,10 +392,51 @@ export default function MasterAdminLayout({
             badge: 'Live',
           },
           {
-            name: 'Companies Management',
-            href: '/masteradmin/companies',
+            name: 'Company Management',
             icon: Building2,
             badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
+            isGroup: true,
+            children: [
+              {
+                name: 'Company List',
+                href: '/masteradmin/companies',
+                icon: Building2,
+                badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
+              },
+              {
+                name: 'Company Sectors',
+                href: '/masteradmin/companies/sectors',
+                icon: Briefcase,
+              },
+              {
+                name: 'Subscription Plans',
+                href: '/masteradmin/companies/plans',
+                icon: Layers,
+              },
+            ],
+          },
+          {
+            name: 'Program Management',
+            icon: BookOpen,
+            isGroup: true,
+            badge: programCount > 0 ? `${programCount}` : undefined,
+            children: [
+              {
+                name: 'Create Program',
+                href: '/masteradmin/programs/create',
+                icon: PlusCircle,
+              },
+              {
+                name: 'Programs List',
+                href: '/masteradmin/programs',
+                icon: BookOpen,
+              },
+              {
+                name: 'Program Customers',
+                href: '/masteradmin/programs/customers',
+                icon: Users,
+              },
+            ],
           },
           {
             name: 'Employee Management',
@@ -295,6 +449,16 @@ export default function MasterAdminLayout({
                 href: '/masteradmin/employees',
                 icon: UserCheck,
                 badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+              },
+              {
+                name: 'Joining Letter',
+                href: '/masteradmin/employees/joining-letter',
+                icon: FileCheck,
+              },
+              {
+                name: 'Working Agreement',
+                href: '/masteradmin/employees/working-agreement',
+                icon: FileSignature,
               },
               {
                 name: 'Resignations & Clearances',
@@ -344,10 +508,56 @@ export default function MasterAdminLayout({
             ],
           },
           {
+            name: 'Agent Management',
+            icon: Briefcase,
+            isGroup: true,
+            badge: agentCount > 0 ? `${agentCount}` : undefined,
+            children: [
+              {
+                name: 'Create Agent',
+                href: '/masteradmin/agents/create',
+                icon: UserPlus,
+              },
+              {
+                name: 'Agent List',
+                href: '/masteradmin/agents',
+                icon: Briefcase,
+              },
+              {
+                name: 'Agent Wise Customer',
+                href: '/masteradmin/agents/customers',
+                icon: Users,
+              },
+            ],
+          },
+          {
+            name: 'Account Management',
+            icon: Receipt,
+            isGroup: true,
+            children: [
+              {
+                name: 'Company Quotation',
+                href: '/masteradmin/companies/quotations',
+                icon: FileSpreadsheet,
+              },
+              {
+                name: 'Company Invoice',
+                href: '/masteradmin/companies/invoices',
+                icon: DollarSign,
+              },
+            ],
+          },
+          {
+            name: 'Service Cards',
+            href: '/masteradmin/services',
+            icon: Sparkles,
+            badge: serviceCount > 0 ? `${serviceCount}` : undefined,
+          },
+          {
             name: 'Services Portal',
             href: '/companies',
-            icon: Sparkles,
-            badge: 'Cards',
+            icon: ExternalLink,
+            badge: 'Preview',
           },
         ],
       },
@@ -370,6 +580,11 @@ export default function MasterAdminLayout({
                 href: '/masteradmin/attendance/leaves',
                 icon: Calendar,
                 badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
+              },
+              {
+                name: 'Reports',
+                href: '/masteradmin/attendance/reports',
+                icon: FileSpreadsheet,
               },
               {
                 name: 'Settings',
@@ -522,17 +737,33 @@ export default function MasterAdminLayout({
                         (child) => pathname === child.href || pathname.startsWith(child.href)
                       );
                       const isGroupOpen =
-                        link.name === 'Customer Management'
-                          ? customerMenuOpen
-                          : link.name === 'Attendance Management'
-                            ? attendanceMenuOpen
-                            : employeeMenuOpen;
+                        link.name === 'Company Management'
+                          ? companyMenuOpen
+                          : link.name === 'Account Management'
+                            ? accountsMenuOpen
+                            : link.name === 'Customer Management'
+                              ? customerMenuOpen
+                              : link.name === 'Attendance Management'
+                                ? attendanceMenuOpen
+                                : link.name === 'Program Management'
+                                  ? programMenuOpen
+                                  : link.name === 'Agent Management'
+                                    ? agentMenuOpen
+                                    : employeeMenuOpen;
                       const toggleGroup = () => {
                         if (!sidebarOpen) setSidebarOpen(true);
-                        if (link.name === 'Customer Management') {
+                        if (link.name === 'Company Management') {
+                          setCompanyMenuOpen(!companyMenuOpen);
+                        } else if (link.name === 'Account Management') {
+                          setAccountsMenuOpen(!accountsMenuOpen);
+                        } else if (link.name === 'Customer Management') {
                           setCustomerMenuOpen(!customerMenuOpen);
                         } else if (link.name === 'Attendance Management') {
                           setAttendanceMenuOpen(!attendanceMenuOpen);
+                        } else if (link.name === 'Program Management') {
+                          setProgramMenuOpen(!programMenuOpen);
+                        } else if (link.name === 'Agent Management') {
+                          setAgentMenuOpen(!agentMenuOpen);
                         } else {
                           setEmployeeMenuOpen(!employeeMenuOpen);
                         }
@@ -598,19 +829,50 @@ export default function MasterAdminLayout({
                               {link.children?.map((child) => {
                                 const ChildIcon = child.icon;
                                 const isChildItemActive =
-                                  child.href === '/masteradmin/customers'
-                                    ? pathname === '/masteradmin/customers' ||
-                                    pathname.startsWith('/masteradmin/customers/edit') || pathname.startsWith('/masteradmin/customers/view')
-                                    : child.href === '/masteradmin/customers/create'
-                                      ? pathname === '/masteradmin/customers/create'
-                                      : child.href === '/masteradmin/employees'
-                                        ? pathname === '/masteradmin/employees' ||
-                                        pathname.startsWith('/masteradmin/employees/')
-                                        : child.href === '/masteradmin/attendance'
-                                          ? pathname === '/masteradmin/attendance' || pathname.startsWith('/masteradmin/attendance/list')
-                                          : child.href === '/masteradmin/attendance/settings'
-                                            ? pathname === '/masteradmin/attendance/settings' || pathname.startsWith('/masteradmin/attendance/settings/')
-                                            : pathname === child.href || pathname.startsWith(child.href + '/');
+                                  child.href === '/masteradmin/companies'
+                                    ? pathname === '/masteradmin/companies'
+                                    : child.href === '/masteradmin/companies/sectors'
+                                      ? pathname.startsWith('/masteradmin/companies/sectors')
+                                      : child.href === '/masteradmin/companies/trial-applications'
+                                        ? pathname.startsWith('/masteradmin/companies/trial-applications')
+                                        : child.href === '/masteradmin/companies/plans'
+                                          ? pathname.startsWith('/masteradmin/companies/plans')
+                                          : child.href === '/masteradmin/companies/quotations'
+                                            ? pathname.startsWith('/masteradmin/companies/quotations')
+                                            : child.href === '/masteradmin/companies/invoices'
+                                              ? pathname.startsWith('/masteradmin/companies/invoices')
+                                              : child.href === '/masteradmin/customers'
+                                                ? pathname === '/masteradmin/customers' ||
+                                                pathname.startsWith('/masteradmin/customers/edit') || pathname.startsWith('/masteradmin/customers/view')
+                                                : child.href === '/masteradmin/customers/create'
+                                                  ? pathname === '/masteradmin/customers/create'
+                                                  : child.href === '/masteradmin/employees'
+                                                    ? pathname === '/masteradmin/employees' ||
+                                                    (pathname.startsWith('/masteradmin/employees/') &&
+                                                      !pathname.startsWith('/masteradmin/employees/resignations') &&
+                                                      !pathname.startsWith('/masteradmin/employees/joining-letter') &&
+                                                      !pathname.startsWith('/masteradmin/employees/working-agreement'))
+                                                    : child.href === '/masteradmin/employees/joining-letter'
+                                                      ? pathname.startsWith('/masteradmin/employees/joining-letter')
+                                                      : child.href === '/masteradmin/employees/working-agreement'
+                                                        ? pathname.startsWith('/masteradmin/employees/working-agreement')
+                                                        : child.href === '/masteradmin/employees/resignations'
+                                                          ? pathname.startsWith('/masteradmin/employees/resignations')
+                                                          : child.href === '/masteradmin/attendance'
+                                                            ? pathname === '/masteradmin/attendance' || pathname.startsWith('/masteradmin/attendance/list')
+                                                            : child.href === '/masteradmin/attendance/reports'
+                                                              ? pathname.startsWith('/masteradmin/attendance/reports')
+                                                              : child.href === '/masteradmin/attendance/settings'
+                                                                ? pathname === '/masteradmin/attendance/settings' || pathname.startsWith('/masteradmin/attendance/settings/')
+                                                                : child.href === '/masteradmin/programs'
+                                                                  ? pathname === '/masteradmin/programs'
+                                                                  : child.href === '/masteradmin/programs/create'
+                                                                    ? pathname === '/masteradmin/programs/create'
+                                                                    : child.href === '/masteradmin/agents'
+                                                                      ? pathname === '/masteradmin/agents'
+                                                                      : child.href === '/masteradmin/agents/create'
+                                                                        ? pathname === '/masteradmin/agents/create'
+                                                                        : pathname === child.href || pathname.startsWith(child.href + '/');
 
                                 return (
                                   <Link
@@ -663,11 +925,9 @@ export default function MasterAdminLayout({
                     }
 
                     const isActive =
-                      pathname === link.href ||
-                      (link.href === '/masteradmin/companies' &&
-                        pathname.startsWith('/masteradmin/companies')) ||
-                      (link.href !== '/masteradmin' &&
-                        Boolean(link.href && pathname.startsWith(link.href)));
+                      link.href === '/masteradmin'
+                        ? pathname === '/masteradmin'
+                        : Boolean(link.href && (pathname === link.href || pathname.startsWith(link.href + '/')));
 
                     return (
                       <Link

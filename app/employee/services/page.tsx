@@ -60,6 +60,8 @@ export default function EmployeeServicesPage() {
       : 120;
   });
 
+  const [animTriggerKey, setAnimTriggerKey] = useState<number>(0);
+
   useEffect(() => {
     const user = getCurrentUser();
     setCurrentUser(user);
@@ -125,6 +127,7 @@ export default function EmployeeServicesPage() {
         if (typeof theme?.service_cards_stagger === 'number') {
           setCardStagger(theme.service_cards_stagger);
         }
+        setAnimTriggerKey((k) => k + 1);
       })
       .catch(() => {});
 
@@ -138,6 +141,7 @@ export default function EmployeeServicesPage() {
       if (typeof theme?.service_cards_stagger === 'number') {
         setCardStagger(theme.service_cards_stagger);
       }
+      setAnimTriggerKey((k) => k + 1);
     });
 
     return unsub;
@@ -304,9 +308,9 @@ export default function EmployeeServicesPage() {
 
           return (
             <div
-              key={card.id}
+              key={`${card.id}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
               style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
-              className={`p-5 flex flex-col justify-between transition-all admin-card ${
+              className={`service-card-item p-5 flex flex-col justify-between transition-all admin-card ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 rounded-2xl shadow-xs hover:border-blue-300 hover:shadow-md'

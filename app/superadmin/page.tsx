@@ -29,7 +29,12 @@ import {
   saveStoredPageCards,
   resetStoredPageCards,
 } from '@/lib/pageCardStorage';
-import { useDashboardCardDesign } from '@/lib/themeSettings';
+import {
+  useDashboardCardDesign,
+  useCardAnimationSettings,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+} from '@/lib/themeSettings';
 import SuperAdminCompaniesPage from './companies/page';
 
 const DEFAULT_DASHBOARD_CARDS: PageStatCardConfig[] = [
@@ -52,6 +57,12 @@ export interface DashboardTabItem {
 export default function SuperAdminDashboard() {
   const cardDesign = useDashboardCardDesign();
   const isGlass = cardDesign === 'glassmorphism';
+  const {
+    animation: cardAnimation,
+    duration: cardDuration,
+    stagger: cardStagger,
+    animTriggerKey,
+  } = useCardAnimationSettings();
   const [activeTab, setActiveTab] = useState<DashboardTabId>('companies');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -227,15 +238,20 @@ export default function SuperAdminDashboard() {
 
           {/* KPI Cards (Exact Dashboard Card Design, Hardcoded Static Fallback & Theme) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {activeDashboardCards.map((card) => {
+            {activeDashboardCards.map((card, index) => {
+              const animClass = getServiceCardAnimationClass(cardAnimation, index);
+              const animStyle = getServiceCardAnimationStyle(index, cardDuration, cardStagger);
+              const cardKey = `${card.id}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`;
+
               if (card.id === 'reg_companies') {
                 return (
                   <button
-                    key={card.id}
+                    key={cardKey}
+                    style={animStyle}
                     type="button"
                     onClick={() => setActiveTab('companies')}
                     title="Switch to Company Management Tab"
-                    className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer active:scale-[0.99] ${
+                    className={`admin-stat-card p-5 transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer active:scale-[0.99] ${animClass} ${
                       isGlass
                         ? 'dashboard-card-glass rounded-2xl'
                         : 'bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl shadow-xs'
@@ -263,8 +279,9 @@ export default function SuperAdminDashboard() {
               if (card.id === 'total_workers') {
                 return (
                   <div
-                    key={card.id}
-                    className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] ${
+                    key={cardKey}
+                    style={animStyle}
+                    className={`admin-stat-card p-5 transition-all flex flex-col justify-between group min-h-[120px] ${animClass} ${
                       isGlass
                         ? 'dashboard-card-glass rounded-2xl'
                         : 'bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl shadow-xs'
@@ -289,8 +306,9 @@ export default function SuperAdminDashboard() {
               if (card.id === 'active_sectors') {
                 return (
                   <div
-                    key={card.id}
-                    className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] ${
+                    key={cardKey}
+                    style={animStyle}
+                    className={`admin-stat-card p-5 transition-all flex flex-col justify-between group min-h-[120px] ${animClass} ${
                       isGlass
                         ? 'dashboard-card-glass rounded-2xl'
                         : 'bg-white border border-slate-200 hover:border-indigo-400 hover:shadow-md rounded-xl shadow-xs'
@@ -314,8 +332,9 @@ export default function SuperAdminDashboard() {
 
               return (
                 <div
-                  key={card.id}
-                  className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] ${
+                  key={cardKey}
+                  style={animStyle}
+                  className={`admin-stat-card p-5 transition-all flex flex-col justify-between group min-h-[120px] ${animClass} ${
                     isGlass
                       ? 'dashboard-card-glass rounded-2xl'
                       : 'bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl shadow-xs'

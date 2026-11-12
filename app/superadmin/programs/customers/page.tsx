@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState, useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertCircle,
@@ -39,10 +39,13 @@ import { CustomerRecord, fetchCustomers, updateCustomer } from '@/lib/customerSt
 import { ProgramRecord, fetchPrograms } from '@/lib/programStorage';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { AgentRecord, fetchAgents } from '@/lib/agentStorage';
+import { getMasterAdminUser } from '@/lib/auth';
 
 function ProgramCustomersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
   const initialProgramId = searchParams.get('program_id') || 'all';
 
   const [selectedProgramId, setSelectedProgramId] = useState<string>(initialProgramId);
@@ -70,12 +73,23 @@ function ProgramCustomersContent() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [progList, custList] = await Promise.all([
+      const [progList, custListRaw] = await Promise.all([
         fetchPrograms(),
         fetchCustomers(undefined, undefined, undefined, selectedProgramId === 'all' ? undefined : selectedProgramId),
       ]);
       setPrograms(progList);
-      setCustomers(custList);
+
+      let finalCusts = custListRaw || [];
+      if (rootPath === '/masteradmin') {
+        const user = getMasterAdminUser();
+        const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+        if (scope.length > 0 && !scope.includes('*')) {
+          finalCusts = finalCusts.filter((c) =>
+            Boolean(c.company_id && scope.some((sId) => sId.toLowerCase() === c.company_id?.toLowerCase()))
+          );
+        }
+      }
+      setCustomers(finalCusts);
     } catch (err) {
       console.error('Failed to load data:', err);
       showToast('error', 'Failed to load program customers');
@@ -237,7 +251,7 @@ function ProgramCustomersContent() {
         <div className="min-w-0 flex-1">
           <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
             <BookOpen size={14} className="shrink-0" />
-            <Link href="/superadmin/programs" className="hover:underline">
+            <Link href={`${rootPath}/programs`} className="hover:underline">
               Program Management
             </Link>
             <span>/</span>
@@ -253,7 +267,7 @@ function ProgramCustomersContent() {
 
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
           <Link
-            href="/superadmin/programs"
+            href={`${rootPath}/programs`}
             className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap"
           >
             <BookOpen size={14} className="text-slate-500 shrink-0" />
@@ -261,7 +275,7 @@ function ProgramCustomersContent() {
           </Link>
 
           <Link
-            href="/superadmin/customers/create"
+            href={`${rootPath}/customers/create`}
             className="inline-flex items-center justify-center gap-2 h-10 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm whitespace-nowrap"
           >
             <Plus size={15} className="shrink-0" />
@@ -303,9 +317,9 @@ function ProgramCustomersContent() {
                 const val = e.target.value;
                 setSelectedProgramId(val);
                 if (val === 'all') {
-                  router.push('/superadmin/programs/customers');
+                  router.push(`${rootPath}/programs/customers`);
                 } else {
-                  router.push(`/superadmin/programs/customers?program_id=${val}`);
+                  router.push(`${rootPath}/programs/customers?program_id=${val}`);
                 }
               }}
               className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-white rounded-lg focus:outline-none shadow-sm cursor-pointer"
@@ -322,7 +336,7 @@ function ProgramCustomersContent() {
               <div className="mt-3 flex items-center justify-between text-[11px] text-indigo-200">
                 <span>{filteredCustomers.length} workers enrolled</span>
                 <Link
-                  href={`/superadmin/programs/edit?id=${currentProgram.id}`}
+                  href={`${rootPath}/programs/edit?id=${currentProgram.id}`}
                   className="inline-flex items-center gap-1 font-semibold text-white hover:underline"
                 >
                   <Edit2 size={11} />
@@ -468,7 +482,7 @@ function ProgramCustomersContent() {
             </p>
             <div className="mt-5 flex items-center justify-center gap-3">
               <Link
-                href="/superadmin/customers/create"
+                href={`${rootPath}/customers/create`}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm"
               >
                 <Plus size={14} />
@@ -578,7 +592,7 @@ function ProgramCustomersContent() {
                         </button>
 
                         <Link
-                          href={`/superadmin/customers/edit?id=${cust.id}&view=true`}
+                          href={`${rootPath}/customers/edit?id=${cust.id}&view=true`}
                           title="View Worker Details"
                           className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                         >
@@ -586,7 +600,7 @@ function ProgramCustomersContent() {
                         </Link>
 
                         <Link
-                          href={`/superadmin/customers/edit?id=${cust.id}`}
+                          href={`${rootPath}/customers/edit?id=${cust.id}`}
                           title="Edit Customer"
                           className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         >

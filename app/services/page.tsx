@@ -51,6 +51,7 @@ import {
   getServiceCardAnimationClass,
   getServiceCardAnimationStyle,
   ServiceCardsAnimationType,
+  useDashboardCardDesign,
 } from '@/lib/themeSettings';
 import {
   fetchCustomers,
@@ -227,6 +228,10 @@ function ServicesContent() {
     return unsub;
   }, []);
 
+  // Card Design Theme (Default or Glassmorphism)
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
+
   // Service Card Animation Setting State
   const [cardAnimation, setCardAnimation] = useState<ServiceCardsAnimationType>(() => {
     return typeof window !== 'undefined'
@@ -243,6 +248,7 @@ function ServicesContent() {
       ? getStoredThemeSettings().service_cards_stagger || 120
       : 120;
   });
+  const [animTriggerKey, setAnimTriggerKey] = useState<number>(0);
 
   // Load and listen to active service card animation theme changes
   useEffect(() => {
@@ -257,6 +263,7 @@ function ServicesContent() {
         if (typeof theme?.service_cards_stagger === 'number') {
           setCardStagger(theme.service_cards_stagger);
         }
+        setAnimTriggerKey((k) => k + 1);
       })
       .catch(() => {});
 
@@ -270,6 +277,7 @@ function ServicesContent() {
       if (typeof theme?.service_cards_stagger === 'number') {
         setCardStagger(theme.service_cards_stagger);
       }
+      setAnimTriggerKey((k) => k + 1);
     });
 
     return unsubTheme;
@@ -600,7 +608,7 @@ function ServicesContent() {
       </section>
 
       {/* Services Grid Section */}
-      <section className="bg-[#f7f9fb] py-12 sm:py-16" id="services">
+      <section className={`py-12 sm:py-16 transition-colors duration-300 ${isGlass ? 'bg-gradient-to-b from-[#f8fafc] via-[#eff6ff]/30 to-[#f8fafc]' : 'bg-[#f7f9fb]'}`} id="services">
         <div className="w-full max-w-[1180px] mx-auto px-6">
           {/* Authenticated Service Alert Callout */}
           {verifiedService && (
@@ -649,7 +657,11 @@ function ServicesContent() {
             </div>
 
             <div className="flex items-center justify-start">
-              <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 w-full sm:w-80 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all shadow-xs">
+              <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 w-full sm:w-80 transition-all shadow-xs ${
+                isGlass
+                  ? 'bg-white/80 backdrop-blur-md border border-white/80 text-slate-400 focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100'
+                  : 'bg-white border border-slate-200 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100'
+              }`}>
                 <Search size={18} className="shrink-0 text-slate-400" />
                 <input
                   value={query}
@@ -733,12 +745,20 @@ function ServicesContent() {
                   <CardElement
                     href={cardHref}
                     id={`service-card-${index}`}
-                    key={service.id || service.title}
+                    key={`${service.id || service.title}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
                     style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
-                    className={`group relative flex flex-col items-center text-center bg-white border rounded-[20px] p-8 md:p-9 shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:-translate-y-1.5 transition-all duration-300 cursor-pointer min-h-[300px] outline-none font-inherit no-underline select-none ${animClass} ${
-                      isCardVerified
-                        ? 'border-emerald-400 ring-2 ring-emerald-400/20'
-                        : 'border-slate-200/90 hover:border-blue-400'
+                    className={`service-card-item group relative flex flex-col items-center text-center rounded-[20px] p-8 md:p-9 cursor-pointer min-h-[300px] outline-none font-inherit no-underline select-none transition-all duration-300 ${animClass} ${
+                      isGlass
+                        ? `dashboard-card-glass ${
+                            isCardVerified
+                              ? 'ring-2 ring-emerald-400/50 border-emerald-400'
+                              : ''
+                          }`
+                        : `bg-white border shadow-[0_4px_20px_rgba(18,38,70,0.05)] hover:shadow-[0_16px_36px_rgba(18,55,110,0.12)] hover:-translate-y-1.5 ${
+                            isCardVerified
+                              ? 'border-emerald-400 ring-2 ring-emerald-400/20'
+                              : 'border-slate-200/90 hover:border-blue-400'
+                          }`
                     }`}
                   >
                     {/* Service Image */}
@@ -754,12 +774,18 @@ function ServicesContent() {
                     {/* Service Info */}
                     <div className="flex flex-col items-center flex-1 justify-start w-full pointer-events-none">
                       <div className="flex flex-col items-center gap-1.5 justify-center pointer-events-none">
-                        <h3 className="text-[17px] font-bold text-slate-900 leading-snug m-0 pointer-events-none group-hover:text-[#0b4da2] transition-colors">
+                        <h3 className={`text-[17px] font-bold leading-snug m-0 pointer-events-none transition-colors ${
+                          isGlass ? 'text-slate-900 group-hover:text-[var(--glass-text-accent,#0284c7)]' : 'text-slate-900 group-hover:text-[#0b4da2]'
+                        }`}>
                           {service.title}
                         </h3>
                         <div className="flex items-center gap-2 mt-1 flex-wrap justify-center">
                           {service.tag && (
-                            <span className="inline-block bg-blue-50 border border-blue-200 text-blue-600 text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full pointer-events-none">
+                            <span className={`inline-block border text-[9px] font-bold tracking-wider px-2.5 py-0.5 rounded-full pointer-events-none ${
+                              isGlass
+                                ? 'bg-sky-500/10 border-sky-400/30 text-sky-700'
+                                : 'bg-blue-50 border-blue-200 text-blue-600'
+                            }`}>
                               {service.tag}
                             </span>
                           )}
@@ -775,17 +801,23 @@ function ServicesContent() {
                           )}
                         </div>
                       </div>
-                      <p className="text-[13px] text-slate-500 leading-relaxed mt-2.5 max-w-[280px] pointer-events-none">
+                      <p className={`text-[13px] leading-relaxed mt-2.5 max-w-[280px] pointer-events-none ${
+                        isGlass ? 'text-slate-600' : 'text-slate-500'
+                      }`}>
                         {service.description}
                       </p>
                     </div>
 
                     {/* Card Action Link */}
-                    <div className="mt-4 pt-3 border-t border-slate-100 w-full flex items-center justify-between text-xs text-slate-500 pointer-events-none">
-                      <span className="text-[11px] text-slate-400 font-medium">
+                    <div className={`mt-4 pt-3 border-t w-full flex items-center justify-between text-xs pointer-events-none ${
+                      isGlass ? 'border-white/50 text-slate-600' : 'border-slate-100 text-slate-500'
+                    }`}>
+                      <span className={`text-[11px] font-medium ${isGlass ? 'text-slate-500' : 'text-slate-400'}`}>
                         {isCoreCustomer ? 'Official Portal' : 'Download Service Repository'}
                       </span>
-                      <span className="inline-flex items-center gap-1 font-semibold text-[#0b4da2] group-hover:translate-x-1 transition-transform">
+                      <span className={`inline-flex items-center gap-1 font-semibold group-hover:translate-x-1 transition-transform ${
+                        isGlass ? 'text-[var(--glass-text-accent,#0b4da2)]' : 'text-[#0b4da2]'
+                      }`}>
                         {actionText} <ArrowRight size={14} />
                       </span>
                     </div>

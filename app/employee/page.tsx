@@ -19,7 +19,12 @@ import {
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { getCurrentUser, AuthUser } from '@/lib/auth';
-import { useDashboardCardDesign } from '@/lib/themeSettings';
+import {
+  useDashboardCardDesign,
+  useCardAnimationSettings,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+} from '@/lib/themeSettings';
 import EmployeeCompaniesPage from './companies/page';
 
 export type DashboardTabId = 'overview' | 'companies' | string;
@@ -35,6 +40,12 @@ export interface DashboardTabItem {
 export default function EmployeeDashboardPage() {
   const cardDesign = useDashboardCardDesign();
   const isGlass = cardDesign === 'glassmorphism';
+  const {
+    animation: cardAnimation,
+    duration: cardDuration,
+    stagger: cardStagger,
+    animTriggerKey,
+  } = useCardAnimationSettings();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [customerCount, setCustomerCount] = useState<number>(0);
@@ -232,9 +243,11 @@ export default function EmployeeDashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Permitted Companies */}
             <button
+              key={`emp-kpi-0-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(0, cardDuration, cardStagger)}
               type="button"
               onClick={() => setActiveTab('companies')}
-              className={`p-5 shadow-xs flex items-center gap-4 text-left cursor-pointer transition-all active:scale-[0.99] admin-stat-card ${
+              className={`p-5 shadow-xs flex items-center gap-4 text-left cursor-pointer transition-all active:scale-[0.99] admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 0)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 hover:border-blue-300 rounded-2xl'
@@ -256,7 +269,9 @@ export default function EmployeeDashboardPage() {
 
             {/* Customer Records */}
             <div
-              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${
+              key={`emp-kpi-1-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(1, cardDuration, cardStagger)}
+              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 1)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 rounded-2xl'
@@ -278,7 +293,9 @@ export default function EmployeeDashboardPage() {
 
             {/* Supervisor Master Admin */}
             <div
-              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${
+              key={`emp-kpi-2-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(2, cardDuration, cardStagger)}
+              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 2)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 rounded-2xl'
@@ -300,7 +317,9 @@ export default function EmployeeDashboardPage() {
 
             {/* System Access Level */}
             <div
-              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${
+              key={`emp-kpi-3-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(3, cardDuration, cardStagger)}
+              className={`p-5 shadow-xs flex items-center gap-4 transition-all admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 3)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 rounded-2xl'

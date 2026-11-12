@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ExternalLink,
 } from 'lucide-react';
+import { getMasterAdminUser } from '@/lib/auth';
 
 interface EmployeeDocument {
   name: string;
@@ -82,7 +83,18 @@ export default function AdminJoiningLettersManagement({
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
-          setEmployees(data);
+          let finalData = data;
+          if (portalType === 'masteradmin') {
+            const user = getMasterAdminUser();
+            const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+            if (scope.length > 0 && !scope.includes('*')) {
+              finalData = data.filter((emp: any) => {
+                const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+                return assigned.some((cId: string) => scope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
+              });
+            }
+          }
+          setEmployees(finalData);
         }
       }
     } catch (err) {

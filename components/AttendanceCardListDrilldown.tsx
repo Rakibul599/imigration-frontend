@@ -294,19 +294,21 @@ export default function AttendanceCardListDrilldown({
       if (portalType === 'masteradmin') {
         const user = getMasterAdminUser();
         const scope: string[] = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
-        finalLogs = finalLogs.filter((att) => {
-          if (!att.company_id) return true;
-          return scope.some((id: string) => id.toLowerCase() === att.company_id?.toLowerCase());
-        });
-        finalProfiles = finalProfiles.filter((p) => {
-          if (!p.company_id) return true;
-          return scope.some((id: string) => id.toLowerCase() === p.company_id?.toLowerCase());
-        });
-        finalEmployees = finalEmployees.filter((emp) => {
-          const comps = emp.assigned_companies || [];
-          if (comps.length === 0) return true;
-          return comps.some((c) => scope.some((s: string) => s.toLowerCase() === c.toLowerCase()));
-        });
+        if (scope.length > 0 && !scope.includes('*')) {
+          finalLogs = finalLogs.filter((att) => {
+            if (!att.company_id) return false;
+            return scope.some((id: string) => id.toLowerCase() === att.company_id?.toLowerCase());
+          });
+          finalProfiles = finalProfiles.filter((p) => {
+            if (!p.company_id) return false;
+            return scope.some((id: string) => id.toLowerCase() === p.company_id?.toLowerCase());
+          });
+          finalEmployees = finalEmployees.filter((emp) => {
+            const comps = emp.assigned_companies || [];
+            if (comps.length === 0) return false;
+            return comps.some((c) => scope.some((s: string) => s.toLowerCase() === c.toLowerCase()));
+          });
+        }
       }
 
       if (statsData) setStats(statsData);

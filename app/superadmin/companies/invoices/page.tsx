@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertCircle,
   ArrowRight,
@@ -34,9 +34,12 @@ import {
   deleteInvoice,
 } from '@/lib/companyTrialAndFinanceStorage';
 import PrintableInvoiceModal from '@/components/PrintableInvoiceModal';
+import { getMasterAdminUser } from '@/lib/auth';
 
 export default function InvoicesListPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -69,8 +72,26 @@ export default function InvoicesListPage() {
     loadData();
   }, []);
 
-  const filteredInvoices = useMemo(() => {
+  // Strict tenant scoping for masteradmin
+  const scopedInvoices = useMemo(() => {
+    if (rootPath !== '/masteradmin') return invoices;
+    const user = getMasterAdminUser();
+    const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+    if (allowed.length === 0) return [];
+    if (allowed.includes('*')) return invoices;
     return invoices.filter((inv) => {
+      const cId = inv.company_id || '';
+      const cName = inv.company_name || '';
+      return allowed.some(
+        (id) =>
+          id.toLowerCase() === cId.toLowerCase() ||
+          id.toLowerCase() === cName.toLowerCase()
+      );
+    });
+  }, [invoices, rootPath]);
+
+  const filteredInvoices = useMemo(() => {
+    return scopedInvoices.filter((inv) => {
       if (statusFilter !== 'all' && inv.payment_status !== statusFilter) return false;
       if (searchTerm.trim()) {
         const s = searchTerm.toLowerCase();
@@ -83,14 +104,14 @@ export default function InvoicesListPage() {
       }
       return true;
     });
-  }, [invoices, statusFilter, searchTerm]);
+  }, [scopedInvoices, statusFilter, searchTerm]);
 
-  const totalCount = invoices.length;
-  const paidCount = invoices.filter((i) => i.payment_status === 'Paid').length;
-  const pendingCount = invoices.filter((i) => i.payment_status === 'Pending' || i.payment_status === 'Partial').length;
+  const totalCount = scopedInvoices.length;
+  const paidCount = scopedInvoices.filter((i) => i.payment_status === 'Paid').length;
+  const pendingCount = scopedInvoices.filter((i) => i.payment_status === 'Pending' || i.payment_status === 'Partial').length;
 
-  const totalCollected = invoices.reduce((acc, i) => acc + (Number(i.amount_paid) || 0), 0);
-  const totalOutstanding = invoices.reduce((acc, i) => acc + (Number(i.balance_due) || 0), 0);
+  const totalCollected = scopedInvoices.reduce((acc, i) => acc + (Number(i.amount_paid) || 0), 0);
+  const totalOutstanding = scopedInvoices.reduce((acc, i) => acc + (Number(i.balance_due) || 0), 0);
 
   const handleOpenSettleModal = (inv: CompanyInvoice) => {
     setSettlingInvoice(inv);
@@ -145,7 +166,7 @@ export default function InvoicesListPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <Link href="/companies" className="hover:text-[#0b4da2] no-underline">
+            <Link href={`${rootPath}/companies`} className="hover:text-[#0b4da2] no-underline">
               Company Management
             </Link>
             <span>/</span>
@@ -171,7 +192,7 @@ export default function InvoicesListPage() {
             <span>Refresh</span>
           </button>
           <Link
-            href="/companies/invoices/create"
+            href={`${rootPath}/companies/invoices/create`}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm hover:shadow transition-all no-underline"
           >
             <Plus size={14} />

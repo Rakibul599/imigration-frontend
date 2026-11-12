@@ -43,6 +43,8 @@ export async function fetchCompaniesFromBackend(): Promise<Company[]> {
                 telephone: bComp.telephone || local.telephone,
                 email: bComp.email || local.email,
                 currency: bComp.currency || local.currency,
+                wallet_balance: typeof bComp.wallet_balance === 'number' ? bComp.wallet_balance : (local.wallet_balance ?? 0),
+                wallet_account_no: bComp.wallet_account_no || local.wallet_account_no,
                 language: bComp.language || local.language,
                 bankName: bComp.bankName || local.bankName,
                 bankAccountName: bComp.bankAccountName || local.bankAccountName,
@@ -442,6 +444,75 @@ export async function resetStoredCompanies(): Promise<Company[]> {
     window.dispatchEvent(new Event(STORAGE_EVENT));
   }
   return defaultCompanies;
+}
+
+export type AddWalletBalancePayload = {
+  amount: number;
+  payment_method?: string;
+  reference?: string;
+  notes?: string;
+};
+
+/**
+ * Add / Top up wallet balance for a company.
+ */
+export async function addCompanyWalletBalance(
+  companyId: string,
+  payload: AddWalletBalancePayload
+): Promise<{ success: boolean; wallet_balance: number; company?: Company; error?: string }> {
+  const current = getStoredCompanies();
+  const target = current.find((c) => c.id === companyId);
+  const currentBal = Number(target?.wallet_balance) || 0;
+  const newBal = currentBal + Number(payload.amount);
+
+  // Optimistic local update
+  const updated = current.map((c) => {
+    if (c.id === companyId) {
+      return {
+        ...c,
+        wallet_balance: newBal,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return c;
+  });
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event(STORAGE_EVENT));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(companyId)}/wallet/add-balance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.company) {
+        const finalUpdated = updated.map((c) => (c.id === companyId ? { ...c, ...data.company } : c));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(finalUpdated));
+          window.dispatchEvent(new Event(STORAGE_EVENT));
+        }
+        return { success: true, wallet_balance: data.wallet_balance, company: data.company };
+      }
+      return { success: true, wallet_balance: newBal };
+    }
+  } catch (err) {
+    console.warn('Backend add-balance failed, cached locally:', err);
+  }
+
+  return { success: true, wallet_balance: newBal };
 }
 
 /**

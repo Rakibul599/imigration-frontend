@@ -32,17 +32,24 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Trash2,
   UploadCloud,
   UserCheck,
   UserPlus,
+  Crown,
+  KeyRound,
+  EyeOff,
+  Lock,
   Edit2,
   Users,
   Wallet,
   X,
 } from 'lucide-react';
+import { SubscriptionPlan, fetchSubscriptionPlans } from '@/lib/companyTrialAndFinanceStorage';
 import { Company, CompanyBankAccount, CompanyDirector, DirectorCar, DirectorDocument, DirectorExcelDocument, UploadedFileInfo, resolveFileUrl } from '@/lib/companies';
 import {
   fileToBase64,
@@ -142,6 +149,80 @@ function createEmptyDirector(index = 1): CompanyDirector {
   };
 }
 
+export interface StagedMasterAdmin {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  password: string;
+  showPassword?: boolean;
+  subscription_package: string;
+  status: 'active' | 'inactive';
+}
+
+export interface StagedEmployee {
+  id: string;
+  name: string;
+  employee_code: string;
+  email: string;
+  password: string;
+  showPassword?: boolean;
+  role: string;
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  status: 'active' | 'inactive';
+}
+
+function generateSecurePassword(length = 10): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const numbers = '23456789';
+  const symbols = '!@#$%&*';
+  const all = upper + lower + numbers + symbols;
+  let pass = '';
+  pass += upper.charAt(Math.floor(Math.random() * upper.length));
+  pass += lower.charAt(Math.floor(Math.random() * lower.length));
+  pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
+  pass += symbols.charAt(Math.floor(Math.random() * symbols.length));
+  for (let i = 4; i < length; i++) {
+    pass += all.charAt(Math.floor(Math.random() * all.length));
+  }
+  return pass.split('').sort(() => 0.5 - Math.random()).join('');
+}
+
+function createEmptyMasterAdmin(index = 1, companyName = ''): StagedMasterAdmin {
+  const cleanComp = companyName ? companyName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) : 'company';
+  return {
+    id: `ma-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    name: '',
+    email: '',
+    username: cleanComp ? `${cleanComp}_admin${index > 1 ? index : ''}` : `admin_${index}`,
+    password: generateSecurePassword(10),
+    showPassword: true,
+    subscription_package: '1_month',
+    status: 'active',
+  };
+}
+
+function createEmptyEmployee(index = 1, companyName = ''): StagedEmployee {
+  const prefix = companyName ? companyName.trim().slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'EMP') : 'EMP';
+  const randNum = Math.floor(1000 + Math.random() * 9000);
+  return {
+    id: `emp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    name: '',
+    employee_code: `${prefix.padEnd(3, 'E')}-${randNum}`,
+    email: '',
+    password: generateSecurePassword(10),
+    showPassword: true,
+    role: 'Employee',
+    can_create: true,
+    can_edit: true,
+    can_delete: false,
+    status: 'active',
+  };
+}
+
 function CreateCompanyFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -166,6 +247,17 @@ function CreateCompanyFormContent() {
   const [totalWorkers, setTotalWorkers] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState('Verified JIM');
+
+  // Staged Master Admins (multiple accounts to create)
+  const [masterAdmins, setMasterAdmins] = useState<StagedMasterAdmin[]>([]);
+  const [existingMasterAdmins, setExistingMasterAdmins] = useState<any[]>([]);
+
+  // Staged Employees (multiple staff to create)
+  const [employees, setEmployees] = useState<StagedEmployee[]>([]);
+  const [existingEmployees, setExistingEmployees] = useState<any[]>([]);
+
+  // Subscription Plans
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
 
   // Directors state (multiple directors / CEOs)
   const [directors, setDirectors] = useState<CompanyDirector[]>([createEmptyDirector(1)]);
@@ -300,6 +392,91 @@ function CreateCompanyFormContent() {
       }
     }
   }, [editId]);
+
+  // Load subscription plans for Master Admin dropdown
+  useEffect(() => {
+    fetchSubscriptionPlans()
+      .then((plans) => {
+        if (plans && plans.length > 0) {
+          setSubscriptionPlans(plans);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // In edit mode, load existing master admins and employees assigned to this company
+  useEffect(() => {
+    if (editId) {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      fetch(`${apiBase}/master-admins`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const matched = data.filter((m: any) =>
+              Array.isArray(m.assigned_companies) && m.assigned_companies.includes(editId)
+            );
+            setExistingMasterAdmins(matched);
+          }
+        })
+        .catch(() => {});
+
+      fetch(`${apiBase}/employees`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const matched = data.filter((e: any) =>
+              Array.isArray(e.assigned_companies) && e.assigned_companies.includes(editId)
+            );
+            setExistingEmployees(matched);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [editId]);
+
+  // Master Admin Handlers
+  const handleAddMasterAdmin = () => {
+    setMasterAdmins((prev) => [...prev, createEmptyMasterAdmin(prev.length + 1, name)]);
+  };
+
+  const handleRemoveMasterAdmin = (index: number) => {
+    setMasterAdmins((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateMasterAdmin = (index: number, field: keyof StagedMasterAdmin, value: any) => {
+    setMasterAdmins((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleRegenerateMasterAdminPassword = (index: number) => {
+    handleUpdateMasterAdmin(index, 'password', generateSecurePassword(10));
+    handleUpdateMasterAdmin(index, 'showPassword', true);
+  };
+
+  // Staff Employee Handlers
+  const handleAddEmployee = () => {
+    setEmployees((prev) => [...prev, createEmptyEmployee(prev.length + 1, name)]);
+  };
+
+  const handleRemoveEmployee = (index: number) => {
+    setEmployees((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateEmployee = (index: number, field: keyof StagedEmployee, value: any) => {
+    setEmployees((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleRegenerateEmployeePassword = (index: number) => {
+    handleUpdateEmployee(index, 'password', generateSecurePassword(10));
+    handleUpdateEmployee(index, 'showPassword', true);
+  };
 
   const handleSectorChange = (selectedSector: string) => {
     setSector(selectedSector);
@@ -853,6 +1030,56 @@ function CreateCompanyFormContent() {
       return;
     }
 
+    // Validate staged Master Admins
+    for (let i = 0; i < masterAdmins.length; i++) {
+      const ma = masterAdmins[i];
+      if (!ma.name.trim()) {
+        setErrorMessage(`Please enter Full Name for Master Admin #${i + 1}.`);
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+        return;
+      }
+      if (!ma.username.trim()) {
+        setErrorMessage(`Please enter Username for Master Admin #${i + 1}.`);
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+        return;
+      }
+      if (!ma.email.trim() || !ma.email.includes('@')) {
+        setErrorMessage(`Please enter a valid Email Address for Master Admin #${i + 1}.`);
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+        return;
+      }
+      if (!ma.password.trim() || ma.password.trim().length < 4) {
+        setErrorMessage(`Password must be at least 4 characters for Master Admin #${i + 1}.`);
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+        return;
+      }
+    }
+
+    // Validate staged Employees
+    for (let i = 0; i < employees.length; i++) {
+      const emp = employees[i];
+      if (!emp.name.trim()) {
+        setErrorMessage(`Please enter Full Name for Staff Employee #${i + 1}.`);
+        window.scrollTo({ top: 500, behavior: 'smooth' });
+        return;
+      }
+      if (!emp.employee_code.trim()) {
+        setErrorMessage(`Please enter Employee Code for Staff Employee #${i + 1}.`);
+        window.scrollTo({ top: 500, behavior: 'smooth' });
+        return;
+      }
+      if (!emp.email.trim() || !emp.email.includes('@')) {
+        setErrorMessage(`Please enter a valid Email Address for Staff Employee #${i + 1}.`);
+        window.scrollTo({ top: 500, behavior: 'smooth' });
+        return;
+      }
+      if (!emp.password.trim() || emp.password.trim().length < 4) {
+        setErrorMessage(`Password must be at least 4 characters for Staff Employee #${i + 1}.`);
+        window.scrollTo({ top: 500, behavior: 'smooth' });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -927,7 +1154,85 @@ function CreateCompanyFormContent() {
         await saveStoredCompany(companyData);
       }
 
-      // Successfully saved to localStorage, navigate to registered company list page
+      // Persist staged Master Admins to backend
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      const accountErrors: string[] = [];
+
+      for (let i = 0; i < masterAdmins.length; i++) {
+        const ma = masterAdmins[i];
+        try {
+          const maRes = await fetch(`${apiBase}/master-admins`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({
+              name: ma.name.trim(),
+              username: ma.username.trim(),
+              email: ma.email.trim().toLowerCase(),
+              password: ma.password.trim(),
+              assigned_companies: [sanitizedId],
+              status: ma.status || 'active',
+              subscription_package: ma.subscription_package || null,
+            }),
+          });
+          if (!maRes.ok) {
+            const errData = await maRes.json().catch(() => ({}));
+            accountErrors.push(`Master Admin (${ma.username}): ${errData.message || 'Registration failed'}`);
+          }
+        } catch (err: any) {
+          accountErrors.push(`Master Admin (${ma.username}): ${err.message || 'Network error'}`);
+        }
+      }
+
+      // Persist staged Employees to backend
+      for (let i = 0; i < employees.length; i++) {
+        const emp = employees[i];
+        try {
+          const empRes = await fetch(`${apiBase}/employees`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({
+              name: emp.name.trim(),
+              employee_code: emp.employee_code.trim(),
+              email: emp.email.trim().toLowerCase(),
+              password: emp.password.trim(),
+              role: 'Employee',
+              assigned_companies: [sanitizedId],
+              assigned_service_cards: ['*'],
+              can_create: Boolean(emp.can_create),
+              can_edit: Boolean(emp.can_edit),
+              can_delete: Boolean(emp.can_delete),
+              module_permissions: {
+                companies: { view: true, statistics: true, cards: ['*'] },
+                customers: {
+                  view: true,
+                  create: Boolean(emp.can_create),
+                  edit: Boolean(emp.can_edit),
+                  delete: Boolean(emp.can_delete),
+                },
+              },
+              status: emp.status || 'active',
+            }),
+          });
+          if (!empRes.ok) {
+            const errData = await empRes.json().catch(() => ({}));
+            accountErrors.push(`Employee (${emp.name}): ${errData.message || 'Registration failed'}`);
+          }
+        } catch (err: any) {
+          accountErrors.push(`Employee (${emp.name}): ${err.message || 'Network error'}`);
+        }
+      }
+
+      if (accountErrors.length > 0) {
+        alert(`Company saved successfully, but some associated accounts had notices:\n\n${accountErrors.join('\n')}`);
+      }
+
+      // Successfully saved to localStorage & backend, navigate to registered company list page
       router.push('/companies/registered');
     } catch (err: any) {
       console.error('Error saving company:', err);
@@ -1289,7 +1594,6 @@ function CreateCompanyFormContent() {
                         type="text"
                         value={account.bankName}
                         onChange={(e) => handleUpdateBankAccount(bIndex, 'bankName', e.target.value)}
-                        placeholder="e.g. Maybank, CIMB Bank"
                         className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                       />
                     </div>
@@ -1306,7 +1610,6 @@ function CreateCompanyFormContent() {
                         type="text"
                         value={account.bankAccountName}
                         onChange={(e) => handleUpdateBankAccount(bIndex, 'bankAccountName', e.target.value)}
-                        placeholder="e.g. Enterprise Sdn Bhd"
                         className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                       />
                     </div>
@@ -1324,7 +1627,6 @@ function CreateCompanyFormContent() {
                         inputMode="numeric"
                         value={account.bankAccountNo}
                         onChange={(e) => handleUpdateBankAccount(bIndex, 'bankAccountNo', e.target.value.replace(/\D/g, ''))}
-                        placeholder="e.g. 514012345678"
                         className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
                       />
                     </div>
@@ -1355,8 +1657,8 @@ function CreateCompanyFormContent() {
                 options={ALL_WORLD_CURRENCIES}
                 value={currency}
                 onChange={(val) => setCurrency(val)}
-                placeholder="Select Currency..."
-                searchPlaceholder="Search currency or country..."
+                placeholder=""
+                searchPlaceholder=""
                 icon={<Coins size={16} />}
               />
             </div>
@@ -1368,23 +1670,504 @@ function CreateCompanyFormContent() {
                 options={ALL_WORLD_LANGUAGES}
                 value={language}
                 onChange={(val) => setLanguage(val)}
-                placeholder="Select Language..."
-                searchPlaceholder="Search language or country..."
+                placeholder=""
+                searchPlaceholder=""
                 icon={<Languages size={16} />}
               />
             </div>
           </div>
         </div>
 
-        {/* SECTION 5: COMPANY DIRECTORS (CEOs) - MULTIPLE ADD */}
+        {/* SECTION 5: MASTER ADMINISTRATOR ACCOUNT(S) - MULTIPLE ADD */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                5
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 m-0">Master Administrator Account(s)</h2>
+                <p className="text-[11px] text-slate-500 m-0">
+                  Assign administrative login credentials for this company to access the Master Admin Portal. Multiple master admins can be added.
+                </p>
+              </div>
+            </div>
+
+            {/* + Add Master Admin Button */}
+            <button
+              type="button"
+              onClick={handleAddMasterAdmin}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs transition-colors cursor-pointer shrink-0"
+            >
+              <Crown size={14} />
+              <span>Add Master Admin</span>
+            </button>
+          </div>
+
+          {/* Existing Master Admins (when editing company) */}
+          {existingMasterAdmins && existingMasterAdmins.length > 0 && (
+            <div className="bg-indigo-50/40 border border-indigo-200/70 rounded-xl p-4 space-y-2.5">
+              <div className="flex items-center gap-2 text-indigo-900 text-xs font-bold">
+                <ShieldCheck size={14} className="text-indigo-600" />
+                <span>Currently Assigned Master Admins ({existingMasterAdmins.length})</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {existingMasterAdmins.map((adm) => (
+                  <div key={adm.id} className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-800 truncate">{adm.name}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {adm.status || 'active'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-mono truncate">
+                      @{adm.username} • {adm.email}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Staged Master Admins List */}
+          {masterAdmins.length === 0 ? (
+            <div className="text-[11px] text-slate-400 italic bg-white/60 p-4 rounded-xl border border-dashed border-slate-200 text-center flex flex-col sm:flex-row items-center justify-center gap-2">
+              <ShieldCheck size={16} className="text-indigo-400" />
+              <span>No Master Admin account added yet. Click &quot;+ Add Master Admin&quot; to assign administrator credentials to this company.</span>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {masterAdmins.map((admin, mIndex) => (
+                <div
+                  key={admin.id || mIndex}
+                  className="bg-slate-50/70 border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5 relative"
+                >
+                  {/* Master Admin Header */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-[11px] font-bold flex items-center justify-center">
+                        {mIndex + 1}
+                      </span>
+                      <h3 className="text-xs font-bold text-slate-900 m-0 uppercase tracking-wide">
+                        {admin.name ? admin.name : `Master Admin #${mIndex + 1}`}
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-indigo-50 text-indigo-700 border-indigo-200">
+                        Master Administrator
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMasterAdmin(mIndex)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-50 border border-red-200 bg-white transition-colors cursor-pointer"
+                      title="Remove Master Admin"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+
+                  {/* Form Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={admin.name}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          handleUpdateMasterAdmin(mIndex, 'name', val);
+                          if (!admin.username || admin.username.startsWith('admin_') || admin.username.includes('_admin')) {
+                            const clean = val.toLowerCase().replace(/[^a-z0-9]/g, '');
+                            if (clean) {
+                              handleUpdateMasterAdmin(mIndex, 'username', clean);
+                            }
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    {/* Username */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Username (Login Handle) <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-mono">@</span>
+                        <input
+                          type="text"
+                          value={admin.username}
+                          onChange={(e) => handleUpdateMasterAdmin(mIndex, 'username', e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+                          className="w-full bg-white border border-slate-300 rounded-xl pl-7 pr-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="email"
+                          value={admin.email}
+                          onChange={(e) => handleUpdateMasterAdmin(mIndex, 'email', e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type={admin.showPassword ? 'text' : 'password'}
+                            value={admin.password}
+                            onChange={(e) => handleUpdateMasterAdmin(mIndex, 'password', e.target.value)}
+                            className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-8 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-indigo-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateMasterAdmin(mIndex, 'showPassword', !admin.showPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer border-0 bg-transparent p-0"
+                            title={admin.showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {admin.showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRegenerateMasterAdminPassword(mIndex)}
+                          className="p-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 shadow-2xs cursor-pointer transition-colors shrink-0"
+                          title="Generate Secure Random Password"
+                        >
+                          <Sparkles size={14} className="text-indigo-600" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Subscription Package */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Subscription Plan
+                      </label>
+                      <select
+                        value={admin.subscription_package}
+                        onChange={(e) => handleUpdateMasterAdmin(mIndex, 'subscription_package', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      >
+                        {subscriptionPlans.length > 0 ? (
+                          subscriptionPlans.map((plan) => (
+                            <option key={plan.id} value={plan.plan_key}>
+                              {plan.name} ({plan.duration_days || 30} Days) - {plan.price ? `${plan.price} ${plan.currency || 'RM'}` : 'Default'}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="1_month">1 Month Standard (30 Days)</option>
+                            <option value="3_months">3 Months Business (90 Days)</option>
+                            <option value="6_months">6 Months Enterprise (180 Days)</option>
+                            <option value="1_year">1 Year Full Package (365 Days)</option>
+                            <option value="trial">3-Day Free Trial</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Status Toggle */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Account Status
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMasterAdmin(mIndex, 'status', 'active')}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                            admin.status === 'active'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          Active
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateMasterAdmin(mIndex, 'status', 'inactive')}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                            admin.status === 'inactive'
+                              ? 'bg-slate-700 text-white border-slate-700 shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          Inactive
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 6: STAFF EMPLOYEE ACCOUNT(S) - MULTIPLE ADD */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center font-bold text-xs">
+                6
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 m-0">Staff Employee Account(s)</h2>
+                <p className="text-[11px] text-slate-500 m-0">
+                  Create employee credentials and set operating permissions for this company. Multiple employees can be added.
+                </p>
+              </div>
+            </div>
+
+            {/* + Add Employee Button */}
+            <button
+              type="button"
+              onClick={handleAddEmployee}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 shadow-2xs transition-colors cursor-pointer shrink-0"
+            >
+              <UserPlus size={14} />
+              <span>Add Employee</span>
+            </button>
+          </div>
+
+          {/* Existing Employees (when editing company) */}
+          {existingEmployees && existingEmployees.length > 0 && (
+            <div className="bg-teal-50/40 border border-teal-200/70 rounded-xl p-4 space-y-2.5">
+              <div className="flex items-center gap-2 text-teal-900 text-xs font-bold">
+                <Users size={14} className="text-teal-600" />
+                <span>Currently Assigned Staff Employees ({existingEmployees.length})</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {existingEmployees.map((emp) => (
+                  <div key={emp.id} className="bg-white p-3 rounded-lg border border-teal-100 shadow-2xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-800 truncate">{emp.name}</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                        {emp.employee_code}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-mono truncate">
+                      {emp.email} • {emp.status || 'active'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Staged Employees List */}
+          {employees.length === 0 ? (
+            <div className="text-[11px] text-slate-400 italic bg-white/60 p-4 rounded-xl border border-dashed border-slate-200 text-center flex flex-col sm:flex-row items-center justify-center gap-2">
+              <Users size={16} className="text-teal-400" />
+              <span>No staff employee accounts added yet. Click &quot;+ Add Employee&quot; to assign staff members to this company.</span>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {employees.map((emp, eIndex) => (
+                <div
+                  key={emp.id || eIndex}
+                  className="bg-slate-50/70 border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5 relative"
+                >
+                  {/* Employee Header */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-6 h-6 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center">
+                        {eIndex + 1}
+                      </span>
+                      <h3 className="text-xs font-bold text-slate-900 m-0 uppercase tracking-wide">
+                        {emp.name ? emp.name : `Employee #${eIndex + 1}`}
+                      </h3>
+                      <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded border bg-teal-50 text-teal-700 border-teal-200">
+                        {emp.employee_code || 'CODE'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEmployee(eIndex)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-red-600 hover:bg-red-50 border border-red-200 bg-white transition-colors cursor-pointer"
+                      title="Remove Employee"
+                    >
+                      <Trash2 size={13} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
+
+                  {/* Form Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Full Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Staff Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={emp.name}
+                        onChange={(e) => handleUpdateEmployee(eIndex, 'name', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-teal-500"
+                      />
+                    </div>
+
+                    {/* Employee Code */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Employee Code <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={emp.employee_code}
+                        onChange={(e) => handleUpdateEmployee(eIndex, 'employee_code', e.target.value)}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-teal-500"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="email"
+                          value={emp.email}
+                          onChange={(e) => handleUpdateEmployee(eIndex, 'email', e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type={emp.showPassword ? 'text' : 'password'}
+                            value={emp.password}
+                            onChange={(e) => handleUpdateEmployee(eIndex, 'password', e.target.value)}
+                            className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-8 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-teal-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateEmployee(eIndex, 'showPassword', !emp.showPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer border-0 bg-transparent p-0"
+                            title={emp.showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {emp.showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRegenerateEmployeePassword(eIndex)}
+                          className="p-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 shadow-2xs cursor-pointer transition-colors shrink-0"
+                          title="Generate Secure Random Password"
+                        >
+                          <Sparkles size={14} className="text-teal-600" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Permissions & Status Row */}
+                  <div className="pt-3 border-t border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    {/* Permissions Checkboxes */}
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="text-xs font-bold text-slate-700">Permissions:</span>
+                      <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={emp.can_create}
+                          onChange={(e) => handleUpdateEmployee(eIndex, 'can_create', e.target.checked)}
+                          className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                        />
+                        <span>Can Create</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={emp.can_edit}
+                          onChange={(e) => handleUpdateEmployee(eIndex, 'can_edit', e.target.checked)}
+                          className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                        />
+                        <span>Can Edit</span>
+                      </label>
+                      <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={emp.can_delete}
+                          onChange={(e) => handleUpdateEmployee(eIndex, 'can_delete', e.target.checked)}
+                          className="rounded border-slate-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                        />
+                        <span className="text-slate-600">Can Delete</span>
+                      </label>
+                    </div>
+
+                    {/* Status selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-700">Status:</span>
+                      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateEmployee(eIndex, 'status', 'active')}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer border-0 ${
+                            emp.status === 'active'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-transparent text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Active
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateEmployee(eIndex, 'status', 'inactive')}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer border-0 ${
+                            emp.status === 'inactive'
+                              ? 'bg-slate-700 text-white'
+                              : 'bg-transparent text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Inactive
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 7: COMPANY DIRECTORS (CEOs) & DOCUMENT UPLOADS - MULTIPLE ADD */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs">
-                5
+                7
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-900 m-0">Company Director(s) &amp; CEO(s)</h2>
+                <h2 className="text-sm font-bold text-slate-900 m-0">Company Director(s) &amp; Document Upload(s)</h2>
                 <p className="text-[11px] text-slate-500 m-0">
                   Multiple directors can be added. Includes National ID, Passport, Car, Salary, and other uploaded documents.
                 </p>
@@ -1741,7 +2524,6 @@ function CreateCompanyFormContent() {
                                   <input
                                     type="number"
                                     min="0"
-                                    placeholder="0"
                                     value={car.depositAmount || ''}
                                     onChange={(e) => handleUpdateCar(dIndex, cIndex, 'depositAmount', e.target.value)}
                                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
@@ -1756,7 +2538,6 @@ function CreateCompanyFormContent() {
                                   <input
                                     type="number"
                                     min="0"
-                                    placeholder="e.g. 12, 24, 36"
                                     value={car.emiPeriod || ''}
                                     onChange={(e) => handleUpdateCar(dIndex, cIndex, 'emiPeriod', e.target.value)}
                                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
@@ -1771,7 +2552,6 @@ function CreateCompanyFormContent() {
                                   <input
                                     type="number"
                                     min="0"
-                                    placeholder="0"
                                     value={car.amount}
                                     onChange={(e) => handleUpdateCar(dIndex, cIndex, 'amount', e.target.value)}
                                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
@@ -1791,7 +2571,6 @@ function CreateCompanyFormContent() {
                                   <input
                                     type="number"
                                     min="0"
-                                    placeholder="0"
                                     value={car.totalPayment || ''}
                                     onChange={(e) => handleUpdateCar(dIndex, cIndex, 'totalPayment', e.target.value)}
                                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-blue-900 focus:outline-none focus:border-blue-500"
@@ -1829,7 +2608,6 @@ function CreateCompanyFormContent() {
                                 <input
                                   type="number"
                                   min="0"
-                                  placeholder="0"
                                   value={car.amount}
                                   onChange={(e) => handleUpdateCar(dIndex, cIndex, 'amount', e.target.value)}
                                   className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
@@ -2144,7 +2922,7 @@ function CreateCompanyFormContent() {
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-md hover:shadow-lg transition-all cursor-pointer border-0 disabled:opacity-50"
             >
               <Save size={16} />
-              <span>{isSubmitting ? 'Saving to LocalStorage...' : editId ? 'Save & Update Company' : 'Register & Save Company'}</span>
+              <span>{isSubmitting ? 'Saving Company & Accounts...' : editId ? 'Save & Update Company' : 'Register & Save Company'}</span>
             </button>
           </div>
         </div>

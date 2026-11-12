@@ -495,7 +495,9 @@ body.card-theme-glass .admin-card,
 html[data-card-design="glassmorphism"] .kpi-card,
 body.card-theme-glass .kpi-card,
 html[data-card-design="glassmorphism"] .company-directory-card,
-body.card-theme-glass .company-directory-card {
+body.card-theme-glass .company-directory-card,
+html[data-card-design="glassmorphism"] .service-card-item,
+body.card-theme-glass .service-card-item {
   position: relative;
   /* Multi-stop crystal frosted glass with soft, light tint of the hover color across the full card */
   background: 
@@ -534,6 +536,8 @@ html[data-card-design="glassmorphism"] .kpi-card::before,
 body.card-theme-glass .kpi-card::before,
 html[data-card-design="glassmorphism"] .company-directory-card::before,
 body.card-theme-glass .company-directory-card::before,
+html[data-card-design="glassmorphism"] .service-card-item::before,
+body.card-theme-glass .service-card-item::before,
 .dashboard-card-glass::after,
 html[data-card-design="glassmorphism"] .admin-stat-card::after,
 body.card-theme-glass .admin-stat-card::after,
@@ -545,6 +549,8 @@ html[data-card-design="glassmorphism"] .kpi-card::after,
 body.card-theme-glass .kpi-card::after,
 html[data-card-design="glassmorphism"] .company-directory-card::after,
 body.card-theme-glass .company-directory-card::after,
+html[data-card-design="glassmorphism"] .service-card-item::after,
+body.card-theme-glass .service-card-item::after,
 .dashboard-card-glass:hover::before,
 html[data-card-design="glassmorphism"] .admin-stat-card:hover::before,
 body.card-theme-glass .admin-stat-card:hover::before,
@@ -556,6 +562,8 @@ html[data-card-design="glassmorphism"] .kpi-card:hover::before,
 body.card-theme-glass .kpi-card:hover::before,
 html[data-card-design="glassmorphism"] .company-directory-card:hover::before,
 body.card-theme-glass .company-directory-card:hover::before,
+html[data-card-design="glassmorphism"] .service-card-item:hover::before,
+body.card-theme-glass .service-card-item:hover::before,
 .dashboard-card-glass:hover::after,
 html[data-card-design="glassmorphism"] .admin-stat-card:hover::after,
 body.card-theme-glass .admin-stat-card:hover::after,
@@ -566,7 +574,9 @@ body.card-theme-glass .admin-card:hover::after,
 html[data-card-design="glassmorphism"] .kpi-card:hover::after,
 body.card-theme-glass .kpi-card:hover::after,
 html[data-card-design="glassmorphism"] .company-directory-card:hover::after,
-body.card-theme-glass .company-directory-card:hover::after {
+body.card-theme-glass .company-directory-card:hover::after,
+html[data-card-design="glassmorphism"] .service-card-item:hover::after,
+body.card-theme-glass .service-card-item:hover::after {
   display: none !important;
   content: none !important;
 }
@@ -582,7 +592,9 @@ body.card-theme-glass .admin-card:hover,
 html[data-card-design="glassmorphism"] .kpi-card:hover,
 body.card-theme-glass .kpi-card:hover,
 html[data-card-design="glassmorphism"] .company-directory-card:hover,
-body.card-theme-glass .company-directory-card:hover {
+body.card-theme-glass .company-directory-card:hover,
+html[data-card-design="glassmorphism"] .service-card-item:hover,
+body.card-theme-glass .service-card-item:hover {
   transform: translateY(-4px) !important;
   border-color: var(--glass-hover-border, rgba(56, 189, 248, 0.75)) !important;
   background: linear-gradient(

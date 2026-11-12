@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowLeft,
@@ -23,10 +23,13 @@ import {
 import { Company, resolveFileUrl } from '@/lib/companies';
 import { fetchCompaniesFromBackend, getStoredCompanies } from '@/lib/companyStorage';
 import PrintableQuotationModal, { formatCorporateDate } from '@/components/PrintableQuotationModal';
+import { getMasterAdminUser } from '@/lib/auth';
 
 function CreateQuotationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -85,12 +88,33 @@ function CreateQuotationContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    const list = getStoredCompanies();
+    const filterByScope = (rawList: Company[]) => {
+      if (rootPath !== '/masteradmin') return rawList;
+      const user = getMasterAdminUser();
+      const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+      if (scope.length === 0) return [];
+      if (scope.includes('*')) return rawList;
+      return rawList.filter((c) => scope.some((sId) => sId.toLowerCase() === c.id.toLowerCase()));
+    };
+
+    const list = filterByScope(getStoredCompanies());
     setCompanies(list);
+    if (list.length === 1 && !selectedCompanyId) {
+      setSelectedCompanyId(list[0].id);
+      applyCompanyToBilling(list[0]);
+    }
+
     fetchCompaniesFromBackend().then((res) => {
-      if (Array.isArray(res) && res.length > 0) setCompanies(res);
+      if (Array.isArray(res) && res.length > 0) {
+        const filtered = filterByScope(res);
+        setCompanies(filtered);
+        if (filtered.length === 1 && !selectedCompanyId) {
+          setSelectedCompanyId(filtered[0].id);
+          applyCompanyToBilling(filtered[0]);
+        }
+      }
     }).catch(() => {});
-  }, []);
+  }, [rootPath]);
 
   const applyCompanyToBilling = (comp: Company) => {
     setCompanyName(comp.name);
@@ -221,7 +245,7 @@ function CreateQuotationContent() {
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <div className="flex items-center gap-3">
           <Link
-            href="/companies/quotations"
+            href={`${rootPath}/companies/quotations`}
             className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors no-underline"
           >
             <ArrowLeft size={16} />
@@ -239,7 +263,7 @@ function CreateQuotationContent() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/companies/quotations"
+            href={`${rootPath}/companies/quotations`}
             className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold no-underline"
           >
             Quotation List

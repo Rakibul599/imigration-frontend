@@ -302,9 +302,10 @@ export default function MasterAdminEmployeesPage() {
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
-      // Employee has at least one company in common with Master Admin scope OR all if admin
+      // Employee must belong to at least one company in Master Admin scope
       const inScope =
-        emp.role === 'Admin' ||
+        assignedScope.length === 0 ||
+        assignedScope.includes('*') ||
         assigned.some((cId) => assignedScope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
 
       if (!inScope && assignedScope.length > 0) return false;

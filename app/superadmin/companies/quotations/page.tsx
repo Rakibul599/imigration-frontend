@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertCircle,
   ArrowRight,
@@ -33,9 +33,12 @@ import {
   deleteQuotation,
 } from '@/lib/companyTrialAndFinanceStorage';
 import PrintableQuotationModal from '@/components/PrintableQuotationModal';
+import { getMasterAdminUser } from '@/lib/auth';
 
 export default function QuotationsListPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
   const [quotations, setQuotations] = useState<CompanyQuotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,8 +67,26 @@ export default function QuotationsListPage() {
   const isPending = (s?: string) => s === 'Draft' || s?.toLowerCase() === 'pending';
   const isRejected = (s?: string) => s === 'Declined' || s?.toLowerCase() === 'rejected' || s?.toLowerCase() === 'declined';
 
-  const filteredQuotations = useMemo(() => {
+  // Strict tenant scoping for masteradmin
+  const scopedQuotations = useMemo(() => {
+    if (rootPath !== '/masteradmin') return quotations;
+    const user = getMasterAdminUser();
+    const allowed = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+    if (allowed.length === 0) return [];
+    if (allowed.includes('*')) return quotations;
     return quotations.filter((quo) => {
+      const cId = quo.company_id || '';
+      const cName = quo.company_name || '';
+      return allowed.some(
+        (id) =>
+          id.toLowerCase() === cId.toLowerCase() ||
+          id.toLowerCase() === cName.toLowerCase()
+      );
+    });
+  }, [quotations, rootPath]);
+
+  const filteredQuotations = useMemo(() => {
+    return scopedQuotations.filter((quo) => {
       if (statusFilter !== 'all') {
         if (statusFilter === 'open') {
           if (!isOpen(quo.status)) return false;
@@ -91,10 +112,10 @@ export default function QuotationsListPage() {
     });
   }, [quotations, statusFilter, searchTerm]);
 
-  const openQuotes = useMemo(() => quotations.filter((q) => isOpen(q.status)), [quotations]);
-  const acceptedQuotes = useMemo(() => quotations.filter((q) => isAccepted(q.status)), [quotations]);
-  const pendingQuotes = useMemo(() => quotations.filter((q) => isPending(q.status)), [quotations]);
-  const rejectedQuotes = useMemo(() => quotations.filter((q) => isRejected(q.status)), [quotations]);
+  const openQuotes = useMemo(() => scopedQuotations.filter((q) => isOpen(q.status)), [scopedQuotations]);
+  const acceptedQuotes = useMemo(() => scopedQuotations.filter((q) => isAccepted(q.status)), [scopedQuotations]);
+  const pendingQuotes = useMemo(() => scopedQuotations.filter((q) => isPending(q.status)), [scopedQuotations]);
+  const rejectedQuotes = useMemo(() => scopedQuotations.filter((q) => isRejected(q.status)), [scopedQuotations]);
 
   const openAmount = useMemo(() => openQuotes.reduce((acc, q) => acc + (Number(q.total_amount) || 0), 0), [openQuotes]);
   const acceptedAmount = useMemo(() => acceptedQuotes.reduce((acc, q) => acc + (Number(q.total_amount) || 0), 0), [acceptedQuotes]);
@@ -137,7 +158,7 @@ export default function QuotationsListPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-            <Link href="/companies" className="hover:text-[#0b4da2] no-underline">
+            <Link href={`${rootPath}/companies`} className="hover:text-[#0b4da2] no-underline">
               Company Management
             </Link>
             <span>/</span>
@@ -163,7 +184,7 @@ export default function QuotationsListPage() {
             <span>Refresh</span>
           </button>
           <Link
-            href="/companies/quotations/create"
+            href={`${rootPath}/companies/quotations/create`}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0b4da2] hover:bg-[#083877] text-white text-xs font-bold shadow-sm hover:shadow transition-all no-underline"
           >
             <Plus size={14} />

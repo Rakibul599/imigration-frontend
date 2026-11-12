@@ -471,7 +471,7 @@ export default function ThemeManager({
           }`}
         >
           <LayoutGrid size={17} />
-          <span>Service Cards Animation</span>
+          <span>Card Animations &amp; Motion</span>
         </button>
 
         <button
@@ -499,10 +499,10 @@ export default function ThemeManager({
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-base md:text-lg font-bold text-slate-900 m-0">
-                    Service Cards Entrance Animation
+                    Dashboard &amp; Service Cards Entrance Animation
                   </h2>
                   <p className="text-xs text-slate-500 m-0 mt-1">
-                    Select which direction the cards will slide in when the services page loads.
+                    Select which direction cards will slide into view across Super Admin, Master Admin, Employee Dashboard, and Public Services.
                   </p>
                 </div>
 
@@ -857,6 +857,12 @@ export default function ThemeManager({
           glassColors={glassColors}
           onSaveGlassColors={handleGlassColorsChange}
           saving={saving}
+          selectedCardAnim={selectedCardAnim}
+          onSelectCardAnim={handleCardAnimationSelect}
+          cardDuration={cardDuration}
+          onChangeCardDuration={setCardDuration}
+          cardStagger={cardStagger}
+          onChangeCardStagger={setCardStagger}
         />
       )}
 

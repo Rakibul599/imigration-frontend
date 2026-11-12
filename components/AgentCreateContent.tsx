@@ -20,7 +20,7 @@ import {
 import { createAgent, AgentRecord } from '@/lib/agentStorage';
 
 interface AgentCreateContentProps {
-  portalType: 'superadmin' | 'frontend_superadmin';
+  portalType: 'superadmin' | 'frontend_superadmin' | 'masteradmin';
   backUrl: string;
 }
 

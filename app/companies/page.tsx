@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Company, getCompanyPendingWallet } from '@/lib/companies';
+import { Company } from '@/lib/companies';
 import {
   AuthUser,
   getCurrentUser,
@@ -43,6 +43,7 @@ import {
   logoutMasterAdmin,
 } from '@/lib/auth';
 import {
+  addCompanyWalletBalance,
   deleteStoredCompany,
   fetchCompaniesFromBackend,
   getStoredCompanies,
@@ -165,7 +166,7 @@ export default function CompaniesPage() {
     if (typeof window === 'undefined') return [];
     return getStoredCompanies();
   });
-  const [sortField, setSortField] = useState<'name' | 'due'>('name');
+  const [sortField, setSortField] = useState<'name' | 'due' | 'balance'>('name');
   const [sortAsc, setSortAsc] = useState(true);
   const [invoices, setInvoices] = useState<CompanyInvoice[]>([]);
   const [customerPendings, setCustomerPendings] = useState<CustomerPendingAmountRecord[]>([]);
@@ -178,6 +179,14 @@ export default function CompaniesPage() {
   const [payNotes, setPayNotes] = useState<string>('');
   const [payDate, setPayDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+
+  // Wallet Balance Top-up Modal State
+  const [walletTargetCompany, setWalletTargetCompany] = useState<Company | null>(null);
+  const [walletAddAmount, setWalletAddAmount] = useState<string>('');
+  const [walletPaymentMethod, setWalletPaymentMethod] = useState<string>('Bank Transfer');
+  const [walletReference, setWalletReference] = useState<string>('');
+  const [walletNotes, setWalletNotes] = useState<string>('');
+  const [isSubmittingWallet, setIsSubmittingWallet] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState<Company | null>(null);
   const [showSubscriptionAlert, setShowSubscriptionAlert] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
@@ -428,7 +437,7 @@ export default function CompaniesPage() {
       .filter((inv) => inv.payment_status !== 'Paid')
       .reduce((sum, inv) => sum + (Number(inv.balance_due) || 0), 0);
 
-    const invoiceDue = liveInvoiceDue > 0 ? liveInvoiceDue : (Number(comp.invoice_due) || 0);
+    const invoiceDue = compInvs.length > 0 ? liveInvoiceDue : (Number(comp.invoice_due) || 0);
 
     // 2. Direct Customer / Worker Pending Ledger
     const compPendings = customerPendings.filter((rec) => {
@@ -444,14 +453,14 @@ export default function CompaniesPage() {
     });
 
     const liveCustomerDue = compPendings.reduce((sum, rec) => sum + (Number(rec.pending_amount) || 0), 0);
-    const customerDue = liveCustomerDue > 0 ? liveCustomerDue : (Number(comp.customer_due) || 0);
+    const customerDue = compPendings.length > 0 ? liveCustomerDue : (Number(comp.customer_due) || 0);
 
-    // 3. Foreign Worker Pending Wallet
-    const walletPending = getCompanyPendingWallet(comp);
+    // 3. Foreign Worker Pending Wallet (only real recorded pending)
+    const walletPending = typeof comp.pendingWallet === 'number' ? comp.pendingWallet : 0;
 
-    // 4. Combined / Priority Due
+    // 4. Combined Due
     const recordedDue = invoiceDue + customerDue;
-    const totalDue = recordedDue > 0 ? recordedDue : walletPending;
+    const totalDue = recordedDue + walletPending;
 
     return {
       invoiceDue,
@@ -459,7 +468,7 @@ export default function CompaniesPage() {
       walletPending,
       recordedDue,
       totalDue,
-      hasDirectDue: recordedDue > 0,
+      hasDirectDue: totalDue > 0,
       invoices: compInvs,
       pendings: compPendings,
     };
@@ -542,6 +551,16 @@ export default function CompaniesPage() {
         });
       }
 
+      // Clear pendingWallet / dues on payingCompany in local storage as well
+      const updatedCompanyData: Company = {
+        ...payingCompany,
+        pendingWallet: 0,
+        invoice_due: 0,
+        customer_due: 0,
+        total_due: 0,
+      };
+      await updateStoredCompany(updatedCompanyData);
+
       // Refresh live invoices and companies from backend
       const updatedInvoices = await fetchInvoices();
       setInvoices(updatedInvoices);
@@ -562,7 +581,53 @@ export default function CompaniesPage() {
     }
   };
 
-  const toggleSort = (field: 'name' | 'due' = 'name') => {
+  const openWalletModal = (company: Company) => {
+    setWalletTargetCompany(company);
+    setWalletAddAmount('');
+    setWalletPaymentMethod('Bank Transfer');
+    setWalletReference(`TOPUP-${Date.now().toString().slice(-6)}`);
+    setWalletNotes(`Wallet top-up for ${company.name}`);
+  };
+
+  const handleConfirmAddWalletBalance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!walletTargetCompany) return;
+
+    const amount = parseFloat(walletAddAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Please enter a valid positive top-up amount in RM.');
+      return;
+    }
+
+    setIsSubmittingWallet(true);
+    try {
+      const result = await addCompanyWalletBalance(walletTargetCompany.id, {
+        amount,
+        payment_method: walletPaymentMethod,
+        reference: walletReference,
+        notes: walletNotes || `Balance top-up of RM ${amount.toFixed(2)} on ${new Date().toISOString().slice(0, 10)}.`,
+      });
+
+      // Refresh live companies from backend
+      const updatedCompanies = await fetchCompaniesFromBackend();
+      setCompanyList(updatedCompanies);
+
+      const newBalance = result.wallet_balance ?? (Number(walletTargetCompany.wallet_balance || 0) + amount);
+      const companyName = walletTargetCompany.name;
+      setWalletTargetCompany(null);
+      setActionFeedback({
+        type: 'success',
+        message: `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} successfully added to ${companyName}'s wallet! New Balance: RM ${newBalance.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`,
+      });
+      setTimeout(() => setActionFeedback(null), 4500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to add wallet balance. Please try again.');
+    } finally {
+      setIsSubmittingWallet(false);
+    }
+  };
+
+  const toggleSort = (field: 'name' | 'due' | 'balance' = 'name') => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -583,6 +648,11 @@ export default function CompaniesPage() {
         const dueA = getCompanyDueInfo(a).totalDue;
         const dueB = getCompanyDueInfo(b).totalDue;
         return sortAsc ? dueA - dueB : dueB - dueA;
+      }
+      if (sortField === 'balance') {
+        const balA = Number(a.wallet_balance) || 0;
+        const balB = Number(b.wallet_balance) || 0;
+        return sortAsc ? balA - balB : balB - balA;
       }
       if (sortAsc) return a.name.localeCompare(b.name);
       return b.name.localeCompare(a.name);
@@ -826,41 +896,62 @@ export default function CompaniesPage() {
         <div className="bg-white border border-slate-300 rounded-sm shadow-xs overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#22a34a] text-white text-xs font-bold">
+              <tr className="bg-[#1f9343] text-white text-xs font-semibold select-none">
                 <th
                   onClick={() => toggleSort('name')}
-                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[28%]"
+                  className="py-2.5 px-3 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[190px]"
                   title="Click to sort by Company Name"
                 >
                   <div className="flex items-center justify-between">
                     <span>Company Name</span>
-                    <span className="text-sm leading-none font-bold">
+                    <span className="text-xs leading-none font-bold opacity-80">
                       {sortField === 'name' ? (sortAsc ? '↑' : '↓') : '↕'}
                     </span>
                   </div>
                 </th>
-                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[14%]">
+                <th className="py-2.5 px-3 border-r border-green-600/60 font-semibold min-w-[110px]">
                   Remark
                 </th>
                 <th
+                  onClick={() => toggleSort('balance')}
+                  className="py-2.5 px-3 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[150px]"
+                  title="Click to sort by Account Balance"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Wallet size={12} className="opacity-90" />
+                      <span>Account Balance</span>
+                    </span>
+                    <span className="text-xs leading-none font-bold opacity-80">
+                      {sortField === 'balance' ? (sortAsc ? '↑' : '↓') : '↕'}
+                    </span>
+                  </div>
+                </th>
+                <th
                   onClick={() => toggleSort('due')}
-                  className="py-3 px-4 border-r border-green-600/60 cursor-pointer select-none hover:bg-[#1f9343] transition-colors w-[22%]"
+                  className="py-2.5 px-3 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[140px]"
                   title="Click to sort by Due Amount"
                 >
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <CreditCard size={13} className="opacity-90" />
+                      <CreditCard size={12} className="opacity-90" />
                       <span>Due Amount</span>
                     </span>
-                    <span className="text-sm leading-none font-bold">
+                    <span className="text-xs leading-none font-bold opacity-80">
                       {sortField === 'due' ? (sortAsc ? '↑' : '↓') : '↕'}
                     </span>
                   </div>
                 </th>
-                <th className="py-3 px-4 border-r border-green-600/60 font-bold w-[22%]">
-                  Expire Date &amp; Countdown
+                <th className="py-2.5 px-3 border-r border-green-600/60 font-semibold min-w-[125px]">
+                  Expire Date
                 </th>
-                <th className="py-3 px-4 text-center font-bold w-[14%]">
+                <th className="py-2.5 px-3 border-r border-green-600/60 font-semibold min-w-[155px] text-center">
+                  <span className="inline-flex items-center justify-center gap-1">
+                    <Clock size={12} className="opacity-90" />
+                    <span>Countdown</span>
+                  </span>
+                </th>
+                <th className="py-2.5 px-3 text-right font-semibold min-w-[130px]">
                   Actions
                 </th>
               </tr>
@@ -872,216 +963,202 @@ export default function CompaniesPage() {
                 const compIsTrial = company.subscription_status === 'trial_active';
                 const compPlan = getPlanLabel(company.subscription_plan_key, compIsTrial);
                 const dueInfo = getCompanyDueInfo(company);
-                const isOverdue = dueInfo.invoiceDue > 0;
-                const hasAnyDue = dueInfo.totalDue > 0;
 
                 return (
                   <tr
                     key={company.id}
-                    className="hover:bg-blue-50/40 transition-colors group"
+                    className="hover:bg-slate-50/70 transition-colors group"
                   >
-                    {/* Company Name as Blue Clickable Link */}
-                    <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                      <div className="flex items-center justify-between gap-2">
+                    {/* 1. Company Name & ROC */}
+                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
+                      <div className="flex flex-col">
                         <Link
                           href={`/services?company=${encodeURIComponent(company.id)}`}
-                          className="text-[#2563eb] hover:text-[#1d4ed8] hover:underline font-semibold text-[13px] tracking-tight block"
+                          className="text-blue-600 hover:text-blue-800 hover:underline font-semibold text-xs leading-tight tracking-tight block truncate max-w-[220px]"
+                          title={company.name}
                         >
                           {company.name}
                         </Link>
-                        <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
-                          {company.roc}
+                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          {company.roc ? `ROC: ${company.roc}` : 'No ROC'}
                         </span>
                       </div>
                     </td>
 
-                    {/* Remark Column */}
-                    <td className="py-3.5 px-4 border-r border-slate-200 text-slate-500 align-middle">
-                      {company.sector ? (
-                        <span className="text-slate-600 text-[11px] font-medium">
-                          {company.sector}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
+                    {/* 2. Remark (Sector) */}
+                    <td className="py-2 px-3 border-r border-slate-200 text-slate-600 align-middle">
+                      <span className="text-xs font-medium text-slate-700 block truncate max-w-[120px]" title={company.sector || '—'}>
+                        {company.sector || '—'}
+                      </span>
                     </td>
 
-                    {/* Due Amount Column */}
-                    <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between gap-1.5">
+                    {/* 3. Account Balance */}
+                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div>
                           <div className="flex items-baseline gap-1">
-                            <span className="text-[11px] font-semibold text-slate-500 font-mono">RM</span>
-                            <span
-                              className={`font-mono font-bold text-sm tracking-tight ${
-                                isOverdue
-                                  ? 'text-rose-700'
-                                  : hasAnyDue
-                                  ? 'text-slate-900'
-                                  : 'text-emerald-700'
-                              }`}
-                            >
-                              {dueInfo.totalDue.toLocaleString('en-MY', {
+                            <span className="text-[10px] text-slate-400 font-mono font-semibold">RM</span>
+                            <span className="font-mono font-bold text-xs text-emerald-700">
+                              {(Number(company.wallet_balance) || 0).toLocaleString('en-MY', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })}
                             </span>
                           </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openPaymentModal(company)}
-                              title={
-                                dueInfo.totalDue > 0
-                                  ? `Pay Due (RM ${dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })})`
-                                  : 'Record Payment'
-                              }
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors shadow-2xs border ${
-                                dueInfo.totalDue > 0
-                                  ? 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-300'
-                                  : 'text-slate-600 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border-slate-200'
-                              }`}
-                            >
-                              Pay Due
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setViewingDueCompany(company)}
-                              title="View Due Breakdown & Details"
-                              className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold hover:underline inline-flex items-center gap-0.5 cursor-pointer bg-transparent border-0 p-0"
-                            >
-                              <span>Breakdown</span>
-                            </button>
-                          </div>
+                          <span
+                            className="text-[10px] text-slate-400 font-mono leading-none block mt-0.5 truncate max-w-[110px]"
+                            title={company.wallet_account_no || `ID: ${company.id}`}
+                          >
+                            {company.wallet_account_no
+                              ? `Acc: ${company.wallet_account_no}`
+                              : `ID: ${company.id}`}
+                          </span>
                         </div>
 
-                        {/* Status Badges */}
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {dueInfo.invoiceDue > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs font-mono">
-                              <AlertCircle size={10} className="text-rose-600 shrink-0" />
-                              <span>Invoice Due: RM {dueInfo.invoiceDue.toLocaleString()}</span>
-                            </span>
-                          )}
-
-                          {dueInfo.customerDue > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs font-mono">
-                              <Clock size={10} className="text-amber-600 shrink-0" />
-                              <span>Worker Due: RM {dueInfo.customerDue.toLocaleString()}</span>
-                            </span>
-                          )}
-
-                          {!dueInfo.hasDirectDue && dueInfo.walletPending > 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/90 shadow-2xs">
-                              <Clock size={10} className="text-amber-600 shrink-0" />
-                              <span>Pending Dues</span>
-                            </span>
-                          )}
-
-                          {dueInfo.totalDue === 0 && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-                              <CheckCircle2 size={10} className="text-emerald-600 shrink-0" />
-                              <span>Cleared</span>
-                            </span>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openWalletModal(company)}
+                          title={`Add Balance for ${company.name}`}
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer shrink-0"
+                        >
+                          + Top Up
+                        </button>
                       </div>
                     </td>
 
-                    {/* Expire Date & Countdown Column */}
-                    <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
-                      <div className="flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-[#0b4da2] border border-blue-200/80">
-                            <Sparkles size={11} className="text-[#0b4da2]" />
-                            {compPlan}
+                    {/* 4. Due Amount */}
+                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-[10px] text-slate-400 font-mono font-semibold">RM</span>
+                          <span
+                            className={`font-mono font-bold text-xs ${
+                              dueInfo.totalDue > 0
+                                ? 'text-rose-600'
+                                : 'text-slate-800'
+                            }`}
+                          >
+                            {dueInfo.totalDue.toLocaleString('en-MY', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
-                          {compExpiry ? (
-                            <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1 font-mono">
-                              <CalendarClock size={12} className="text-slate-400 shrink-0" />
-                              {new Date(compExpiry).toLocaleDateString('en-GB', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric',
-                              })}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 italic">No expiry set</span>
-                          )}
                         </div>
 
-                        {compCountdown.hasExpiry ? (
-                          <div
-                            suppressHydrationWarning
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold font-mono tracking-tight w-fit shadow-2xs ${compCountdown.isExpired
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : compCountdown.isExpiringSoon
-                                  ? 'bg-amber-50 text-amber-800 border border-amber-300'
-                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              }`}
+                        {dueInfo.totalDue > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => openPaymentModal(company)}
+                            title={`Pay Due RM ${dueInfo.totalDue.toFixed(2)}`}
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer shrink-0"
                           >
-                            {compCountdown.isExpired ? (
-                              <AlertCircle size={12} className="text-rose-600 shrink-0" />
-                            ) : compCountdown.isExpiringSoon ? (
-                              <Hourglass size={12} className="text-amber-600 shrink-0" />
-                            ) : (
-                              <Clock size={12} className="text-emerald-600 shrink-0" />
-                            )}
-                            <span suppressHydrationWarning>{compCountdown.label}</span>
-                          </div>
+                            Pay Due
+                          </button>
                         ) : (
-                          <span className="text-[10px] text-slate-400 font-medium italic">Active License</span>
+                          <span className="text-[10px] font-semibold text-emerald-600 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200/80 shrink-0">
+                            Cleared
+                          </span>
                         )}
                       </div>
                     </td>
 
-                    {/* Action Buttons: Due Payment, Details & Settings matching screenshot icons */}
-                    <td className="py-3 px-4 align-middle text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* Due Payment Action Button */}
+                    {/* 5. Expire Date */}
+                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
+                      <div className="flex flex-col">
+                        <span className="font-mono text-xs font-semibold text-slate-700">
+                          {compExpiry
+                            ? new Date(compExpiry).toLocaleDateString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })
+                            : 'Active'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {compPlan}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 6. Countdown (Dedicated Column) */}
+                    <td className="py-2 px-3 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                      {compCountdown.hasExpiry ? (
+                        <span
+                          suppressHydrationWarning
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border ${
+                            compCountdown.isExpired
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : compCountdown.isExpiringSoon
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
+                          {compCountdown.isExpired ? (
+                            <AlertCircle size={10} className="text-rose-500 shrink-0" />
+                          ) : (
+                            <Clock size={10} className="text-emerald-500 shrink-0" />
+                          )}
+                          <span suppressHydrationWarning>{compCountdown.label}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400 font-medium">—</span>
+                      )}
+                    </td>
+
+                    {/* 7. Actions */}
+                    <td className="py-2 px-3 align-middle text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openWalletModal(company)}
+                          title={`Add Wallet Balance for ${company.name}`}
+                          className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-emerald-50 flex items-center justify-center text-slate-500 hover:text-emerald-700 transition-colors cursor-pointer"
+                        >
+                          <Wallet size={13} />
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => openPaymentModal(company)}
                           title={
                             dueInfo.totalDue > 0
                               ? `Pay Due (RM ${dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })})`
-                              : 'Record Due Payment / Settle Balance'
+                              : 'Record Due Payment'
                           }
-                          className={`w-9 h-8 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                          className={`w-7 h-7 rounded border flex items-center justify-center transition-colors cursor-pointer ${
                             dueInfo.totalDue > 0
-                              ? 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold'
-                              : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-600'
+                              ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700'
+                              : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                           }`}
                         >
-                          <CreditCard size={15} />
+                          <CreditCard size={13} />
                         </button>
 
                         <Link
                           href={`/services?company=${encodeURIComponent(company.id)}`}
                           title="View Digital Service Cards"
-                          className="w-9 h-8 rounded border border-slate-400/80 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
+                          className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-blue-50 flex items-center justify-center text-slate-500 hover:text-blue-700 transition-colors cursor-pointer"
                         >
-                          <BookOpen size={16} />
+                          <BookOpen size={13} />
                         </Link>
 
                         {userCanEdit ? (
                           <button
                             type="button"
                             onClick={() => openSettingsModal(company)}
-                            title="Edit Company Details"
-                            className="w-9 h-8 rounded border border-slate-400/80 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 hover:text-blue-700 transition-colors cursor-pointer"
+                            title="Company Details"
+                            className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
                           >
-                            <Settings size={16} />
+                            <Settings size={13} />
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => openSettingsModal(company)}
                             title="View Company Information (Read Only)"
-                            className="w-9 h-8 rounded border border-slate-300 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                            className="w-7 h-7 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                           >
-                            <Settings size={16} />
+                            <Settings size={13} />
                           </button>
                         )}
 
@@ -1090,9 +1167,9 @@ export default function CompaniesPage() {
                             type="button"
                             onClick={() => handleDeleteCompany(company.id, company.name)}
                             title="Delete Company"
-                            className="w-9 h-8 rounded border border-rose-200 bg-rose-50/60 hover:bg-rose-100 flex items-center justify-center text-rose-600 transition-colors cursor-pointer"
+                            className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-rose-50 flex items-center justify-center text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={13} />
                           </button>
                         )}
                       </div>
@@ -1104,7 +1181,7 @@ export default function CompaniesPage() {
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     className="py-12 text-center text-slate-500 font-medium bg-slate-50/50"
                   >
                     {isRestrictedRole && accessibleCompanies.length === 0 ? (
@@ -1666,6 +1743,204 @@ export default function CompaniesPage() {
                       {isSubmittingPayment
                         ? 'Processing Payment...'
                         : `Confirm & Record Payment (RM ${parsedAmount > 0 ? parsedAmount.toFixed(2) : '0.00'})`}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Add Company Wallet Balance Modal */}
+      {walletTargetCompany && (() => {
+        const parsedAddAmount = parseFloat(walletAddAmount) || 0;
+        const currentBalance = Number(walletTargetCompany.wallet_balance) || 0;
+        const newBalanceAfter = currentBalance + parsedAddAmount;
+        const accountDisplay = walletTargetCompany.wallet_account_no
+          || walletTargetCompany.bankAccountNo
+          || `WAL-${String(walletTargetCompany.id).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}`;
+
+        const quickPresets = [100, 500, 1000, 5000, 10000];
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-700 text-white p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-xs shadow-inner">
+                    <Wallet size={22} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold m-0 leading-tight">
+                      Add Wallet Balance / Top Up
+                    </h3>
+                    <p className="text-xs text-emerald-100/90 m-0 mt-0.5 font-medium">
+                      {walletTargetCompany.name} • {accountDisplay}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWalletTargetCompany(null)}
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 cursor-pointer bg-transparent border-0 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Form Content */}
+              <form onSubmit={handleConfirmAddWalletBalance} className="p-6 space-y-4">
+                {/* Account & Live Balance Overview Card */}
+                <div className="bg-gradient-to-br from-emerald-50/60 via-slate-50 to-teal-50/40 border border-emerald-200/80 rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                      Current Account Balance
+                    </span>
+                    <span className="text-2xl font-black font-mono text-emerald-800">
+                      RM {currentBalance.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                      <Wallet size={11} className="text-slate-400" />
+                      <span>Account No: {accountDisplay}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                      Balance After Top-Up
+                    </span>
+                    <span className="text-base font-extrabold font-mono text-emerald-700 block">
+                      RM {newBalanceAfter.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    {parsedAddAmount > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100/70 px-1.5 py-0.5 rounded font-mono">
+                        +RM {parsedAddAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Amount to Add */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Top-Up Amount (RM) <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">Select preset or enter custom</span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
+                      RM
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      autoFocus
+                      value={walletAddAmount}
+                      onChange={(e) => setWalletAddAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-11 pr-4 py-2.5 text-base font-bold font-mono bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+                    />
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    {quickPresets.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          const currentVal = parseFloat(walletAddAmount) || 0;
+                          setWalletAddAmount(String(currentVal + preset));
+                        }}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 cursor-pointer transition-colors shadow-2xs"
+                      >
+                        +RM {preset.toLocaleString()}
+                      </button>
+                    ))}
+                    {parsedAddAmount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setWalletAddAmount('')}
+                        className="text-[10px] text-slate-400 hover:text-rose-600 px-1.5 py-1 underline cursor-pointer bg-transparent border-0"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Payment / Deposit Method & Reference */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Payment / Deposit Method
+                    </label>
+                    <select
+                      value={walletPaymentMethod}
+                      onChange={(e) => setWalletPaymentMethod(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="Bank Transfer">Bank Transfer (FPX / Interbank)</option>
+                      <option value="Online Banking Gateway">Online Banking / DuitNow</option>
+                      <option value="Cash Deposit">Cash Deposit (CDM)</option>
+                      <option value="Company Cheque">Company Cheque</option>
+                      <option value="Credit / Debit Card">Credit / Debit Card</option>
+                      <option value="Direct Admin Adjustment">Direct Admin Adjustment</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Reference / Receipt No
+                    </label>
+                    <input
+                      type="text"
+                      value={walletReference}
+                      onChange={(e) => setWalletReference(e.target.value)}
+                      placeholder="e.g. TOPUP-849201"
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 font-mono focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Notes / Remarks */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Notes / Description (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={walletNotes}
+                    onChange={(e) => setWalletNotes(e.target.value)}
+                    placeholder="e.g. Agency operating account wallet top-up"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setWalletTargetCompany(null)}
+                    disabled={isSubmittingWallet}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingWallet || parsedAddAmount <= 0}
+                    className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Coins size={14} />
+                    <span>
+                      {isSubmittingWallet
+                        ? 'Adding Balance...'
+                        : `Confirm & Add RM ${parsedAddAmount > 0 ? parsedAddAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 }) : '0.00'}`}
                     </span>
                   </button>
                 </div>

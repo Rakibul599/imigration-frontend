@@ -107,6 +107,8 @@ export type Company = {
   totalWorkers: number;
 
   // Foreign Worker & Wallet Metrics
+  wallet_balance?: number; // Company Main Account / Wallet Balance (MYR)
+  wallet_account_no?: string; // Company Account / Wallet Number
   activeWorkers?: number; // Total active foreign workers
   inactiveWorkers?: number; // Total inactive foreign workers
   incomeWallet?: number; // Total Income Wallet (MYR)
@@ -183,8 +185,7 @@ export function getCompanyWorkerWallet(c: Company): number {
 
 export function getCompanyPendingWallet(c: Company): number {
   if (typeof c.pendingWallet === 'number') return c.pendingWallet;
-  const inactive = getCompanyInactiveWorkers(c);
-  return inactive * 180 + 3500;
+  return 0;
 }
 
 export const companies: Company[] = [

@@ -25,6 +25,7 @@ import {
   getEmployeeResignations,
   EmployeeResignationItem,
 } from '@/lib/employeeRequestsApi';
+import { getMasterAdminUser } from '@/lib/auth';
 
 interface AdminResignationsManagementProps {
   portalType: 'superadmin' | 'masteradmin';
@@ -117,9 +118,34 @@ export default function AdminResignationsManagement({
     loadData();
   }, [loadData]);
 
+  // Scoped employee codes for masteradmin
+  const effectiveScope = useMemo(() => {
+    if (portalType !== 'masteradmin') return [];
+    if (assignedScope && assignedScope.length > 0) return assignedScope;
+    const user = getMasterAdminUser();
+    return Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+  }, [portalType, assignedScope]);
+
+  const permittedEmployeeCodes = useMemo(() => {
+    if (portalType !== 'masteradmin' || effectiveScope.length === 0 || effectiveScope.includes('*')) return null;
+    const set = new Set<string>();
+    employees.forEach((emp: any) => {
+      const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+      if (assigned.some((cId: string) => effectiveScope.some((sId) => sId.toLowerCase() === cId.toLowerCase()))) {
+        set.add((emp.employee_code || '').toUpperCase());
+      }
+    });
+    return set;
+  }, [employees, portalType, effectiveScope]);
+
   // Filtered resignations
   const filteredResignations = useMemo(() => {
     return resignations.filter((item) => {
+      // Company scoping for masteradmin
+      if (permittedEmployeeCodes && !permittedEmployeeCodes.has((item.employee_code || '').toUpperCase())) {
+        return false;
+      }
+
       // Status filter
       if (statusFilter !== 'all' && item.status !== statusFilter) return false;
 
@@ -140,12 +166,17 @@ export default function AdminResignationsManagement({
 
       return true;
     });
-  }, [resignations, statusFilter, startDate, endDate, searchQuery]);
+  }, [resignations, statusFilter, startDate, endDate, searchQuery, permittedEmployeeCodes]);
 
-  // Summary counts
-  const pendingCount = resignations.filter((r) => r.status === 'pending').length;
-  const approvedCount = resignations.filter((r) => r.status === 'approved').length;
-  const rejectedCount = resignations.filter((r) => r.status === 'rejected').length;
+  // Summary counts scoped to permitted employees
+  const scopedResignations = useMemo(() => {
+    if (!permittedEmployeeCodes) return resignations;
+    return resignations.filter((r) => permittedEmployeeCodes.has((r.employee_code || '').toUpperCase()));
+  }, [resignations, permittedEmployeeCodes]);
+
+  const pendingCount = scopedResignations.filter((r) => r.status === 'pending').length;
+  const approvedCount = scopedResignations.filter((r) => r.status === 'approved').length;
+  const rejectedCount = scopedResignations.filter((r) => r.status === 'rejected').length;
 
 
 

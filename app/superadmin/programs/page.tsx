@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   AlertCircle,
   BookOpen,
@@ -52,6 +52,8 @@ const DEFAULT_PROGRAM_CARDS: PageStatCardConfig[] = [
 
 export default function SuperAdminProgramsListPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
   const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -267,7 +269,7 @@ export default function SuperAdminProgramsListPage() {
           </button>
 
           <Link
-            href="/superadmin/programs/customers"
+            href={`${rootPath}/programs/customers`}
             className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
           >
             <Users size={14} className="text-slate-500 shrink-0" />
@@ -275,7 +277,7 @@ export default function SuperAdminProgramsListPage() {
           </Link>
 
           <Link
-            href="/superadmin/programs/create"
+            href={`${rootPath}/programs/create`}
             className="inline-flex items-center justify-center gap-2 h-10 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-sm hover:shadow whitespace-nowrap cursor-pointer"
           >
             <Plus size={15} className="shrink-0" />
@@ -388,7 +390,7 @@ export default function SuperAdminProgramsListPage() {
             </p>
             <div className="mt-5">
               <Link
-                href="/superadmin/programs/create"
+                href={`${rootPath}/programs/create`}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-sm"
               >
                 <Plus size={14} />
@@ -431,7 +433,7 @@ export default function SuperAdminProgramsListPage() {
                     {/* Enrolled Workers */}
                     <td className="py-4 px-4 align-middle whitespace-nowrap">
                       <Link
-                        href={`/superadmin/programs/customers?program_id=${program.id}`}
+                        href={`${rootPath}/programs/customers?program_id=${program.id}`}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 transition-colors"
                         title="View workers assigned to this program"
                       >
@@ -450,7 +452,7 @@ export default function SuperAdminProgramsListPage() {
                     <td className="py-4 px-4 align-middle text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         <Link
-                          href={`/superadmin/programs/customers?program_id=${program.id}`}
+                          href={`${rootPath}/programs/customers?program_id=${program.id}`}
                           title="View Program Customers"
                           className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                         >
@@ -458,7 +460,7 @@ export default function SuperAdminProgramsListPage() {
                         </Link>
 
                         <Link
-                          href={`/superadmin/programs/edit?id=${program.id}`}
+                          href={`${rootPath}/programs/edit?id=${program.id}`}
                           title="Edit Program"
                           className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         >

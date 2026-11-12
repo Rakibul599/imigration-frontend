@@ -33,7 +33,12 @@ import {
   subscribeToCompanyChanges,
 } from '@/lib/companyStorage';
 import { getMasterAdminUser } from '@/lib/auth';
-import { useDashboardCardDesign } from '@/lib/themeSettings';
+import {
+  useDashboardCardDesign,
+  useCardAnimationSettings,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+} from '@/lib/themeSettings';
 import MasterAdminCompaniesPage from './companies/page';
 
 export type DashboardTabId = 'overview' | 'companies' | string;
@@ -49,6 +54,12 @@ export interface DashboardTabItem {
 export default function MasterAdminDashboard() {
   const cardDesign = useDashboardCardDesign();
   const isGlass = cardDesign === 'glassmorphism';
+  const {
+    animation: cardAnimation,
+    duration: cardDuration,
+    stagger: cardStagger,
+    animTriggerKey,
+  } = useCardAnimationSettings();
   const [activeTab, setActiveTab] = useState<DashboardTabId>('companies');
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const currentUser = getMasterAdminUser();
@@ -289,9 +300,11 @@ export default function MasterAdminDashboard() {
           {/* KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
+              key={`ma-kpi-0-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(0, cardDuration, cardStagger)}
               type="button"
               onClick={() => setActiveTab('companies')}
-              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer active:scale-[0.99] admin-stat-card ${
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] text-left cursor-pointer active:scale-[0.99] admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 0)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl shadow-xs'
@@ -315,7 +328,9 @@ export default function MasterAdminDashboard() {
             </button>
 
             <div
-              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${
+              key={`ma-kpi-1-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(1, cardDuration, cardStagger)}
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 1)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md rounded-xl shadow-xs'
@@ -338,7 +353,9 @@ export default function MasterAdminDashboard() {
             </div>
 
             <div
-              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${
+              key={`ma-kpi-2-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(2, cardDuration, cardStagger)}
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 2)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 hover:border-purple-400 hover:shadow-md rounded-xl shadow-xs'
@@ -361,7 +378,9 @@ export default function MasterAdminDashboard() {
             </div>
 
             <div
-              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${
+              key={`ma-kpi-3-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              style={getServiceCardAnimationStyle(3, cardDuration, cardStagger)}
+              className={`p-5 transition-all flex flex-col justify-between group min-h-[120px] admin-stat-card ${getServiceCardAnimationClass(cardAnimation, 3)} ${
                 isGlass
                   ? 'dashboard-card-glass rounded-2xl'
                   : 'bg-white border border-slate-200 hover:border-amber-400 hover:shadow-md rounded-xl shadow-xs'
@@ -405,10 +424,11 @@ export default function MasterAdminDashboard() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {permittedCompanies.map((comp) => (
+              {permittedCompanies.map((comp, idx) => (
                 <div
-                  key={comp.id}
-                  className={`p-4 transition-all group flex flex-col justify-between company-directory-card ${
+                  key={`${comp.id}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+                  style={getServiceCardAnimationStyle(idx, cardDuration, cardStagger)}
+                  className={`p-4 transition-all group flex flex-col justify-between company-directory-card ${getServiceCardAnimationClass(cardAnimation, idx)} ${
                     isGlass
                       ? 'dashboard-card-glass rounded-2xl'
                       : 'border border-slate-200 rounded-xl bg-white hover:border-[#0b4da2] hover:shadow-md'

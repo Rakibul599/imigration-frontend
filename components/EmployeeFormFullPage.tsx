@@ -615,7 +615,7 @@ export default function EmployeeFormFullPage({
 
     const payload = {
       name: name.trim(),
-      employee_code: employeeCode.trim().toUpperCase(),
+      employee_code: employeeCode.trim(),
       email: email.trim().toLowerCase(),
       password: password || undefined,
       role: 'Employee', // strictly Employee
@@ -725,9 +725,6 @@ export default function EmployeeFormFullPage({
             <Users className="text-[#0b4da2]" size={28} />
             <span>{editId ? `Edit Employee: ${employeeCode}` : 'Register New Employee'}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Configure staff credentials, supervisor assignment, employer company clearances, and granular module permissions.
-          </p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
@@ -785,14 +782,9 @@ export default function EmployeeFormFullPage({
               <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shadow-2xs">
                 <User size={18} />
               </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
-                  Employee Identity &amp; System Credentials
-                </h3>
-                <p className="text-xs text-slate-400 m-0 mt-0.5">
-                  Basic staff profile information, login code, password, and supervising Master Admin.
-                </p>
-              </div>
+              <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
+                Employee Identity &amp; System Credentials
+              </h3>
             </div>
 
             <div className="flex items-center gap-2">
@@ -814,25 +806,20 @@ export default function EmployeeFormFullPage({
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Mohd Syahir Bin Abdullah"
                 className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none transition-all"
               />
             </div>
 
             {/* Employee Code */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                  Employee Code (User ID) <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.2 rounded">Login ID</span>
-              </div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                Employee Code (User ID) <span className="text-rose-500">*</span>
+              </label>
               <input
                 type="text"
                 required
                 value={employeeCode}
-                onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
-                placeholder="e.g. EMP-2003"
+                onChange={(e) => setEmployeeCode(e.target.value)}
                 className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-mono font-bold outline-none transition-all"
               />
             </div>
@@ -847,7 +834,6 @@ export default function EmployeeFormFullPage({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. syahir@agency.gov.my"
                 className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none transition-all"
               />
             </div>
@@ -872,7 +858,6 @@ export default function EmployeeFormFullPage({
                   required={!editId}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter secure password"
                   className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl pl-3.5 pr-10 py-2.5 text-xs sm:text-sm text-slate-900 font-mono outline-none transition-all"
                 />
                 <button
@@ -885,42 +870,6 @@ export default function EmployeeFormFullPage({
               </div>
             </div>
 
-            {/* ASSIGN MASTER ADMIN */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                  {isMasterAdminActor ? 'Supervising Master Admin' : 'Assign Master Admin'}
-                </label>
-                <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.2 rounded">Supervisor</span>
-              </div>
-              {isMasterAdminActor ? (
-                <div className="w-full bg-slate-100/90 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 font-bold flex items-center justify-between shadow-2xs">
-                  <div className="flex items-center gap-2 truncate">
-                    <ShieldCheck size={16} className="text-purple-600 shrink-0" />
-                    <span className="truncate">
-                      {masterUser ? `${masterUser.name} (${masterUser.username})` : 'Current Master Admin'}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-purple-700 bg-purple-100 font-bold px-2 py-0.5 rounded-full shrink-0 border border-purple-200">
-                    Self Supervisor
-                  </span>
-                </div>
-              ) : (
-                <select
-                  value={masterAdminId}
-                  onChange={(e) => setMasterAdminId(e.target.value)}
-                  className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none cursor-pointer transition-all"
-                >
-                  <option value="">-- No Supervising Master Admin --</option>
-                  {masterAdmins.map((ma) => (
-                    <option key={ma.id} value={String(ma.id)}>
-                      {ma.name} ({ma.username})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
             {/* Account Status */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
@@ -931,8 +880,8 @@ export default function EmployeeFormFullPage({
                 onChange={(e) => setStatus(e.target.value as 'active' | 'inactive')}
                 className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 font-medium outline-none cursor-pointer transition-all"
               >
-                <option value="active">Active (Permitted To Login)</option>
-                <option value="inactive">Inactive (Suspended)</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
           </div>
@@ -945,14 +894,9 @@ export default function EmployeeFormFullPage({
               <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-2xs">
                 <Building2 size={18} />
               </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
-                  Assigned Employer Clearances
-                </h3>
-                <p className="text-xs text-slate-400 m-0 mt-0.5">
-                  Select which registered companies this employee is authorized to access and manage.
-                </p>
-              </div>
+              <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
+                Assigned Employer Clearances
+              </h3>
             </div>
 
             <div className="flex items-center gap-2">
@@ -980,48 +924,54 @@ export default function EmployeeFormFullPage({
               type="text"
               value={companySearch}
               onChange={(e) => setCompanySearch(e.target.value)}
-              placeholder="Search companies by name, ROC, sector..."
               className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-[#0b4da2] rounded-xl pl-8 pr-3 py-2 text-xs text-slate-900 outline-none transition-all"
             />
           </div>
 
-          {/* Companies Checkbox Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[280px] overflow-y-auto p-1">
-            {filteredCompanies.map((c) => {
-              const isChecked = assignedCompanies.includes(c.id);
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => handleToggleCompany(c.id)}
-                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
-                    isChecked
-                      ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs ring-1 ring-blue-200'
-                      : 'border-slate-200 hover:border-slate-300 bg-white'
-                  }`}
-                >
+          {/* Companies Checkbox Grid in Scrollable Container */}
+          <div className="border border-slate-200 rounded-2xl bg-slate-50/50 p-3 sm:p-4 max-h-[360px] overflow-y-auto shadow-inner">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredCompanies.map((c) => {
+                const isChecked = assignedCompanies.includes(c.id);
+                return (
                   <div
-                    className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-colors ${
-                      isChecked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                    key={c.id}
+                    onClick={() => handleToggleCompany(c.id)}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                      isChecked
+                        ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs ring-1 ring-blue-200'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    {isChecked && <Check size={12} strokeWidth={3} />}
-                  </div>
+                    <div
+                      className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-colors ${
+                        isChecked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                      }`}
+                    >
+                      {isChecked && <Check size={12} strokeWidth={3} />}
+                    </div>
 
-                  <div className="w-8 h-8 rounded-lg bg-slate-50 p-1 flex items-center justify-center shrink-0 border border-slate-100">
-                    <img src={c.logo} alt="" className="max-h-full max-w-full object-contain" />
-                  </div>
+                    <div className="w-8 h-8 rounded-lg bg-slate-50 p-1 flex items-center justify-center shrink-0 border border-slate-100">
+                      <img src={c.logo} alt="" className="max-h-full max-w-full object-contain" />
+                    </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-slate-900 truncate">{c.name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono truncate">{c.roc}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-900 truncate">{c.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono truncate">{c.roc}</div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {filteredCompanies.length === 0 && (
+              <div className="text-center py-8 text-xs text-slate-400 italic">
+                No matching employer companies found for &quot;{companySearch}&quot;.
+              </div>
+            )}
           </div>
 
           <div className="text-xs text-slate-500 pt-1">
-            <strong>{assignedCompanies.length}</strong> of {availableCompanies.length} companies selected for this employee.
+            <strong>{assignedCompanies.length}</strong> of {availableCompanies.length} companies selected.
           </div>
         </div>
 
@@ -1032,14 +982,9 @@ export default function EmployeeFormFullPage({
               <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-2xs">
                 <Sparkles size={18} />
               </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
-                  Service Cards Access &amp; Clearances
-                </h3>
-                <p className="text-xs text-slate-400 m-0 mt-0.5">
-                  Select which digital service cards this employee is permitted to view and manage across the portal.
-                </p>
-              </div>
+              <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
+                Service Cards Access &amp; Clearances
+              </h3>
             </div>
 
             <div className="flex items-center gap-2">
@@ -1063,24 +1008,21 @@ export default function EmployeeFormFullPage({
           {/* Quick Select All Toggle Banner */}
           <div
             onClick={handleToggleAllServices}
-            className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer select-none transition-all ${
+            className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer select-none transition-all ${
               isAllServicesSelected
                 ? 'bg-amber-50/70 border-amber-300 text-amber-950 shadow-2xs'
                 : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100/70'
             }`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
               <div
-                className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors ${
+                className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
                   isAllServicesSelected ? 'bg-amber-600 text-white' : 'border border-slate-300 bg-white'
                 }`}
               >
-                {isAllServicesSelected && <Check size={12} strokeWidth={3} />}
+                {isAllServicesSelected && <Check size={10} strokeWidth={3} />}
               </div>
-              <div>
-                <div className="text-xs font-bold">Grant All Service Cards Clearance (Full Access)</div>
-                <div className="text-[11px] text-slate-500">Employee will be able to see all current and newly added service cards</div>
-              </div>
+              <div className="text-xs font-bold">Grant All Service Cards Clearance (Full Access)</div>
             </div>
 
             <span
@@ -1092,55 +1034,71 @@ export default function EmployeeFormFullPage({
             </span>
           </div>
 
-          {/* Service Cards Checkbox Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {serviceCardsList.map((card) => {
-              const checked = isCardChecked(card.id);
-              return (
-                <div
-                  key={card.id}
-                  onClick={() => handleToggleServiceCard(card.id)}
-                  className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
-                    checked
-                      ? 'border-[#0b4da2] bg-blue-50/70 shadow-2xs ring-1 ring-blue-200'
-                      : 'border-slate-200 hover:border-slate-300 bg-white'
-                  }`}
-                >
+          {/* Service Cards Checkbox Grid in Scrollable Container */}
+          <div className="border border-slate-200 rounded-2xl bg-slate-50/50 p-3 sm:p-4 max-h-[360px] overflow-y-auto shadow-inner">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {serviceCardsList.map((card) => {
+                const checked = isCardChecked(card.id);
+                const cleanTag = (card.tag || '').trim();
+                const isShortTag = cleanTag.length > 0 && cleanTag.length <= 12;
+                const badgeTag = isShortTag ? cleanTag : null;
+                const subtitleText = (card.description || '').trim() || (!isShortTag ? cleanTag : '');
+
+                return (
                   <div
-                    className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                      checked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                    key={card.id}
+                    onClick={() => handleToggleServiceCard(card.id)}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border transition-all cursor-pointer select-none overflow-hidden min-w-0 ${
+                      checked
+                        ? 'border-[#0b4da2] bg-blue-50/70 shadow-2xs ring-1 ring-blue-200'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                   >
-                    {checked && <Check size={12} strokeWidth={3} />}
-                  </div>
-
-                  <div className="w-10 h-10 rounded-lg bg-white p-1.5 flex items-center justify-center shrink-0 border border-slate-200 shadow-2xs">
-                    <img src={card.image} alt="" className="max-h-full max-w-full object-contain" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="text-xs font-bold text-slate-900 truncate">{card.title}</div>
-                      {card.tag && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 uppercase shrink-0">
-                          {card.tag}
-                        </span>
-                      )}
+                    <div
+                      className={`w-4 h-4 rounded flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                        checked ? 'bg-[#0b4da2] text-white' : 'border border-slate-300 bg-white'
+                      }`}
+                    >
+                      {checked && <Check size={10} strokeWidth={3} />}
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">
-                      {card.description}
+
+                    <div className="w-8 h-8 rounded-lg bg-white p-1 flex items-center justify-center shrink-0 border border-slate-200 shadow-2xs">
+                      <img src={card.image} alt="" className="max-h-full max-w-full object-contain" />
+                    </div>
+
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <div className="flex items-center justify-between gap-1.5 min-w-0">
+                        <div className="text-xs font-bold text-slate-900 truncate min-w-0 flex-1" title={card.title}>
+                          {card.title}
+                        </div>
+                        {badgeTag && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase shrink-0 max-w-[60px] truncate">
+                            {badgeTag}
+                          </span>
+                        )}
+                      </div>
+                      {subtitleText ? (
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate" title={subtitleText}>
+                          {subtitleText}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {serviceCardsList.length === 0 && (
+              <div className="text-center py-8 text-xs text-slate-400 italic">
+                No service cards available.
+              </div>
+            )}
           </div>
 
           <div className="text-xs text-slate-500 pt-1">
             <strong>
               {assignedServiceCards.includes('*') ? serviceCardsList.length : assignedServiceCards.length}
             </strong>{' '}
-            of {serviceCardsList.length} service cards authorized for this employee.
+            of {serviceCardsList.length} service cards selected.
           </div>
         </div>
 
@@ -1151,14 +1109,9 @@ export default function EmployeeFormFullPage({
               <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shadow-2xs">
                 <ShieldCheck size={18} />
               </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
-                  Operational Permissions &amp; Sidebar Access Control
-                </h3>
-                <p className="text-xs text-slate-400 m-0 mt-0.5">
-                  Granular control over which admin sidebar modules this employee can see, view, edit, or delete.
-                </p>
-              </div>
+              <h3 className="text-sm font-extrabold text-slate-900 m-0 uppercase tracking-wider">
+                Operational Permissions &amp; Sidebar Access Control
+              </h3>
             </div>
 
             {/* Quick Preset Buttons */}
@@ -1191,8 +1144,8 @@ export default function EmployeeFormFullPage({
           {/* Granular Permission Matrix Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <thead className="sticky top-0 bg-white z-10">
+                <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/80">
                   <th className="py-2.5 px-3">Sidebar Module</th>
                   <th className="py-2.5 px-3 text-center">View Access</th>
                   <th className="py-2.5 px-3 text-center">Create / Add</th>
@@ -1209,38 +1162,44 @@ export default function EmployeeFormFullPage({
                       <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0">
                         <Building2 size={14} />
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900">Companies Management</div>
-                        <div className="text-[11px] text-slate-400">View &amp; manage employer profile cards</div>
-                      </div>
+                      <div className="font-bold text-slate-900">Companies Management</div>
                     </div>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={permissions.companies.view}
-                      onChange={(e) => handlePermissionChange('companies', 'view', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
-                    />
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={permissions.companies.view}
+                        onChange={(e) => handlePermissionChange('companies', 'view', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">View</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center text-slate-300 font-mono">—</td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.companies.view}
-                      checked={permissions.companies.edit ?? false}
-                      onChange={(e) => handlePermissionChange('companies', 'edit', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.companies.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.companies.view}
+                        checked={permissions.companies.edit ?? false}
+                        onChange={(e) => handlePermissionChange('companies', 'edit', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">Edit</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.companies.view}
-                      checked={permissions.companies.delete ?? false}
-                      onChange={(e) => handlePermissionChange('companies', 'delete', e.target.checked)}
-                      className="w-4 h-4 text-red-600 rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.companies.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.companies.view}
+                        checked={permissions.companies.delete ?? false}
+                        onChange={(e) => handlePermissionChange('companies', 'delete', e.target.checked)}
+                        className="w-4 h-4 text-red-600 rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-red-600">Delete</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-right">
                     <span
@@ -1270,43 +1229,33 @@ export default function EmployeeFormFullPage({
                   <tr className="bg-slate-50/80 border-b border-blue-100">
                     <td colSpan={6} className="p-3.5 sm:p-4">
                       <div className="bg-white rounded-xl border border-blue-200 p-4 shadow-2xs space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 m-0">
-                              Granular Company Permissions (Card Access &amp; Statistics Access)
-                            </h4>
-                          </div>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            Configure statistics graph access and specific treasury cards independently
-                          </span>
+                        <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 m-0">
+                            Granular Company Permissions (Card Access &amp; Statistics Access)
+                          </h4>
                         </div>
 
                         {/* 1. Statistics Graph Toggle */}
                         <div
                           onClick={() => handleToggleCompanyStatistics()}
-                          className="flex items-start sm:items-center justify-between gap-4 p-3.5 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200 hover:border-blue-200 transition-all cursor-pointer select-none"
+                          className="flex items-center justify-between gap-4 p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200 hover:border-blue-200 transition-all cursor-pointer select-none"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                              <TrendingUp size={18} />
+                            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                              <TrendingUp size={16} />
                             </div>
-                            <div>
-                              <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                                Company Order &amp; Metric Statistics Analytics Graph
-                                <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase transition-colors ${
-                                    permissions.companies.statistics !== false
-                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                      : 'bg-slate-200 text-slate-600 border border-slate-300'
-                                  }`}
-                                >
-                                  {permissions.companies.statistics !== false ? 'Enabled (ON)' : 'Hidden (OFF)'}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-slate-500 mt-0.5">
-                                Allow this employee to view the interactive date-wise orders &amp; metrics graph inside Companies Management.
-                              </div>
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                              Company Order &amp; Metric Statistics Analytics Graph
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase transition-colors ${
+                                  permissions.companies.statistics !== false
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-slate-200 text-slate-600 border border-slate-300'
+                                }`}
+                              >
+                                {permissions.companies.statistics !== false ? 'Enabled (ON)' : 'Hidden (OFF)'}
+                              </span>
                             </div>
                           </div>
 
@@ -1334,14 +1283,9 @@ export default function EmployeeFormFullPage({
                         {/* 2. Treasury Cards Access */}
                         <div className="space-y-2.5 pt-1">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div>
-                              <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                                <CreditCard size={15} className="text-[#0b4da2]" />
-                                <span>Financial &amp; Treasury Stat Cards Clearances</span>
-                              </div>
-                              <p className="text-[11px] text-slate-500 m-0 mt-0.5">
-                                Select which treasury metrics cards this employee is permitted to view.
-                              </p>
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                              <CreditCard size={15} className="text-[#0b4da2]" />
+                              <span>Financial &amp; Treasury Stat Cards Clearances</span>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -1379,10 +1323,7 @@ export default function EmployeeFormFullPage({
                               >
                                 {isAllCompanyCardsSelected && <Check size={10} strokeWidth={3} />}
                               </div>
-                              <div>
-                                <div className="text-xs font-bold">Grant All Treasury Cards Access (Full Overview)</div>
-                                <div className="text-[10px] text-slate-500">Employee can see all financial &amp; operational metrics cards</div>
-                              </div>
+                              <div className="text-xs font-bold">Grant All Treasury Cards Access (Full Overview)</div>
                             </div>
                             <span
                               className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
@@ -1421,7 +1362,6 @@ export default function EmployeeFormFullPage({
 
                                   <div className="min-w-0 flex-1">
                                     <div className="text-xs font-bold text-slate-800 truncate">{card.name}</div>
-                                    <div className="text-[10px] text-slate-400 font-mono truncate">{card.subtitle || 'Treasury Metric'}</div>
                                   </div>
                                 </div>
                               );
@@ -1432,7 +1372,7 @@ export default function EmployeeFormFullPage({
                             <strong>
                               {assignedCompanyCards.includes('*') ? companyStatCardsList.length : assignedCompanyCards.length}
                             </strong>{' '}
-                            of {companyStatCardsList.length} treasury cards authorized for this employee.
+                            of {companyStatCardsList.length} treasury cards authorized.
                           </div>
                         </div>
                       </div>
@@ -1447,46 +1387,55 @@ export default function EmployeeFormFullPage({
                       <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                         <UserCheck size={14} />
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900">Customer &amp; Worker Management</div>
-                        <div className="text-[11px] text-slate-400">Profiles, passport numbers, documents &amp; sectors</div>
-                      </div>
+                      <div className="font-bold text-slate-900">Customer &amp; Worker Management</div>
                     </div>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={permissions.customers.view}
-                      onChange={(e) => handlePermissionChange('customers', 'view', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
-                    />
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={permissions.customers.view}
+                        onChange={(e) => handlePermissionChange('customers', 'view', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">View</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.customers.view}
-                      checked={permissions.customers.create ?? false}
-                      onChange={(e) => handlePermissionChange('customers', 'create', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.customers.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.customers.view}
+                        checked={permissions.customers.create ?? false}
+                        onChange={(e) => handlePermissionChange('customers', 'create', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">Create</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.customers.view}
-                      checked={permissions.customers.edit ?? false}
-                      onChange={(e) => handlePermissionChange('customers', 'edit', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.customers.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.customers.view}
+                        checked={permissions.customers.edit ?? false}
+                        onChange={(e) => handlePermissionChange('customers', 'edit', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">Edit</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.customers.view}
-                      checked={permissions.customers.delete ?? false}
-                      onChange={(e) => handlePermissionChange('customers', 'delete', e.target.checked)}
-                      className="w-4 h-4 text-red-600 rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.customers.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.customers.view}
+                        checked={permissions.customers.delete ?? false}
+                        onChange={(e) => handlePermissionChange('customers', 'delete', e.target.checked)}
+                        className="w-4 h-4 text-red-600 rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-red-600">Delete</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-right">
                     <span
@@ -1516,17 +1465,12 @@ export default function EmployeeFormFullPage({
                   <tr className="bg-emerald-50/30 border-y border-emerald-100/60">
                     <td colSpan={6} className="py-3 px-4">
                       <div className="pl-6 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
-                              Customer Finance &amp; Expense Sub-Modules
-                            </span>
-                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full">
-                              Granular Access
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            Authorized financial tools visible in employee portal
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+                            Customer Finance &amp; Expense Sub-Modules
+                          </span>
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full">
+                            Granular Access
                           </span>
                         </div>
 
@@ -1547,10 +1491,7 @@ export default function EmployeeFormFullPage({
                               }
                               className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                             />
-                            <div>
-                              <div className="text-xs font-bold text-slate-800">Target Amount</div>
-                              <div className="text-[10px] text-slate-400">Target quotas &amp; pipelines</div>
-                            </div>
+                            <span className="text-xs font-bold text-slate-800">Target Amount</span>
                           </label>
 
                           {/* 2. Deposit Amount */}
@@ -1569,10 +1510,7 @@ export default function EmployeeFormFullPage({
                               }
                               className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                             />
-                            <div>
-                              <div className="text-xs font-bold text-slate-800">Deposit Amount</div>
-                              <div className="text-[10px] text-slate-400">Payments &amp; bank slips</div>
-                            </div>
+                            <span className="text-xs font-bold text-slate-800">Deposit Amount</span>
                           </label>
 
                           {/* 3. Pending Amount */}
@@ -1591,10 +1529,7 @@ export default function EmployeeFormFullPage({
                               }
                               className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                             />
-                            <div>
-                              <div className="text-xs font-bold text-slate-800">Pending Amount</div>
-                              <div className="text-[10px] text-slate-400">Unpaid dues &amp; collections</div>
-                            </div>
+                            <span className="text-xs font-bold text-slate-800">Pending Amount</span>
                           </label>
 
                           {/* 4. Company Cost Amount */}
@@ -1613,10 +1548,7 @@ export default function EmployeeFormFullPage({
                               }
                               className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                             />
-                            <div>
-                              <div className="text-xs font-bold text-slate-800">Company Cost</div>
-                              <div className="text-[10px] text-slate-400">Expenses &amp; value dossiers</div>
-                            </div>
+                            <span className="text-xs font-bold text-slate-800">Company Cost</span>
                           </label>
                         </div>
                       </div>
@@ -1631,46 +1563,55 @@ export default function EmployeeFormFullPage({
                       <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                         <Sparkles size={14} />
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900">Service Cards Management</div>
-                        <div className="text-[11px] text-slate-400">Digital service cards &amp; attached documents</div>
-                      </div>
+                      <div className="font-bold text-slate-900">Service Cards Management</div>
                     </div>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={permissions.services.view}
-                      onChange={(e) => handlePermissionChange('services', 'view', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
-                    />
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={permissions.services.view}
+                        onChange={(e) => handlePermissionChange('services', 'view', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">View</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.services.view}
-                      checked={permissions.services.create ?? false}
-                      onChange={(e) => handlePermissionChange('services', 'create', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.services.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.services.view}
+                        checked={permissions.services.create ?? false}
+                        onChange={(e) => handlePermissionChange('services', 'create', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">Create</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.services.view}
-                      checked={permissions.services.edit ?? false}
-                      onChange={(e) => handlePermissionChange('services', 'edit', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.services.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.services.view}
+                        checked={permissions.services.edit ?? false}
+                        onChange={(e) => handlePermissionChange('services', 'edit', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">Edit</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.services.view}
-                      checked={permissions.services.delete ?? false}
-                      onChange={(e) => handlePermissionChange('services', 'delete', e.target.checked)}
-                      className="w-4 h-4 text-red-600 rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.services.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.services.view}
+                        checked={permissions.services.delete ?? false}
+                        onChange={(e) => handlePermissionChange('services', 'delete', e.target.checked)}
+                        className="w-4 h-4 text-red-600 rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-red-600">Delete</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-right">
                     <span
@@ -1702,29 +1643,32 @@ export default function EmployeeFormFullPage({
                       <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                         <KeyRound size={14} />
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900">Password Management</div>
-                        <div className="text-[11px] text-slate-400">View &amp; reset administrative passwords</div>
-                      </div>
+                      <div className="font-bold text-slate-900">Password Management</div>
                     </div>
                   </td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      checked={permissions.passwords.view}
-                      onChange={(e) => handlePermissionChange('passwords', 'view', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
-                    />
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={permissions.passwords.view}
+                        onChange={(e) => handlePermissionChange('passwords', 'view', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">View</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center text-slate-300 font-mono">—</td>
                   <td className="py-3.5 px-3 text-center">
-                    <input
-                      type="checkbox"
-                      disabled={!permissions.passwords.view}
-                      checked={permissions.passwords.edit ?? false}
-                      onChange={(e) => handlePermissionChange('passwords', 'edit', e.target.checked)}
-                      className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
-                    />
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer select-none ${!permissions.passwords.view ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                      <input
+                        type="checkbox"
+                        disabled={!permissions.passwords.view}
+                        checked={permissions.passwords.edit ?? false}
+                        onChange={(e) => handlePermissionChange('passwords', 'edit', e.target.checked)}
+                        className="w-4 h-4 text-[#0b4da2] rounded cursor-pointer disabled:opacity-40"
+                      />
+                      <span className="text-[11px] font-bold text-slate-700">Edit</span>
+                    </label>
                   </td>
                   <td className="py-3.5 px-3 text-center text-slate-300 font-mono">—</td>
                   <td className="py-3.5 px-3 text-right">
@@ -1749,14 +1693,9 @@ export default function EmployeeFormFullPage({
         {/* Card: Multiple Upload Documents (Name + Date of Issue + Date of Expire + Attachment) */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div>
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <FileText size={15} className="text-[#0b4da2]" />
-                <span>Upload Documents (NID, Passport, Contract, Certificates &amp; Files)</span>
-              </div>
-              <p className="text-[11px] text-slate-500 m-0 mt-0.5">
-                Attach employee documents with document name, date of issue, date of expire, and file upload.
-              </p>
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <FileText size={15} className="text-[#0b4da2]" />
+              <span>Upload Documents (NID, Passport, Contract, Certificates &amp; Files)</span>
             </div>
             <button
               type="button"
@@ -1771,10 +1710,7 @@ export default function EmployeeFormFullPage({
           {documents.length === 0 ? (
             <div className="border border-dashed border-slate-300 rounded-xl p-8 text-center text-slate-400 bg-slate-50/50">
               <FileText size={32} className="mx-auto text-slate-300 mb-2" />
-              <p className="text-xs font-semibold text-slate-600 m-0">No document attachments added yet.</p>
-              <p className="text-[11px] text-slate-400 mt-1 mb-3">
-                Upload national ID, passport copy, employment contract, appointment letter, or certificates.
-              </p>
+              <p className="text-xs font-semibold text-slate-600 m-0 mb-3">No document attachments added yet.</p>
               <button
                 type="button"
                 onClick={handleAddDocumentRow}
@@ -1801,7 +1737,6 @@ export default function EmployeeFormFullPage({
                         type="text"
                         value={doc.name}
                         onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
-                        placeholder="e.g. NID, Passport, Contract, Certificate"
                         className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2]"
                       />
                     </div>
