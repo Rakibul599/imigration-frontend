@@ -127,7 +127,8 @@ export async function fetchCustomers(
   search?: string,
   sector?: string,
   programId?: string,
-  agentId?: string
+  agentId?: string,
+  year?: string
 ): Promise<CustomerRecord[]> {
   try {
     const params = new URLSearchParams();
@@ -136,6 +137,7 @@ export async function fetchCustomers(
     if (sector && sector !== 'ALL') params.append('sector', sector);
     if (programId && programId !== 'ALL') params.append('program_id', programId);
     if (agentId && agentId !== 'ALL') params.append('agent_id', agentId);
+    if (year && year !== 'ALL') params.append('year', year);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -151,7 +153,7 @@ export async function fetchCustomers(
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data)) {
-        if (typeof window !== 'undefined' && !companyId && !search && !sector && !programId && !agentId) {
+        if (typeof window !== 'undefined' && !companyId && !search && !sector && !programId && !agentId && !year) {
           try {
             const sanitized = sanitizeForStorage(data);
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(sanitized));
@@ -178,6 +180,13 @@ export async function fetchCustomers(
         }
         if (agentId && agentId !== 'ALL') {
           list = list.filter((c) => String(c.agent_id) === String(agentId));
+        }
+        if (year && year !== 'ALL') {
+          list = list.filter((c) => {
+            const y = (c.created_at || '').slice(0, 4);
+            const py = (c.passport_issue_date || '').slice(0, 4);
+            return y === year || py === year;
+          });
         }
         if (search) {
           const s = search.toLowerCase();
