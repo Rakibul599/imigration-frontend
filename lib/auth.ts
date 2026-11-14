@@ -441,29 +441,68 @@ export async function authenticateMasterAdmin(
         message: data.message || 'Master Admin authentication failed.',
       };
     }
+    const userRole = data.user.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'MasterAdmin';
     const user: AuthUser = {
       id: data.user.id,
       employee_code: data.user.username,
       username: data.user.username,
       name: data.user.name,
       email: data.user.email,
-      role: 'MasterAdmin',
-      assigned_companies: Array.isArray(data.user.assigned_companies) ? data.user.assigned_companies : [],
+      role: userRole,
+      assigned_companies: Array.isArray(data.user.assigned_companies)
+        ? data.user.assigned_companies
+        : (userRole === 'SUPER_ADMIN' ? ['*'] : []),
       permissions: {
-        can_create: false,
+        can_create: userRole === 'SUPER_ADMIN',
         can_edit: true,
-        can_delete: false,
+        can_delete: userRole === 'SUPER_ADMIN',
       },
     };
+    if (userRole === 'SUPER_ADMIN') {
+      setSuperAdminUser(user, data.token);
+    }
     setMasterAdminUser(user, data.token);
     return {
       success: true,
-      message: data.message || 'Master Admin authenticated successfully.',
+      message: data.message || 'Authenticated successfully.',
       user,
       token: data.token,
     };
   } catch (err) {
     console.error('Master admin auth error:', err);
+
+    // Offline fallback for Super Admin logging into Master Admin
+    const cleanUser = username.trim().toLowerCase();
+    const isSuperFallback =
+      (cleanUser === 'admin' && (password === 'admin' || password === 'superadmin2026')) ||
+      (cleanUser === 'superadmin' && (password === 'admin' || password === 'superadmin2026')) ||
+      (cleanUser === 'superadmin@agency.gov.my' && (password === 'superadmin2026' || password === 'admin'));
+
+    if (isSuperFallback) {
+      const superAdminUser: AuthUser = {
+        id: 1,
+        employee_code: 'superadmin',
+        username: username.trim(),
+        name: 'Super Administrator',
+        email: cleanUser.includes('@') ? cleanUser : `${cleanUser}@agency.gov.my`,
+        role: 'SUPER_ADMIN',
+        assigned_companies: ['*'],
+        permissions: {
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+        },
+      };
+      setSuperAdminUser(superAdminUser, 'superadmin_token_offline');
+      setMasterAdminUser(superAdminUser, 'superadmin_token_offline');
+      return {
+        success: true,
+        message: 'Super Administrator authenticated via Master Admin portal.',
+        user: superAdminUser,
+        token: 'superadmin_token_offline',
+      };
+    }
+
     // Offline fallback for demo
     if (username.trim().toLowerCase() === 'masteradmin' && (password === 'password123' || password === 'admin')) {
       const demoMasterAdmin: AuthUser = {
@@ -498,6 +537,7 @@ export async function authenticateMasterAdmin(
  * Check if the currently logged-in user has access to a specific company ID
  */
 export function hasCompanyAccess(companyId: string, companyName?: string, roc?: string): boolean {
+  if (!companyId || companyId.toUpperCase() === 'ALL') return true;
   const user = getCurrentUser() || getMasterAdminUser();
   if (!user) return true; // Unauthenticated public view
   if (user.role === 'SUPER_ADMIN') return true;

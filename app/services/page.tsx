@@ -23,15 +23,18 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
+  RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Layers,
   User,
   X,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import Select2Search, { Select2Option } from '@/components/Select2Search';
 import { Company } from '@/lib/companies';
 import {
   getStoredCompanies,
@@ -44,6 +47,11 @@ import {
   fetchServiceCards,
   subscribeToServiceChanges,
 } from '@/lib/serviceStorage';
+import {
+  ProgramRecord,
+  fetchPrograms,
+  getStoredPrograms,
+} from '@/lib/programStorage';
 import {
   getStoredThemeSettings,
   fetchThemeSettings,
@@ -71,11 +79,85 @@ import {
   hasServiceCardAccess,
 } from '@/lib/auth';
 
+function matchesProgram(
+  cust: CustomerRecord,
+  selectedProg?: string,
+  progsList?: ProgramRecord[]
+): boolean {
+  if (!selectedProg || selectedProg === 'ALL') return true;
+  const target = String(selectedProg).trim().toLowerCase();
+
+  if (cust.program_id && String(cust.program_id).trim().toLowerCase() === target) return true;
+  if (cust.program_name && cust.program_name.trim().toLowerCase() === target) return true;
+
+  if (progsList && progsList.length > 0) {
+    const matched = progsList.find(
+      (p) =>
+        String(p.id).toLowerCase() === target ||
+        p.name.toLowerCase() === target ||
+        (p.code && p.code.toLowerCase() === target)
+    );
+    if (matched) {
+      if (cust.program_id && String(cust.program_id) === String(matched.id)) return true;
+      if (cust.program_name && cust.program_name.toLowerCase() === matched.name.toLowerCase()) return true;
+      if (matched.code && cust.program_name && cust.program_name.toLowerCase() === matched.code.toLowerCase()) return true;
+    }
+  }
+  return false;
+}
+
+function matchesYear(
+  cust: CustomerRecord,
+  doc?: { issue_date?: string; expire_date?: string; issueDate?: string; expireDate?: string },
+  selectedYr?: string
+): boolean {
+  if (!selectedYr || selectedYr === 'ALL') return true;
+  const target = String(selectedYr).trim();
+
+  if (doc) {
+    const issue = doc.issue_date || doc.issueDate;
+    if (issue && String(issue).startsWith(target)) return true;
+    const exp = doc.expire_date || doc.expireDate;
+    if (exp && String(exp).startsWith(target)) return true;
+  }
+
+  if (cust.created_at && String(cust.created_at).startsWith(target)) return true;
+  if (cust.passport_issue_date && String(cust.passport_issue_date).startsWith(target)) return true;
+  if (cust.passport_expire_date && String(cust.passport_expire_date).startsWith(target)) return true;
+
+  return false;
+}
+
 function ServicesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyParam = searchParams.get('company');
   const verifiedServiceParam = searchParams.get('verifiedService');
+  const programParam = searchParams.get('program') || 'ALL';
+  const yearParam = searchParams.get('year') || 'ALL';
+
+  const [selectedProgram, setSelectedProgram] = useState<string>(programParam);
+  const [selectedYear, setSelectedYear] = useState<string>(yearParam);
+
+  useEffect(() => {
+    setSelectedProgram(searchParams.get('program') || 'ALL');
+  }, [searchParams]);
+
+  useEffect(() => {
+    setSelectedYear(searchParams.get('year') || 'ALL');
+  }, [searchParams]);
+
+  const [allPrograms, setAllPrograms] = useState<ProgramRecord[]>(() => {
+    return typeof window !== 'undefined' ? getStoredPrograms() : [];
+  });
+
+  useEffect(() => {
+    fetchPrograms()
+      .then((progs) => {
+        if (progs && progs.length > 0) setAllPrograms(progs);
+      })
+      .catch(() => {});
+  }, []);
 
   const [allCompanies, setAllCompanies] = useState<Company[]>(() => {
     return typeof window !== 'undefined' ? getStoredCompanies() : [];
@@ -205,6 +287,42 @@ function ServicesContent() {
           }
         })
         .catch(() => {});
+    } else if (user.role === 'MasterAdmin' && (user.id || (user as any).username)) {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      fetch(`${apiBase}/master-admins/${user.id || (user as any).username}`, {
+        headers: { Accept: 'application/json' },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((fresh) => {
+          if (fresh && fresh.id) {
+            let freshComps: string[] = [];
+            if (Array.isArray(fresh.assigned_companies)) {
+              freshComps = fresh.assigned_companies;
+            } else if (typeof fresh.assigned_companies === 'string') {
+              try {
+                const parsed = JSON.parse(fresh.assigned_companies);
+                if (Array.isArray(parsed)) freshComps = parsed;
+                else if (fresh.assigned_companies === '*') freshComps = ['*'];
+                else freshComps = [fresh.assigned_companies];
+              } catch {
+                freshComps = fresh.assigned_companies === '*' ? ['*'] : [fresh.assigned_companies];
+              }
+            } else if (fresh.assigned_companies === null || fresh.assigned_companies === undefined) {
+              freshComps = [];
+            }
+
+            const updatedUser: AuthUser = {
+              ...user,
+              assigned_companies: freshComps.length > 0 ? freshComps : user.assigned_companies,
+            };
+            setCurrentUser(updatedUser);
+            try {
+              localStorage.setItem('master_admin_user', JSON.stringify(updatedUser));
+              localStorage.setItem('portal_current_user', JSON.stringify(updatedUser));
+            } catch {}
+          }
+        })
+        .catch(() => {});
     }
 
     // If no company query parameter is provided, enforce company list selection first
@@ -292,7 +410,18 @@ function ServicesContent() {
 
   // Resolve activeCompany: priority to companyParam, then stored activeCompany, then first permitted company
   let targetCompany: Company | undefined;
-  if (companyParam) {
+  if (companyParam && companyParam.toUpperCase() === 'ALL') {
+    targetCompany = {
+      id: 'ALL',
+      name: 'All Companies (All Employers)',
+      roc: 'ALL-ENTITIES',
+      sector: 'All Business Sectors',
+      description: 'Unified view across all authorized employer companies.',
+      logo: '/images/companies/gamuda.svg',
+      tag: 'All Companies',
+      totalWorkers: allCompanies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0),
+    };
+  } else if (companyParam) {
     targetCompany = allCompanies.find(
       (c) =>
         c.id.toLowerCase() === companyParam.toLowerCase() ||
@@ -305,8 +434,17 @@ function ServicesContent() {
       const stored = localStorage.getItem('activeCompany');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && (!isRestrictedRole || hasCompanyAccess(parsed.id, parsed.name, parsed.roc))) {
-          targetCompany = allCompanies.find((c) => c.id === parsed.id) || parsed;
+        if (parsed && (parsed.id === 'ALL' || !isRestrictedRole || hasCompanyAccess(parsed.id, parsed.name, parsed.roc))) {
+          targetCompany = parsed.id === 'ALL' ? {
+            id: 'ALL',
+            name: 'All Companies (All Employers)',
+            roc: 'ALL-ENTITIES',
+            sector: 'All Business Sectors',
+            description: 'Unified view across all authorized employer companies.',
+            logo: '/images/companies/gamuda.svg',
+            tag: 'All Companies',
+            totalWorkers: allCompanies.reduce((acc, c) => acc + (c.totalWorkers || 0), 0),
+          } : (allCompanies.find((c) => c.id === parsed.id) || parsed);
         }
       }
     } catch {}
@@ -316,30 +454,254 @@ function ServicesContent() {
     targetCompany = allCompanies.find((c) => hasCompanyAccess(c.id, c.name, c.roc));
   }
 
-  const activeCompany = targetCompany || allCompanies[0] || {
-    id: 'default-company',
-    name: 'AUTHORIZED EMPLOYER ENTITY',
-    roc: 'ROC-202600000000',
-    sector: 'General Services',
-    description: 'Authorized registered company.',
+  const activeCompany = targetCompany || (allCompanies.length > 0 ? allCompanies[0] : {
+    id: 'ALL',
+    name: 'All Companies (All Employers)',
+    roc: 'ALL-ENTITIES',
+    sector: 'All Business Sectors',
+    description: 'Unified view across all authorized employer companies.',
     logo: '/images/companies/gamuda.svg',
-    tag: 'Verified JIM',
+    tag: 'All Companies',
     totalWorkers: 1000,
-  };
+  });
 
   const hasAccess =
-    !isRestrictedRole || hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc);
+    activeCompany.id === 'ALL' ||
+    !isRestrictedRole ||
+    hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc);
   const panelInfo = getUserPanelInfo();
+
+  // Only companies accessible to the user (e.g. Master Admin assigned companies)
+  const accessibleCompanies = useMemo(() => {
+    const list =
+      !currentUser || currentUser.role === 'SUPER_ADMIN'
+        ? allCompanies
+        : allCompanies.filter((c) => hasCompanyAccess(c.id, c.name, c.roc));
+
+    const seen = new Set<string>();
+    const result: Company[] = [];
+    for (const comp of list) {
+      const key = (comp.id || '').toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(comp);
+      }
+    }
+    return result;
+  }, [allCompanies, currentUser]);
+
+  const finalAccessibleCompanies = useMemo(() => {
+    if (accessibleCompanies.length === 0 && activeCompany) {
+      return [activeCompany];
+    }
+    if (
+      activeCompany &&
+      !accessibleCompanies.some((c) => c.id.toLowerCase() === activeCompany.id.toLowerCase())
+    ) {
+      if (hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc)) {
+        return [activeCompany, ...accessibleCompanies];
+      }
+    }
+    return accessibleCompanies;
+  }, [accessibleCompanies, activeCompany]);
+
+  // Dynamically extract available years from customers, documents, and recent year bounds
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+      years.add(String(y));
+    }
+    companyCustomers.forEach((cust) => {
+      if (cust.created_at) {
+        const y = cust.created_at.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_issue_date) {
+        const y = cust.passport_issue_date.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_expire_date) {
+        const y = cust.passport_expire_date.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (Array.isArray(cust.documents)) {
+        cust.documents.forEach((d) => {
+          if (d.issue_date) {
+            const y = d.issue_date.slice(0, 4);
+            if (/^\d{4}$/.test(y)) years.add(y);
+          }
+          if (d.expire_date) {
+            const y = d.expire_date.slice(0, 4);
+            if (/^\d{4}$/.test(y)) years.add(y);
+          }
+        });
+      }
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [companyCustomers]);
+
+  // Select2 Options for Company Filter
+  const companyFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Companies',
+        subLabel: 'All authorized employer companies',
+        badge: `${finalAccessibleCompanies.filter((c) => c.id !== 'ALL').length} Orgs`,
+      },
+    ];
+
+    finalAccessibleCompanies
+      .filter((c) => c.id !== 'ALL')
+      .forEach((comp) => {
+        opts.push({
+          value: comp.id,
+          label: comp.name,
+          subLabel: comp.sector || comp.roc,
+          badge: comp.totalWorkers ? `${comp.totalWorkers.toLocaleString()} workers` : undefined,
+        });
+      });
+
+    return opts;
+  }, [finalAccessibleCompanies]);
+
+  // Select2 Options for Program Filter
+  const programFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Programs',
+        subLabel: 'All government employment clearance programs',
+        badge: `${allPrograms.length} Programs`,
+      },
+    ];
+
+    allPrograms.forEach((prog) => {
+      opts.push({
+        value: String(prog.id),
+        label: prog.name,
+        subLabel: prog.description || prog.code,
+        badge: prog.code || undefined,
+      });
+    });
+
+    return opts;
+  }, [allPrograms]);
+
+  // Select2 Options for Year Filter
+  const yearFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Years',
+        subLabel: 'All registration & clearance years',
+        badge: `${availableYears.length} Years`,
+      },
+    ];
+
+    availableYears.forEach((yr) => {
+      opts.push({
+        value: yr,
+        label: `Year ${yr}`,
+        subLabel: `Clearances & documents for ${yr}`,
+      });
+    });
+
+    return opts;
+  }, [availableYears]);
+
+  const handleCompanyChange = (newCompId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('company', newCompId);
+    router.push(`/services?${params.toString()}`);
+  };
+
+  const handleProgramChange = (progId: string) => {
+    setSelectedProgram(progId);
+    const params = new URLSearchParams(searchParams.toString());
+    if (progId === 'ALL') {
+      params.delete('program');
+    } else {
+      params.set('program', progId);
+    }
+    router.push(`/services?${params.toString()}`);
+  };
+
+  const handleYearChange = (yr: string) => {
+    setSelectedYear(yr);
+    const params = new URLSearchParams(searchParams.toString());
+    if (yr === 'ALL') {
+      params.delete('year');
+    } else {
+      params.set('year', yr);
+    }
+    router.push(`/services?${params.toString()}`);
+  };
+
+  const handleResetFilters = () => {
+    setQuery('');
+    setSelectedProgram('ALL');
+    setSelectedYear('ALL');
+    const params = new URLSearchParams();
+    if (activeCompany?.id) {
+      params.set('company', activeCompany.id);
+    }
+    router.push(`/services?${params.toString()}`);
+  };
+
+  const getCardHref = (service: ServiceCard) => {
+    const isCoreCustomer = service.id === 'customer';
+    const isCoreDocDownload = service.id === 'document-download';
+
+    const p = new URLSearchParams();
+    p.set('company', activeCompany.id);
+    if (!isCoreCustomer && !isCoreDocDownload) {
+      p.set('service', service.id);
+    }
+    if (selectedProgram && selectedProgram !== 'ALL') {
+      p.set('program', selectedProgram);
+    }
+    if (selectedYear && selectedYear !== 'ALL') {
+      p.set('year', selectedYear);
+    }
+
+    if (isCoreCustomer) {
+      return `/customers?${p.toString()}`;
+    }
+    return `/document-download?${p.toString()}`;
+  };
 
   // Load active company's customers to display documents
   useEffect(() => {
     if (!activeCompany?.id) return;
-    fetchCustomers(activeCompany.id)
-      .then((records) => {
-        setCompanyCustomers(records);
-      })
-      .catch(() => {});
-  }, [activeCompany?.id]);
+    if (activeCompany.id === 'ALL') {
+      fetchCustomers()
+        .then((records) => {
+          if (
+            isRestrictedRole &&
+            currentUser &&
+            Array.isArray(currentUser.assigned_companies) &&
+            !currentUser.assigned_companies.includes('*')
+          ) {
+            const allowed = currentUser.assigned_companies.map((a) => a.toLowerCase().trim());
+            const filtered = records.filter(
+              (r) => r.company_id && allowed.includes(r.company_id.toLowerCase().trim())
+            );
+            setCompanyCustomers(filtered);
+          } else {
+            setCompanyCustomers(records);
+          }
+        })
+        .catch(() => {});
+    } else {
+      fetchCustomers(activeCompany.id)
+        .then((records) => {
+          setCompanyCustomers(records);
+        })
+        .catch(() => {});
+    }
+  }, [activeCompany?.id, isRestrictedRole, currentUser]);
 
   // Open modal if URL query specifies serviceModal
   useEffect(() => {
@@ -400,12 +762,18 @@ function ServicesContent() {
     return list.length > 0 ? list.join(', ') : 'General Services';
   }, [activeCompany, companyCustomers]);
 
-  // Compute document count per service card for the active company
+  // Compute document count per service card for the active company (filtered by program & year)
   const activeCompanyDocCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     companyCustomers.forEach((cust) => {
+      // 1. Filter by Program
+      if (!matchesProgram(cust, selectedProgram, allPrograms)) return;
+
       if (Array.isArray(cust.documents)) {
         cust.documents.forEach((doc) => {
+          // 2. Filter by Year
+          if (!matchesYear(cust, doc, selectedYear)) return;
+
           const docSvcId = (doc.service_id || '').toLowerCase().trim();
           const docSvcName = (doc.service_name || '').toLowerCase().trim();
 
@@ -429,9 +797,9 @@ function ServicesContent() {
       }
     });
     return counts;
-  }, [companyCustomers, serviceList]);
+  }, [companyCustomers, serviceList, selectedProgram, selectedYear, allPrograms]);
 
-  // Compute documents list matching currently opened service card modal
+  // Compute documents list matching currently opened service card modal (filtered by program & year)
   const modalDocuments = useMemo(() => {
     if (!selectedServiceModal) return [];
     const q = docSearchQuery.toLowerCase().trim();
@@ -442,8 +810,14 @@ function ServicesContent() {
     }> = [];
 
     companyCustomers.forEach((cust) => {
+      // 1. Filter by Program
+      if (!matchesProgram(cust, selectedProgram, allPrograms)) return;
+
       if (Array.isArray(cust.documents)) {
         cust.documents.forEach((d, idx) => {
+          // 2. Filter by Year
+          if (!matchesYear(cust, d, selectedYear)) return;
+
           const isMatch =
             d.service_id === selectedServiceModal.id ||
             (d.service_name &&
@@ -470,7 +844,7 @@ function ServicesContent() {
     });
 
     return result;
-  }, [selectedServiceModal, companyCustomers, docSearchQuery]);
+  }, [selectedServiceModal, companyCustomers, docSearchQuery, selectedProgram, selectedYear, allPrograms]);
 
   const allowedServiceList = useMemo(() => {
     if (!currentUser || (currentUser.role !== 'Employee' && currentUser.role !== 'Customer')) {
@@ -656,12 +1030,16 @@ function ServicesContent() {
               </span>
             </div>
 
-            <div className="flex items-center justify-start">
-              <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 w-full sm:w-80 transition-all shadow-xs ${
-                isGlass
-                  ? 'bg-white/80 backdrop-blur-md border border-white/80 text-slate-400 focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100'
-                  : 'bg-white border border-slate-200 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100'
-              }`}>
+            {/* Search and Filters Bar (Company, Program, Year) */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              {/* Search services input */}
+              <div
+                className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 w-full lg:w-72 transition-all shadow-xs ${
+                  isGlass
+                    ? 'bg-white/80 backdrop-blur-md border border-white/80 text-slate-400 focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100'
+                    : 'bg-white border border-slate-200 text-slate-400 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100'
+                }`}
+              >
                 <Search size={18} className="shrink-0 text-slate-400" />
                 <input
                   value={query}
@@ -680,7 +1058,128 @@ function ServicesContent() {
                   </button>
                 )}
               </div>
+
+              {/* Filters next to search (Select2 Searchable Dropdowns) */}
+              <div className="flex items-center gap-2.5 flex-wrap flex-1 lg:justify-end">
+                {/* 1. Company Filter (Select2) */}
+                <div className="w-full sm:w-64 md:w-72">
+                  <Select2Search
+                    options={companyFilterOptions}
+                    value={activeCompany.id}
+                    onChange={(val) => handleCompanyChange(val)}
+                    placeholder="Select Company..."
+                    searchPlaceholder="Search company by name, ROC, sector..."
+                    icon={<Building2 size={15} className="text-blue-600" />}
+                    dropdownWidth="w-[calc(100vw-2rem)] sm:w-[340px] max-w-[360px]"
+                    triggerClassName={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-all shadow-xs cursor-pointer ${
+                      isGlass
+                        ? 'bg-white/80 backdrop-blur-md border border-white/80 hover:border-sky-400'
+                        : 'bg-white border border-slate-200 hover:border-blue-400'
+                    }`}
+                  />
+                </div>
+
+                {/* 2. Program Filter (Select2) */}
+                <div className="w-full sm:w-56 md:w-60">
+                  <Select2Search
+                    options={programFilterOptions}
+                    value={selectedProgram}
+                    onChange={(val) => handleProgramChange(val)}
+                    placeholder="Select Program..."
+                    searchPlaceholder="Search program name or code..."
+                    icon={<Layers size={15} className="text-indigo-600" />}
+                    dropdownAlign="right"
+                    dropdownWidth="w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px]"
+                    triggerClassName={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-all shadow-xs cursor-pointer ${
+                      isGlass
+                        ? 'bg-white/80 backdrop-blur-md border border-white/80 hover:border-sky-400'
+                        : 'bg-white border border-slate-200 hover:border-blue-400'
+                    }`}
+                  />
+                </div>
+
+                {/* 3. Year Filter (Select2) */}
+                <div className="w-full sm:w-48 md:w-52">
+                  <Select2Search
+                    options={yearFilterOptions}
+                    value={selectedYear}
+                    onChange={(val) => handleYearChange(val)}
+                    placeholder="Select Year..."
+                    searchPlaceholder="Search year (e.g. 2026)..."
+                    icon={<Calendar size={15} className="text-amber-600" />}
+                    dropdownAlign="right"
+                    dropdownWidth="w-[calc(100vw-2rem)] sm:w-[220px] max-w-[240px]"
+                    triggerClassName={`w-full px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-all shadow-xs cursor-pointer ${
+                      isGlass
+                        ? 'bg-white/80 backdrop-blur-md border border-white/80 hover:border-sky-400'
+                        : 'bg-white border border-slate-200 hover:border-blue-400'
+                    }`}
+                  />
+                </div>
+
+                {/* Reset Filters button */}
+                {(query || activeCompany.id !== 'ALL' || selectedProgram !== 'ALL' || selectedYear !== 'ALL') && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 border border-slate-200 shadow-2xs"
+                    title="Reset all filters"
+                  >
+                    <RefreshCw size={13} />
+                    <span className="hidden sm:inline">Reset</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Active Filter Badges */}
+            {(activeCompany.id !== 'ALL' || selectedProgram !== 'ALL' || selectedYear !== 'ALL') && (
+              <div className="flex items-center gap-2 flex-wrap text-xs pt-1">
+                <span className="text-[11px] font-semibold text-slate-500">Active Filters:</span>
+                {activeCompany.id !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                    <Building2 size={11} />
+                    <span>Company: {activeCompany.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCompanyChange('ALL')}
+                      className="hover:text-blue-900 cursor-pointer ml-0.5"
+                      title="Show All Companies"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+                {selectedProgram !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                    <Layers size={11} />
+                    <span>
+                      Program: {allPrograms.find((p) => String(p.id) === selectedProgram)?.name || selectedProgram}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleProgramChange('ALL')}
+                      className="hover:text-indigo-900 cursor-pointer ml-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+                {selectedYear !== 'ALL' && (
+                  <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                    <Calendar size={11} />
+                    <span>Year: {selectedYear}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleYearChange('ALL')}
+                      className="hover:text-amber-950 cursor-pointer ml-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 3-Column Service Cards Grid or Restricted Notice */}
@@ -721,14 +1220,8 @@ function ServicesContent() {
                 const docCount = activeCompanyDocCounts[service.id] || 0;
 
                 // Routing:
-                // 1. Customer card -> /customers?company=...
-                // 2. Download Document card -> /document-download?company=... (all documents)
-                // 3. Other service cards -> /document-download?company=...&service=... (only tagged documents)
-                const cardHref = isCoreCustomer
-                  ? `/customers?company=${encodeURIComponent(activeCompany.id)}`
-                  : isCoreDocDownload
-                  ? `/document-download?company=${encodeURIComponent(activeCompany.id)}`
-                  : `/document-download?company=${encodeURIComponent(activeCompany.id)}&service=${encodeURIComponent(service.id)}`;
+                // Carries selected Company, Service, Program, and Year to target page
+                const cardHref = getCardHref(service);
 
                 const actionText = isCoreCustomer
                   ? 'Open Customers'

@@ -131,7 +131,7 @@ export async function fetchCustomers(
 ): Promise<CustomerRecord[]> {
   try {
     const params = new URLSearchParams();
-    if (companyId) params.append('company_id', companyId);
+    if (companyId && companyId.toUpperCase() !== 'ALL') params.append('company_id', companyId);
     if (search) params.append('search', search);
     if (sector && sector !== 'ALL') params.append('sector', sector);
     if (programId && programId !== 'ALL') params.append('program_id', programId);
@@ -170,7 +170,7 @@ export async function fetchCustomers(
       const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (cached) {
         let list: CustomerRecord[] = JSON.parse(cached);
-        if (companyId) {
+        if (companyId && companyId.toUpperCase() !== 'ALL') {
           list = list.filter((c) => !c.company_id || c.company_id === companyId);
         }
         if (programId && programId !== 'ALL') {

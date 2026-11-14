@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   Briefcase,
   Building2,
+  Calendar,
   CheckCircle2,
   ChevronsDown,
   ChevronsUp,
@@ -81,7 +82,8 @@ import {
   uploadCompanyStatCardIcon,
 } from '@/lib/companyStatCards';
 import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
-import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
+import { WorkingSector, fetchWorkingSectors, createWorkingSector, CustomerRecord, fetchCustomers } from '@/lib/customerStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
 import {
   useDashboardCardDesign,
   useCardAnimationSettings,
@@ -153,6 +155,12 @@ export default function SuperAdminCompaniesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
+  const [selectedProgramCardId, setSelectedProgramCardId] = useState<string>('ALL');
+  const [selectedYearCardId, setSelectedYearCardId] = useState<string>('ALL');
+  const [programs, setPrograms] = useState<ProgramRecord[]>(() => {
+    return typeof window !== 'undefined' ? getStoredPrograms() : [];
+  });
+  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([]);
   const [syncTableWithCardFilter, setSyncTableWithCardFilter] = useState<boolean>(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'rejected'>('all');
   const [mounted, setMounted] = useState(false);
@@ -223,6 +231,14 @@ export default function SuperAdminCompaniesPage() {
       if (Array.isArray(plans)) setSubscriptionPlans(plans);
     }).catch(() => {});
 
+    fetchPrograms().then((progs) => {
+      if (Array.isArray(progs) && progs.length > 0) setPrograms(progs);
+    }).catch(() => {});
+
+    fetchCustomers().then((custs) => {
+      if (Array.isArray(custs) && custs.length > 0) setAllCustomers(custs);
+    }).catch(() => {});
+
     const unsubComp = subscribeToCompanyChanges(() => {
       setCompanies(getStoredCompanies());
     });
@@ -278,8 +294,59 @@ export default function SuperAdminCompaniesPage() {
     return companies.find((c) => c.id === selectedCompanyCardId) || null;
   }, [companies, selectedCompanyCardId]);
 
-  const totalActiveWorkers = selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
-  const totalInactiveWorkers = selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+      years.add(String(y));
+    }
+    allCustomers.forEach((cust) => {
+      if (cust.created_at) {
+        const y = cust.created_at.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_issue_date) {
+        const y = cust.passport_issue_date.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [allCustomers]);
+
+  const scopedCustomers = useMemo(() => {
+    return allCustomers.filter((c) => {
+      if (selectedCompanyCardId !== 'ALL') {
+        const matchesComp =
+          c.company_id &&
+          (c.company_id.toLowerCase() === selectedCompanyCardId.toLowerCase() ||
+           (selectedSingleCompany && c.company_id.toLowerCase() === selectedSingleCompany.name.toLowerCase()));
+        if (!matchesComp) return false;
+      }
+      if (selectedProgramCardId !== 'ALL') {
+        if (String(c.program_id) !== String(selectedProgramCardId)) return false;
+      }
+      if (selectedYearCardId !== 'ALL') {
+        const y = (c.created_at || '').slice(0, 4);
+        const py = (c.passport_issue_date || '').slice(0, 4);
+        if (y !== selectedYearCardId && py !== selectedYearCardId) return false;
+      }
+      return true;
+    });
+  }, [allCustomers, selectedCompanyCardId, selectedSingleCompany, selectedProgramCardId, selectedYearCardId]);
+
+  const totalActiveWorkers = useMemo(() => {
+    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
+      return scopedCustomers.filter((c) => c.status !== 'inactive').length;
+    }
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
+  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
+
+  const totalInactiveWorkers = useMemo(() => {
+    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
+      return scopedCustomers.filter((c) => c.status === 'inactive').length;
+    }
+    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
+  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
   const totalWorkerWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
   const totalIncomeWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
   const totalCostWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
@@ -938,13 +1005,33 @@ export default function SuperAdminCompaniesPage() {
     const matchesSector = selectedSector === 'ALL' || c.sector === selectedSector;
     const matchesCardCompany = !syncTableWithCardFilter || selectedCompanyCardId === 'ALL' || c.id === selectedCompanyCardId;
 
+    const matchesProgram =
+      !syncTableWithCardFilter ||
+      selectedProgramCardId === 'ALL' ||
+      scopedCustomers.some(
+        (cust) =>
+          cust.company_id &&
+          (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
+           cust.company_id.toLowerCase() === c.name.toLowerCase())
+      );
+
+    const matchesYear =
+      !syncTableWithCardFilter ||
+      selectedYearCardId === 'ALL' ||
+      scopedCustomers.some(
+        (cust) =>
+          cust.company_id &&
+          (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
+           cust.company_id.toLowerCase() === c.name.toLowerCase())
+      );
+
     const matchesStatus =
       statusFilter === 'all' ||
       (statusFilter === 'active' && isCompanyActive(c)) ||
       (statusFilter === 'inactive' && isCompanyInactive(c)) ||
       (statusFilter === 'rejected' && isCompanyRejected(c));
 
-    return matchesSearch && matchesSector && matchesCardCompany && matchesStatus;
+    return matchesSearch && matchesSector && matchesCardCompany && matchesProgram && matchesYear && matchesStatus;
   });
 
   const companyCardFilterOptions: Select2Option[] = useMemo(() => [
@@ -961,6 +1048,35 @@ export default function SuperAdminCompaniesPage() {
       badge: c.roc,
     })),
   ], [companies]);
+
+  const programCardFilterOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'ALL',
+      label: `All Programs (${programs.length})`,
+      subLabel: 'All government employment clearance schemes',
+      badge: `${programs.length} Progs`,
+    },
+    ...programs.map((p) => ({
+      value: String(p.id),
+      label: p.name,
+      subLabel: p.description || p.code,
+      badge: p.code || undefined,
+    })),
+  ], [programs]);
+
+  const yearCardFilterOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'ALL',
+      label: `All Years (${availableYears.length})`,
+      subLabel: 'All historical & current clearance years',
+      badge: `${availableYears.length} Yrs`,
+    },
+    ...availableYears.map((yr) => ({
+      value: yr,
+      label: `Year ${yr}`,
+      subLabel: `Clearances & quotas for ${yr}`,
+    })),
+  ], [availableYears]);
 
   const sectorFilterOptions: Select2Option[] = useMemo(() => [
     { value: 'ALL', label: `All Sectors (${companies.length})`, badge: 'ALL' },
@@ -1040,55 +1156,85 @@ export default function SuperAdminCompaniesPage() {
           </div>
         </div>
 
-        {/* Company Select2 Filter for Cards Information: Only shown if more than 1 company */}
-        {companies.length > 1 && (
-          <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap">
-                <Building2 size={16} className="text-[#0b4da2]" />
-                <span>Filter Cards by Company:</span>
-              </div>
-              <div className="w-full sm:w-80 md:w-96">
-                <Select2Search
-                  options={companyCardFilterOptions}
-                  value={selectedCompanyCardId}
-                  onChange={(val) => setSelectedCompanyCardId(val)}
-                  placeholder="All Companies (Aggregated)"
-                  searchPlaceholder="Search company by name, ROC, sector..."
-                  icon={<Building2 size={14} className="text-slate-400" />}
-                />
-              </div>
-              {selectedCompanyCardId !== 'ALL' && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedCompanyCardId('ALL')}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer w-fit"
-                  title="Reset card metrics to all companies"
-                >
-                  <X size={13} />
-                  <span>Reset to All</span>
-                </button>
-              )}
+        {/* Company, Program & Year Select2 Filter for Cards Information */}
+        <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
+              <Building2 size={16} className="text-[#0b4da2]" />
+              <span>Filter Cards by Company:</span>
             </div>
 
+            {/* 1. Company Filter */}
+            <div className="w-52 sm:w-60 md:w-64 shrink-0">
+              <Select2Search
+                options={companyCardFilterOptions}
+                value={selectedCompanyCardId}
+                onChange={(val) => setSelectedCompanyCardId(val)}
+                placeholder="All Companies (Aggregated)"
+                searchPlaceholder="Search company by name, ROC, sector..."
+                icon={<Building2 size={14} className="text-blue-600" />}
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px]"
+              />
+            </div>
+
+            {/* 2. Program Filter */}
+            <div className="w-44 sm:w-48 md:w-52 shrink-0">
+              <Select2Search
+                options={programCardFilterOptions}
+                value={selectedProgramCardId}
+                onChange={(val) => setSelectedProgramCardId(val)}
+                placeholder="All Programs"
+                searchPlaceholder="Search program name or code..."
+                icon={<Layers size={14} className="text-indigo-600" />}
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[300px] max-w-[320px]"
+              />
+            </div>
+
+            {/* 3. Year Filter */}
+            <div className="w-32 sm:w-36 md:w-40 shrink-0">
+              <Select2Search
+                options={yearCardFilterOptions}
+                value={selectedYearCardId}
+                onChange={(val) => setSelectedYearCardId(val)}
+                placeholder="All Years"
+                searchPlaceholder="Search year (e.g. 2026)..."
+                icon={<Calendar size={14} className="text-amber-600" />}
+                dropdownAlign="right"
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[220px] max-w-[240px]"
+              />
+            </div>
+
+            {/* Reset All Filters button */}
+            {(selectedCompanyCardId !== 'ALL' || selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCompanyCardId('ALL');
+                  setSelectedProgramCardId('ALL');
+                  setSelectedYearCardId('ALL');
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Reset all card metrics to defaults"
+              >
+                <X size={13} />
+                <span>Reset to All</span>
+              </button>
+            )}
+
+            {/* Compact Sync Table Toggle */}
             {selectedSingleCompany && (
-              <div className="flex items-center gap-3">
-                <label className="text-[11px] text-slate-600 font-medium flex items-center gap-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={syncTableWithCardFilter}
-                    onChange={(e) => setSyncTableWithCardFilter(e.target.checked)}
-                    className="rounded text-blue-600 focus:ring-blue-500 border-slate-300 w-3.5 h-3.5 cursor-pointer"
-                  />
-                  Filter table below as well
-                </label>
-                <span className="hidden lg:inline text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Viewing: {selectedSingleCompany.name}
-                </span>
-              </div>
+              <label className="text-[11px] text-slate-600 font-medium inline-flex items-center gap-1.5 cursor-pointer select-none shrink-0 ml-auto whitespace-nowrap bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg transition-colors">
+                <input
+                  type="checkbox"
+                  checked={syncTableWithCardFilter}
+                  onChange={(e) => setSyncTableWithCardFilter(e.target.checked)}
+                  className="rounded text-[#0b4da2] focus:ring-blue-400 w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Sync table below</span>
+              </label>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* TOP STAT & WALLET CARDS SECTION (Clean Design Matching Screenshot with Top Manage Button) */}

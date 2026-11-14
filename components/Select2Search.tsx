@@ -20,6 +20,10 @@ interface Select2SearchProps {
   icon?: React.ReactNode;
   disabled?: boolean;
   className?: string;
+  dropdownAlign?: 'left' | 'right';
+  minDropdownWidth?: string;
+  dropdownWidth?: string;
+  triggerClassName?: string;
 }
 
 export default function Select2Search({
@@ -32,11 +36,33 @@ export default function Select2Search({
   icon,
   disabled = false,
   className = '',
+  dropdownAlign = 'left',
+  minDropdownWidth = 'min-w-full',
+  dropdownWidth,
+  triggerClassName = '',
 }: Select2SearchProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [effectiveAlign, setEffectiveAlign] = useState<'left' | 'right'>(dropdownAlign);
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic alignment calculation to avoid right-edge overflow
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      if (dropdownAlign === 'right') {
+        setEffectiveAlign('right');
+      } else {
+        const rect = containerRef.current.getBoundingClientRect();
+        const estDropdownWidth = 320;
+        if (rect.left + estDropdownWidth > (typeof window !== 'undefined' ? window.innerWidth : 1200) - 24) {
+          setEffectiveAlign('right');
+        } else {
+          setEffectiveAlign('left');
+        }
+      }
+    }
+  }, [isOpen, dropdownAlign]);
 
   // Selected Option Object
   const selectedOption = useMemo(() => {
@@ -95,21 +121,25 @@ export default function Select2Search({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full bg-slate-50 hover:bg-white border rounded-xl pl-3.5 pr-3 py-2.5 text-xs text-left flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
-          isOpen
-            ? 'border-[#0b4da2] ring-2 ring-blue-100 bg-white'
-            : 'border-slate-300 hover:border-slate-400'
+        className={`w-full text-xs text-left flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
+          triggerClassName
+            ? triggerClassName
+            : `bg-slate-50 hover:bg-white border rounded-xl pl-3.5 pr-3 py-2.5 ${
+                isOpen
+                  ? 'border-[#0b4da2] ring-2 ring-blue-100 bg-white'
+                  : 'border-slate-300 hover:border-slate-400'
+              }`
         } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
       >
-        <div className="flex items-center gap-2.5 truncate flex-1">
-          {icon && <span className="text-slate-400 shrink-0">{icon}</span>}
+        <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+          {icon && <span className="shrink-0">{icon}</span>}
           {selectedOption ? (
-            <div className="flex items-center gap-2 truncate">
-              <span className="font-semibold text-slate-800 truncate">
+            <div className="flex items-center gap-1.5 truncate min-w-0">
+              <span className="font-bold text-slate-800 shrink-0">
                 {selectedOption.label}
               </span>
               {selectedOption.subLabel && selectedOption.value !== 'ALL' && (
-                <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
+                <span className="text-[11px] text-slate-500 truncate hidden md:inline">
                   ({selectedOption.subLabel})
                 </span>
               )}
@@ -120,7 +150,7 @@ export default function Select2Search({
               )}
             </div>
           ) : (
-            <span className="text-slate-400">{placeholder}</span>
+            <span className="text-slate-400 truncate">{placeholder}</span>
           )}
         </div>
 
@@ -134,7 +164,15 @@ export default function Select2Search({
 
       {/* Floating Select2 Search Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-slate-300 rounded-xl shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
+        <div
+          className={`absolute ${
+            effectiveAlign === 'right' ? 'right-0 left-auto' : 'left-0 right-auto'
+          } top-full mt-1.5 z-50 ${
+            dropdownWidth
+              ? dropdownWidth
+              : `${minDropdownWidth} sm:max-w-[360px]`
+          } max-w-[calc(100vw-2rem)] bg-white border border-blue-400/80 rounded-xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150`}
+        >
           {/* Search Box */}
           <div className="p-2 border-b border-slate-100 bg-slate-50/70">
             <div className="relative">
@@ -167,43 +205,52 @@ export default function Select2Search({
           </div>
 
           {/* Options List */}
-          <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 py-1">
+          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 py-1">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => {
                 const isSelected = opt.value === value;
+                const isAll = opt.value === 'ALL';
                 return (
                   <button
                     key={opt.value}
                     type="button"
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full px-3.5 py-2 text-xs text-left flex items-center justify-between gap-2 transition-colors cursor-pointer border-0 ${
+                    className={`w-full px-3.5 py-2.5 text-xs text-left flex items-center justify-between gap-2.5 transition-colors cursor-pointer border-0 ${
                       isSelected
-                        ? 'bg-blue-50/80 text-[#0b4da2] font-semibold'
+                        ? 'bg-blue-50 text-[#0b4da2] font-semibold'
+                        : isAll
+                        ? 'hover:bg-blue-50/60 bg-slate-50/50 text-slate-800'
                         : 'hover:bg-slate-50 text-slate-700'
                     }`}
                   >
-                    <div className="flex items-center gap-2 truncate flex-1">
-                      <span className="truncate">{opt.label}</span>
+                    <div className="flex flex-col min-w-0 flex-1 text-left">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`truncate ${isAll ? 'font-black text-[#0b4da2]' : isSelected ? 'font-bold text-[#0b4da2]' : 'font-semibold text-slate-800'}`}>
+                          {opt.label}
+                        </span>
+                      </div>
                       {opt.subLabel && (
-                        <span className="text-[11px] text-slate-400 truncate font-normal">
-                          • {opt.subLabel}
+                        <span className="text-[10px] text-slate-500 truncate font-normal mt-0.5 leading-tight">
+                          {opt.subLabel}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
                       {opt.badge && (
                         <span
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
                             isSelected
                               ? 'bg-[#0b4da2] text-white'
+                              : isAll
+                              ? 'bg-blue-100 text-blue-800'
                               : 'bg-slate-100 text-slate-600'
                           }`}
                         >
                           {opt.badge}
                         </span>
                       )}
-                      {isSelected && <Check size={14} className="text-[#0b4da2]" />}
+                      {isSelected && <Check size={14} className="text-[#0b4da2] shrink-0" />}
                     </div>
                   </button>
                 );

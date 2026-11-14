@@ -10,6 +10,7 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  Calendar,
   CheckCircle2,
   Clock,
   Coins,
@@ -18,6 +19,7 @@ import {
   ExternalLink,
   Eye,
   Filter,
+  Layers,
   RotateCcw,
   Search,
   ShieldAlert,
@@ -30,6 +32,8 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import { CustomerRecord, fetchCustomers } from '@/lib/customerStorage';
+import { ProgramRecord, fetchPrograms } from '@/lib/programStorage';
 import {
   Company,
   resolveFileUrl,
@@ -90,6 +94,10 @@ export default function MasterAdminCompaniesPage() {
   const [statCards, setStatCards] = useState<CompanyStatCard[]>(DEFAULT_COMPANY_STAT_CARDS);
   const [selectedCardKey, setSelectedCardKey] = useState<string>('deposit_wallet');
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
+  const [selectedProgramCardId, setSelectedProgramCardId] = useState<string>('ALL');
+  const [selectedYearCardId, setSelectedYearCardId] = useState<string>('ALL');
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
+  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
@@ -136,6 +144,18 @@ export default function MasterAdminCompaniesPage() {
     fetchCompanyStatCards().then((cards) => {
       if (Array.isArray(cards) && cards.length > 0) {
         setStatCards(cards);
+      }
+    }).catch(() => {});
+
+    fetchPrograms().then((progs) => {
+      if (Array.isArray(progs) && progs.length > 0) {
+        setPrograms(progs);
+      }
+    }).catch(() => {});
+
+    fetchCustomers().then((custs) => {
+      if (Array.isArray(custs) && custs.length > 0) {
+        setAllCustomers(custs);
       }
     }).catch(() => {});
 
@@ -202,6 +222,54 @@ export default function MasterAdminCompaniesPage() {
     })),
   ], [permittedCompanies]);
 
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+      years.add(String(y));
+    }
+    allCustomers.forEach((cust) => {
+      if (cust.created_at) {
+        const y = cust.created_at.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_issue_date) {
+        const py = cust.passport_issue_date.slice(0, 4);
+        if (/^\d{4}$/.test(py)) years.add(py);
+      }
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [allCustomers]);
+
+  const programCardFilterOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'ALL',
+      label: `All Programs (${programs.length})`,
+      subLabel: 'All government employment clearance schemes',
+      badge: `${programs.length} Progs`,
+    },
+    ...programs.map((p) => ({
+      value: String(p.id),
+      label: p.name,
+      subLabel: p.description || p.code,
+      badge: p.code || undefined,
+    })),
+  ], [programs]);
+
+  const yearCardFilterOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'ALL',
+      label: `All Years (${availableYears.length})`,
+      subLabel: 'All historical & current clearance years',
+      badge: `${availableYears.length} Yrs`,
+    },
+    ...availableYears.map((yr) => ({
+      value: yr,
+      label: `Year ${yr}`,
+      subLabel: `Clearances & quotas for ${yr}`,
+    })),
+  ], [availableYears]);
+
   // Currently selected single company (either by filter or if only 1 permitted company exists)
   const selectedSingleCompany = useMemo(() => {
     if (permittedCompanies.length === 1) return permittedCompanies[0];
@@ -215,6 +283,35 @@ export default function MasterAdminCompaniesPage() {
     return permittedCompanies;
   }, [selectedSingleCompany, permittedCompanies]);
 
+  const scopedCustomers = useMemo(() => {
+    return allCustomers.filter((c) => {
+      const compMatch = permittedCompanies.some(
+        (pc) =>
+          c.company_id &&
+          (c.company_id.toLowerCase() === pc.id.toLowerCase() ||
+           c.company_id.toLowerCase() === pc.name.toLowerCase())
+      );
+      if (!compMatch) return false;
+
+      if (selectedCompanyCardId !== 'ALL') {
+        const matchesComp =
+          c.company_id &&
+          (c.company_id.toLowerCase() === selectedCompanyCardId.toLowerCase() ||
+           (selectedSingleCompany && c.company_id.toLowerCase() === selectedSingleCompany.name.toLowerCase()));
+        if (!matchesComp) return false;
+      }
+      if (selectedProgramCardId !== 'ALL') {
+        if (String(c.program_id) !== String(selectedProgramCardId)) return false;
+      }
+      if (selectedYearCardId !== 'ALL') {
+        const y = (c.created_at || '').slice(0, 4);
+        const py = (c.passport_issue_date || '').slice(0, 4);
+        if (y !== selectedYearCardId && py !== selectedYearCardId) return false;
+      }
+      return true;
+    });
+  }, [allCustomers, permittedCompanies, selectedCompanyCardId, selectedSingleCompany, selectedProgramCardId, selectedYearCardId]);
+
   // Filter table with search & sector
   const filteredCompanies = useMemo(() => {
     return permittedCompanies.filter((c) => {
@@ -225,18 +322,43 @@ export default function MasterAdminCompaniesPage() {
 
       const matchSector = selectedSector === 'ALL' || c.sector === selectedSector;
       const matchCardCompany = !selectedSingleCompany || String(c.id) === String(selectedSingleCompany.id);
-      return matchSearch && matchSector && matchCardCompany;
+
+      const matchesProgram =
+        selectedProgramCardId === 'ALL' ||
+        scopedCustomers.some(
+          (cust) =>
+            cust.company_id &&
+            (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
+             cust.company_id.toLowerCase() === c.name.toLowerCase())
+        );
+
+      const matchesYear =
+        selectedYearCardId === 'ALL' ||
+        scopedCustomers.some(
+          (cust) =>
+            cust.company_id &&
+            (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
+             cust.company_id.toLowerCase() === c.name.toLowerCase())
+        );
+
+      return matchSearch && matchSector && matchCardCompany && matchesProgram && matchesYear;
     });
-  }, [permittedCompanies, searchTerm, selectedSector, selectedSingleCompany]);
+  }, [permittedCompanies, searchTerm, selectedSector, selectedSingleCompany, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
 
   // Aggregated totals strictly for selected scope (single company or all permitted)
   const totalActiveWorkers = useMemo(() => {
+    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
+      return scopedCustomers.filter((c) => c.status !== 'inactive').length;
+    }
     return selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
-  }, [selectedCardCompanies]);
+  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
 
   const totalInactiveWorkers = useMemo(() => {
+    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
+      return scopedCustomers.filter((c) => c.status === 'inactive').length;
+    }
     return selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
-  }, [selectedCardCompanies]);
+  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
 
   const totalWorkerWallet = useMemo(() => {
     return selectedCardCompanies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
@@ -534,108 +656,126 @@ export default function MasterAdminCompaniesPage() {
       )}
 
 
-      {/* Company Select Filter Bar (Matching Super Admin: Select2 Search or Single Scope indicator + Quick 1-click pills) */}
+      {/* Company Select Filter Bar (Matching Super Admin: Select2 Search or Single Scope indicator) */}
       {permittedCompanies.length > 1 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 flex-wrap">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
               <Building2 size={16} className="text-[#0b4da2]" />
               <span>Filter Cards by Company:</span>
             </div>
-            <div className="w-full sm:w-72 md:w-80">
+
+            {/* 1. Company Filter */}
+            <div className="w-52 sm:w-60 md:w-64 shrink-0">
               <Select2Search
                 options={companyCardFilterOptions}
                 value={selectedCompanyCardId}
                 onChange={(val) => setSelectedCompanyCardId(val)}
                 placeholder="All Permitted Companies (Aggregated)"
                 searchPlaceholder="Search company by name, ROC, sector..."
-                icon={<Building2 size={14} className="text-slate-400" />}
+                icon={<Building2 size={14} className="text-blue-600" />}
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px]"
               />
             </div>
-            {selectedCompanyCardId !== 'ALL' && (
+
+            {/* 2. Program Filter */}
+            <div className="w-44 sm:w-48 md:w-52 shrink-0">
+              <Select2Search
+                options={programCardFilterOptions}
+                value={selectedProgramCardId}
+                onChange={(val) => setSelectedProgramCardId(val)}
+                placeholder="All Programs"
+                searchPlaceholder="Search program name or code..."
+                icon={<Layers size={14} className="text-indigo-600" />}
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[300px] max-w-[320px]"
+              />
+            </div>
+
+            {/* 3. Year Filter */}
+            <div className="w-32 sm:w-36 md:w-40 shrink-0">
+              <Select2Search
+                options={yearCardFilterOptions}
+                value={selectedYearCardId}
+                onChange={(val) => setSelectedYearCardId(val)}
+                placeholder="All Years"
+                searchPlaceholder="Search year (e.g. 2026)..."
+                icon={<Calendar size={14} className="text-amber-600" />}
+                dropdownAlign="right"
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[220px] max-w-[240px]"
+              />
+            </div>
+
+            {/* Reset All Filters button */}
+            {(selectedCompanyCardId !== 'ALL' || selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') && (
               <button
                 type="button"
-                onClick={() => setSelectedCompanyCardId('ALL')}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer w-fit"
-                title="Reset card metrics to all permitted companies"
+                onClick={() => {
+                  setSelectedCompanyCardId('ALL');
+                  setSelectedProgramCardId('ALL');
+                  setSelectedYearCardId('ALL');
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Reset card metrics to all defaults"
               >
                 <X size={13} />
                 <span>Reset to All</span>
               </button>
             )}
-
-            {/* Quick 1-click Company Selection Buttons */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setSelectedCompanyCardId('ALL')}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border font-bold transition-all cursor-pointer ${
-                  selectedCompanyCardId === 'ALL'
-                    ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                All ({permittedCompanies.length})
-              </button>
-              {permittedCompanies.map((c) => {
-                const isSelected = selectedCompanyCardId === String(c.id);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setSelectedCompanyCardId(String(c.id))}
-                    className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-semibold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-200'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-[#0b4da2]'
-                    }`}
-                    title={`View ${c.name} cards & statistics`}
-                  >
-                    {c.logo ? (
-                      <img
-                        src={resolveFileUrl(c.logo)}
-                        alt=""
-                        className="w-4 h-4 object-contain rounded shrink-0 bg-white"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <Building2 size={13} className="shrink-0 text-slate-400" />
-                    )}
-                    <span className="truncate max-w-[130px]">{c.name}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
-
-          {selectedSingleCompany && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Viewing: {selectedSingleCompany.name}
-              </span>
-            </div>
-          )}
         </div>
       ) : permittedCompanies.length === 1 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-xs text-slate-700 flex-wrap">
-            <Building2 size={16} className="text-[#0b4da2]" />
-            <span className="font-bold">Assigned Employer Company:</span>
-            <span className="font-extrabold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 text-xs text-slate-700 flex-wrap flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
+              <Building2 size={16} className="text-[#0b4da2]" />
+              <span>Filter Cards by Company:</span>
+            </div>
+            <span className="font-extrabold text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200 shrink-0 text-xs">
               {permittedCompanies[0].name}
             </span>
-            {permittedCompanies[0].roc && (
-              <span className="text-slate-400 font-mono text-[11px]">
-                ({permittedCompanies[0].roc})
-              </span>
+
+            {/* Program Filter */}
+            <div className="w-44 sm:w-48 md:w-52 shrink-0">
+              <Select2Search
+                options={programCardFilterOptions}
+                value={selectedProgramCardId}
+                onChange={(val) => setSelectedProgramCardId(val)}
+                placeholder="All Programs"
+                searchPlaceholder="Search program name or code..."
+                icon={<Layers size={14} className="text-indigo-600" />}
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[300px] max-w-[320px]"
+              />
+            </div>
+
+            {/* Year Filter */}
+            <div className="w-32 sm:w-36 md:w-40 shrink-0">
+              <Select2Search
+                options={yearCardFilterOptions}
+                value={selectedYearCardId}
+                onChange={(val) => setSelectedYearCardId(val)}
+                placeholder="All Years"
+                searchPlaceholder="Search year (e.g. 2026)..."
+                icon={<Calendar size={14} className="text-amber-600" />}
+                dropdownAlign="right"
+                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[220px] max-w-[240px]"
+              />
+            </div>
+
+            {(selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProgramCardId('ALL');
+                  setSelectedYearCardId('ALL');
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Reset filters"
+              >
+                <X size={13} />
+                <span>Reset to All</span>
+              </button>
             )}
           </div>
-          <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit">
-            1 Company Scope
-          </span>
         </div>
       ) : null}
 

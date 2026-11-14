@@ -32,12 +32,77 @@ import Footer from '@/components/Footer';
 import { getStoredCompanies } from '@/lib/companyStorage';
 import { Company } from '@/lib/companies';
 import { CustomerRecord, fetchCustomers, deleteCustomer, getFileUrl } from '@/lib/customerStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
 import { hasCompanyAccess } from '@/lib/auth';
+
+function matchesProgram(
+  cust: CustomerRecord,
+  selectedProg?: string,
+  progsList?: ProgramRecord[]
+): boolean {
+  if (!selectedProg || selectedProg === 'ALL') return true;
+  const target = String(selectedProg).trim().toLowerCase();
+
+  if (cust.program_id && String(cust.program_id).trim().toLowerCase() === target) return true;
+  if (cust.program_name && cust.program_name.trim().toLowerCase() === target) return true;
+
+  if (progsList && progsList.length > 0) {
+    const matched = progsList.find(
+      (p) =>
+        String(p.id).toLowerCase() === target ||
+        p.name.toLowerCase() === target ||
+        (p.code && p.code.toLowerCase() === target)
+    );
+    if (matched) {
+      if (cust.program_id && String(cust.program_id) === String(matched.id)) return true;
+      if (cust.program_name && cust.program_name.toLowerCase() === matched.name.toLowerCase()) return true;
+      if (matched.code && cust.program_name && cust.program_name.toLowerCase() === matched.code.toLowerCase()) return true;
+    }
+  }
+  return false;
+}
+
+function matchesYear(
+  cust: CustomerRecord,
+  selectedYr?: string
+): boolean {
+  if (!selectedYr || selectedYr === 'ALL') return true;
+  const target = String(selectedYr).trim();
+
+  if (cust.created_at && String(cust.created_at).startsWith(target)) return true;
+  if (cust.passport_issue_date && String(cust.passport_issue_date).startsWith(target)) return true;
+  if (cust.passport_expire_date && String(cust.passport_expire_date).startsWith(target)) return true;
+
+  if (Array.isArray(cust.documents)) {
+    const docMatch = cust.documents.some((d) => {
+      if (d.issue_date && String(d.issue_date).startsWith(target)) return true;
+      if (d.expire_date && String(d.expire_date).startsWith(target)) return true;
+      return false;
+    });
+    if (docMatch) return true;
+  }
+
+  return false;
+}
 
 function CustomersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyParam = searchParams.get('company');
+  const programParam = searchParams.get('program');
+  const yearParam = searchParams.get('year');
+
+  const [allPrograms, setAllPrograms] = useState<ProgramRecord[]>(() => {
+    return typeof window !== 'undefined' ? getStoredPrograms() : [];
+  });
+
+  useEffect(() => {
+    fetchPrograms()
+      .then((progs) => {
+        if (progs && progs.length > 0) setAllPrograms(progs);
+      })
+      .catch(() => {});
+  }, []);
 
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [activeCompany, setActiveCompany] = useState<Company>({
@@ -114,7 +179,9 @@ function CustomersContent() {
       (c.bank_account_number && c.bank_account_number.includes(searchQuery));
 
     const matchesRole = roleFilter === 'ALL' || c.role.toLowerCase() === roleFilter.toLowerCase();
-    return matchesSearch && matchesRole;
+    const matchesProg = matchesProgram(c, programParam || undefined, allPrograms);
+    const matchesYr = matchesYear(c, yearParam || undefined);
+    return matchesSearch && matchesRole && matchesProg && matchesYr;
   });
 
   const totalSales = customers.filter((c) => c.role.toLowerCase() === 'sales').length;

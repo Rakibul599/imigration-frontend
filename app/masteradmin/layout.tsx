@@ -122,10 +122,12 @@ export default function MasterAdminLayout({
         return;
       }
 
-      const loggedIn = localStorage.getItem('isMasterAdminLoggedIn');
-      const user = getMasterAdminUser();
+      const loggedIn =
+        localStorage.getItem('isMasterAdminLoggedIn') === 'true' ||
+        localStorage.getItem('isSuperAdminLoggedIn') === 'true';
+      const user = getMasterAdminUser() || getCurrentUser();
 
-      if (loggedIn === 'true' && user && user.role === 'MasterAdmin') {
+      if (loggedIn && user && (user.role === 'MasterAdmin' || user.role === 'SUPER_ADMIN')) {
         setIsAuth(true);
         setCurrentUser(user);
       } else {
@@ -144,9 +146,13 @@ export default function MasterAdminLayout({
 
     const calculatePermitted = () => {
       const all = getStoredCompanies();
-      const user = getMasterAdminUser();
+      const user = getMasterAdminUser() || getCurrentUser();
       if (!user) {
         setPermittedCompanyCount(0);
+        return;
+      }
+      if (user.role === 'SUPER_ADMIN' || (user.assigned_companies && user.assigned_companies.includes('*'))) {
+        setPermittedCompanyCount(all.length);
         return;
       }
       const allowed = Array.isArray(user.assigned_companies) ? user.assigned_companies : [];

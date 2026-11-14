@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import Select2Search, { Select2Option } from '@/components/Select2Search';
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import {
@@ -52,7 +53,61 @@ import {
   getStoredServices,
   fetchServiceCards,
 } from '@/lib/serviceStorage';
+import {
+  ProgramRecord,
+  fetchPrograms,
+  getStoredPrograms,
+} from '@/lib/programStorage';
 import { AuthUser, getCurrentUser, getMasterAdminUser, hasCompanyAccess, hasServiceCardAccess } from '@/lib/auth';
+
+function matchesProgram(
+  cust: CustomerRecord,
+  selectedProg?: string,
+  progsList?: ProgramRecord[]
+): boolean {
+  if (!selectedProg || selectedProg === 'ALL') return true;
+  const target = String(selectedProg).trim().toLowerCase();
+
+  if (cust.program_id && String(cust.program_id).trim().toLowerCase() === target) return true;
+  if (cust.program_name && cust.program_name.trim().toLowerCase() === target) return true;
+
+  if (progsList && progsList.length > 0) {
+    const matched = progsList.find(
+      (p) =>
+        String(p.id).toLowerCase() === target ||
+        p.name.toLowerCase() === target ||
+        (p.code && p.code.toLowerCase() === target)
+    );
+    if (matched) {
+      if (cust.program_id && String(cust.program_id) === String(matched.id)) return true;
+      if (cust.program_name && cust.program_name.toLowerCase() === matched.name.toLowerCase()) return true;
+      if (matched.code && cust.program_name && cust.program_name.toLowerCase() === matched.code.toLowerCase()) return true;
+    }
+  }
+  return false;
+}
+
+function matchesYear(
+  cust: CustomerRecord,
+  doc?: { issue_date?: string; expire_date?: string; issueDate?: string; expireDate?: string },
+  selectedYr?: string
+): boolean {
+  if (!selectedYr || selectedYr === 'ALL') return true;
+  const target = String(selectedYr).trim();
+
+  if (doc) {
+    const issue = doc.issue_date || doc.issueDate;
+    if (issue && String(issue).startsWith(target)) return true;
+    const exp = doc.expire_date || doc.expireDate;
+    if (exp && String(exp).startsWith(target)) return true;
+  }
+
+  if (cust.created_at && String(cust.created_at).startsWith(target)) return true;
+  if (cust.passport_issue_date && String(cust.passport_issue_date).startsWith(target)) return true;
+  if (cust.passport_expire_date && String(cust.passport_expire_date).startsWith(target)) return true;
+
+  return false;
+}
 
 // Standardized flat document structure for the repository table
 export interface RepositoryDocument {
@@ -375,6 +430,31 @@ function DocumentDownloadContent() {
   const searchParams = useSearchParams();
   const companyParam = searchParams.get('company');
   const serviceParam = searchParams.get('service');
+  const programParam = searchParams.get('program');
+  const yearParam = searchParams.get('year');
+
+  const [selectedProgram, setSelectedProgram] = useState<string>(programParam || 'ALL');
+  const [selectedYear, setSelectedYear] = useState<string>(yearParam || 'ALL');
+
+  useEffect(() => {
+    setSelectedProgram(searchParams.get('program') || 'ALL');
+  }, [searchParams]);
+
+  useEffect(() => {
+    setSelectedYear(searchParams.get('year') || 'ALL');
+  }, [searchParams]);
+
+  const [allPrograms, setAllPrograms] = useState<ProgramRecord[]>(() => {
+    return typeof window !== 'undefined' ? getStoredPrograms() : [];
+  });
+
+  useEffect(() => {
+    fetchPrograms()
+      .then((progs) => {
+        if (progs && progs.length > 0) setAllPrograms(progs);
+      })
+      .catch(() => {});
+  }, []);
 
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -428,8 +508,92 @@ function DocumentDownloadContent() {
     totalWorkers: 14200,
   });
 
+  const isEmployee = currentUser?.role === 'Employee';
+  const isMasterAdmin = currentUser?.role === 'MasterAdmin';
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isRestrictedRole = !isSuperAdmin;
+
+  const accessibleCompanies = useMemo(() => {
+    const list =
+      !currentUser || currentUser.role === 'SUPER_ADMIN'
+        ? allCompanies
+        : allCompanies.filter((c) => hasCompanyAccess(c.id, c.name, c.roc));
+
+    const seen = new Set<string>();
+    const result: Company[] = [];
+    for (const comp of list) {
+      const key = (comp.id || '').toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(comp);
+      }
+    }
+    return result;
+  }, [allCompanies, currentUser]);
+
+  const finalAccessibleCompanies = useMemo(() => {
+    if (accessibleCompanies.length === 0 && activeCompany && activeCompany.id !== 'ALL') {
+      return [activeCompany];
+    }
+    if (
+      activeCompany &&
+      activeCompany.id !== 'ALL' &&
+      !accessibleCompanies.some((c) => c.id.toLowerCase() === activeCompany.id.toLowerCase())
+    ) {
+      if (hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc)) {
+        return [activeCompany, ...accessibleCompanies];
+      }
+    }
+    return accessibleCompanies;
+  }, [accessibleCompanies, activeCompany]);
+
   const [companyCustomers, setCompanyCustomers] = useState<CustomerRecord[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
+
+  // Available Years extracted from customers and documents
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+      years.add(String(y));
+    }
+    companyCustomers.forEach((cust) => {
+      if (cust.created_at) {
+        const y = cust.created_at.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_issue_date) {
+        const y = cust.passport_issue_date.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_expire_date) {
+        const y = cust.passport_expire_date.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (Array.isArray(cust.documents)) {
+        cust.documents.forEach((d) => {
+          if (d.issue_date) {
+            const y = d.issue_date.slice(0, 4);
+            if (/^\d{4}$/.test(y)) years.add(y);
+          }
+          if (d.expire_date) {
+            const y = d.expire_date.slice(0, 4);
+            if (/^\d{4}$/.test(y)) years.add(y);
+          }
+        });
+      }
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [companyCustomers]);
+
+  // Scoped customers according to selected Program and Year
+  const filteredCompanyCustomers = useMemo(() => {
+    return companyCustomers.filter((c) => {
+      if (!matchesProgram(c, selectedProgram, allPrograms)) return false;
+      if (!matchesYear(c, undefined, selectedYear)) return false;
+      return true;
+    });
+  }, [companyCustomers, selectedProgram, selectedYear, allPrograms]);
 
   // Filters
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | 'ALL'>('ALL');
@@ -514,29 +678,64 @@ function DocumentDownloadContent() {
       setAllCompanies(merged);
 
       if (companyParam) {
-        const found = merged.find(
-          (c) =>
-            c.id.toLowerCase() === companyParam.toLowerCase() ||
-            c.name.toLowerCase().includes(companyParam.toLowerCase()) ||
-            c.name.toLowerCase().replace(/[^a-z0-9]/g, '-').includes(companyParam.toLowerCase())
-        );
-        if (found) {
-          setActiveCompany(found);
-        } else {
-          const formattedName = companyParam
-            .split('-')
-            .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-            .join(' ');
+        if (companyParam.toUpperCase() === 'ALL') {
           setActiveCompany({
-            id: companyParam,
-            name: formattedName,
-            roc: `ROC-${Math.abs(companyParam.split('').reduce((a, b) => a + b.charCodeAt(0), 0))}`,
-            sector: 'General Business & Services',
-            description: `Employer entity ${formattedName}`,
+            id: 'ALL',
+            name: 'All Companies',
+            roc: 'ALL-COMPANIES',
+            sector: 'All Business Sectors',
+            description: 'Unified view across all assigned employer organizations',
             logo: '/images/companies/gamuda.svg',
-            tag: 'Verified JIM',
-            totalWorkers: 0,
+            tag: 'All Organizations',
+            totalWorkers: merged.reduce((sum, c) => sum + (c.totalWorkers || 0), 0),
           });
+        } else {
+          const found = merged.find(
+            (c) =>
+              c.id.toLowerCase() === companyParam.toLowerCase() ||
+              c.name.toLowerCase().includes(companyParam.toLowerCase()) ||
+              c.name.toLowerCase().replace(/[^a-z0-9]/g, '-').includes(companyParam.toLowerCase())
+          );
+          if (found) {
+            setActiveCompany(found);
+          } else {
+            const formattedName = companyParam
+              .split('-')
+              .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+              .join(' ');
+            setActiveCompany({
+              id: companyParam,
+              name: formattedName,
+              roc: `ROC-${Math.abs(companyParam.split('').reduce((a, b) => a + b.charCodeAt(0), 0))}`,
+              sector: 'General Business & Services',
+              description: `Employer entity ${formattedName}`,
+              logo: '/images/companies/gamuda.svg',
+              tag: 'Verified JIM',
+              totalWorkers: 0,
+            });
+          }
+        }
+      } else {
+        const user = getCurrentUser() || getMasterAdminUser();
+        if (user) {
+          if (user.role === 'SUPER_ADMIN' || user.assigned_companies?.includes('*')) {
+            setActiveCompany({
+              id: 'ALL',
+              name: 'All Companies',
+              roc: 'ALL-COMPANIES',
+              sector: 'All Business Sectors',
+              description: 'Unified view across all assigned employer organizations',
+              logo: '/images/companies/gamuda.svg',
+              tag: 'All Organizations',
+              totalWorkers: merged.reduce((sum, c) => sum + (c.totalWorkers || 0), 0),
+            });
+          } else if (user.assigned_companies && user.assigned_companies.length > 0) {
+            const firstId = user.assigned_companies[0];
+            const found = merged.find((c) => c.id.toLowerCase() === firstId.toLowerCase());
+            if (found) {
+              setActiveCompany(found);
+            }
+          }
         }
       }
     }
@@ -552,13 +751,32 @@ function DocumentDownloadContent() {
     async function loadCustomers() {
       setLoadingCustomers(true);
       try {
-        const list = await fetchCustomers(activeCompany.id);
-        const filtered = list.filter(
-          (c) =>
-            !c.company_id ||
-            c.company_id.toLowerCase() === activeCompany.id.toLowerCase() ||
-            c.company_id.toLowerCase() === activeCompany.name.toLowerCase()
-        );
+        const isAll = activeCompany.id.toUpperCase() === 'ALL';
+        const list = await fetchCustomers(isAll ? undefined : activeCompany.id);
+
+        let filtered: CustomerRecord[];
+        if (isAll) {
+          if (
+            isRestrictedRole &&
+            currentUser &&
+            Array.isArray(currentUser.assigned_companies) &&
+            !currentUser.assigned_companies.includes('*')
+          ) {
+            const allowed = currentUser.assigned_companies.map((a) => a.toLowerCase().trim());
+            filtered = list.filter(
+              (r) => r.company_id && allowed.includes(r.company_id.toLowerCase().trim())
+            );
+          } else {
+            filtered = list;
+          }
+        } else {
+          filtered = list.filter(
+            (c) =>
+              !c.company_id ||
+              c.company_id.toLowerCase() === activeCompany.id.toLowerCase() ||
+              c.company_id.toLowerCase() === activeCompany.name.toLowerCase()
+          );
+        }
 
         if (!isCancelled) {
           setCompanyCustomers(filtered);
@@ -574,7 +792,7 @@ function DocumentDownloadContent() {
     return () => {
       isCancelled = true;
     };
-  }, [activeCompany.id, activeCompany.name]);
+  }, [activeCompany.id, activeCompany.name, isRestrictedRole, currentUser]);
 
   // Aggregate all documents across customers (scoped to selected service card if filtered)
   const allGeneratedDocuments: RepositoryDocument[] = useMemo(() => {
@@ -582,6 +800,11 @@ function DocumentDownloadContent() {
     const isFilteredByService = Boolean(activeService);
 
     companyCustomers.forEach((cust) => {
+      // 1. Program filter on customer
+      if (!matchesProgram(cust, selectedProgram, allPrograms)) {
+        return;
+      }
+
       const refNo = `MYP-2026-${String(cust.id).padStart(6, '0')}`;
       const workerIssueDate = cust.created_at ? cust.created_at.split('T')[0] : '2024-01-15';
       const workerExpireDate = cust.passport_expire_date || '2026-12-31';
@@ -589,30 +812,32 @@ function DocumentDownloadContent() {
       // When NOT filtered by a specific service card (i.e. viewing ALL documents in general download):
       if (!isFilteredByService) {
         // 1. Official ePASS Digital Slip (Always present for every registered worker)
-        const epassStatus = computeExpiryStatus(workerExpireDate);
-        docList.push({
-          id: `${cust.id}-epass`,
-          customerId: cust.id,
-          customerName: cust.full_name,
-          passportNo: cust.passport_no || 'N/A',
-          country: cust.country || 'BANGLADESH',
-          profilePic: cust.profile_pic,
-          workingSector: cust.working_sector || activeCompany.sector,
-          documentName: 'ePASS Digital Slip (Official JIM)',
-          documentCategory: 'Immigration & PLKS Permit',
-          documentUrl: '',
-          documentType: 'epass',
-          documentSize: 'Official Digital Slip',
-          issueDate: workerIssueDate,
-          expireDate: workerExpireDate,
-          referenceNo: refNo,
-          status: epassStatus.status,
-          serviceId: 'document-download',
-          serviceName: 'Document Download',
-        });
+        if (matchesYear(cust, { issueDate: workerIssueDate, expireDate: workerExpireDate }, selectedYear)) {
+          const epassStatus = computeExpiryStatus(workerExpireDate);
+          docList.push({
+            id: `${cust.id}-epass`,
+            customerId: cust.id,
+            customerName: cust.full_name,
+            passportNo: cust.passport_no || 'N/A',
+            country: cust.country || 'BANGLADESH',
+            profilePic: cust.profile_pic,
+            workingSector: cust.working_sector || activeCompany.sector,
+            documentName: 'ePASS Digital Slip (Official JIM)',
+            documentCategory: 'Immigration & PLKS Permit',
+            documentUrl: '',
+            documentType: 'epass',
+            documentSize: 'Official Digital Slip',
+            issueDate: workerIssueDate,
+            expireDate: workerExpireDate,
+            referenceNo: refNo,
+            status: epassStatus.status,
+            serviceId: 'document-download',
+            serviceName: 'Document Download',
+          });
+        }
 
         // 2. Official Passport Scan (if available)
-        if (cust.passport_file) {
+        if (cust.passport_file && matchesYear(cust, { issueDate: cust.passport_issue_date, expireDate: cust.passport_expire_date }, selectedYear)) {
           const passStatus = computeExpiryStatus(cust.passport_expire_date);
           docList.push({
             id: `${cust.id}-passport`,
@@ -637,7 +862,7 @@ function DocumentDownloadContent() {
         }
 
         // 3. National ID (if available)
-        if (cust.nid_file) {
+        if (cust.nid_file && matchesYear(cust, undefined, selectedYear)) {
           docList.push({
             id: `${cust.id}-nid`,
             customerId: cust.id,
@@ -691,6 +916,11 @@ function DocumentDownloadContent() {
             }
           }
 
+          // Check Year Filter
+          if (!matchesYear(cust, doc, selectedYear)) {
+            return;
+          }
+
           const docExpiryStatus = computeExpiryStatus(doc.expire_date);
           docList.push({
             id: `${cust.id}-doc-${idx}`,
@@ -717,7 +947,7 @@ function DocumentDownloadContent() {
     });
 
     return docList;
-  }, [companyCustomers, activeCompany.sector, activeService, selectedServiceId]);
+  }, [companyCustomers, activeCompany.sector, activeService, selectedServiceId, selectedProgram, selectedYear, allPrograms]);
 
   // Unique document types for the "Select Document" filter
   const uniqueDocumentTypes = useMemo(() => {
@@ -795,6 +1025,149 @@ function DocumentDownloadContent() {
     const expired = allGeneratedDocuments.filter((d) => d.status === 'expired' || d.status === 'expiring_soon').length;
     return { total, valid, expired };
   }, [allGeneratedDocuments]);
+
+  // Select2 Options for Company
+  const companyFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Companies',
+        subLabel: 'Unified view across all authorized employers',
+        badge: `${finalAccessibleCompanies.filter((c) => c.id !== 'ALL').length} Orgs`,
+      },
+    ];
+
+    finalAccessibleCompanies
+      .filter((c) => c.id !== 'ALL')
+      .forEach((comp) => {
+        opts.push({
+          value: comp.id,
+          label: comp.name,
+          subLabel: comp.sector || comp.roc,
+          badge: comp.totalWorkers ? `${comp.totalWorkers.toLocaleString()} workers` : undefined,
+        });
+      });
+
+    return opts;
+  }, [finalAccessibleCompanies]);
+
+  // Select2 Options for Service Card
+  const serviceFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Services',
+        subLabel: 'All document repository categories',
+        badge: `${availableServices.filter((s) => s.id !== 'customer').length} Services`,
+      },
+    ];
+
+    availableServices
+      .filter((s) => s.id !== 'customer')
+      .filter((s) => hasServiceCardAccess(s.id, s.title, currentUser))
+      .forEach((svc) => {
+        opts.push({
+          value: svc.id,
+          label: svc.id === 'document-download' ? 'Document Download (All)' : svc.title,
+          subLabel: svc.tag || svc.description,
+          badge: svc.tag || undefined,
+        });
+      });
+
+    return opts;
+  }, [availableServices, currentUser]);
+
+  // Select2 Options for Program
+  const programFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Programs',
+        subLabel: 'All government employment clearance programs',
+        badge: `${allPrograms.length} Programs`,
+      },
+    ];
+
+    allPrograms.forEach((prog) => {
+      opts.push({
+        value: String(prog.id),
+        label: prog.name,
+        subLabel: prog.description || prog.code,
+        badge: prog.code || undefined,
+      });
+    });
+
+    return opts;
+  }, [allPrograms]);
+
+  // Select2 Options for Year
+  const yearFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Years',
+        subLabel: 'All registration & clearance years',
+        badge: `${availableYears.length} Years`,
+      },
+    ];
+
+    availableYears.forEach((yr) => {
+      opts.push({
+        value: yr,
+        label: `Year ${yr}`,
+        subLabel: `Clearances & documents for ${yr}`,
+      });
+    });
+
+    return opts;
+  }, [availableYears]);
+
+  // Select2 Options for Document Type
+  const docTypeFilterOptions: Select2Option[] = useMemo(() => {
+    const opts: Select2Option[] = [
+      {
+        value: 'ALL',
+        label: 'All Documents',
+        subLabel: 'Every category & digital certificate',
+        badge: `${allGeneratedDocuments.length} total`,
+      },
+    ];
+
+    uniqueDocumentTypes.forEach((type) => {
+      const count = allGeneratedDocuments.filter((d) => d.documentName === type).length;
+      opts.push({
+        value: type,
+        label: type,
+        badge: `${count} docs`,
+      });
+    });
+
+    return opts;
+  }, [allGeneratedDocuments, uniqueDocumentTypes]);
+
+  // Select2 Options for Document Validity
+  const validityFilterOptions: Select2Option[] = useMemo(() => {
+    return [
+      {
+        value: 'ALL',
+        label: 'All Documents',
+        subLabel: 'All active, expiring and expired files',
+        badge: `${metrics.total} total`,
+      },
+      {
+        value: 'valid',
+        label: 'Valid Document',
+        subLabel: 'Active & compliant JIM documents',
+        badge: `${metrics.valid} active`,
+      },
+      {
+        value: 'expired',
+        label: 'Expire Document',
+        subLabel: 'Expired or expiring clearance files',
+        badge: `${metrics.expired} expired`,
+      },
+    ];
+  }, [metrics]);
 
   // Trigger preview in dedicated new page / tab
   const handlePreviewInNewPage = (doc: RepositoryDocument) => {
@@ -879,6 +1252,27 @@ function DocumentDownloadContent() {
     setTimeout(() => setCopyFeedback(false), 2000);
   };
 
+  const buildUrl = (svcId?: string, prog?: string, yr?: string, compId?: string) => {
+    const p = new URLSearchParams();
+    const targetComp = compId !== undefined ? compId : activeCompany.id;
+    if (targetComp) {
+      p.set('company', targetComp);
+    }
+    const targetSvc = svcId !== undefined ? svcId : selectedServiceId;
+    if (targetSvc && targetSvc !== 'ALL' && targetSvc !== 'document-download') {
+      p.set('service', targetSvc);
+    }
+    const curProg = prog !== undefined ? prog : selectedProgram;
+    if (curProg && curProg !== 'ALL') {
+      p.set('program', curProg);
+    }
+    const curYr = yr !== undefined ? yr : selectedYear;
+    if (curYr && curYr !== 'ALL') {
+      p.set('year', curYr);
+    }
+    return `/document-download?${p.toString()}`;
+  };
+
   // Reset all filters
   const resetFilters = () => {
     setSelectedCustomerId('ALL');
@@ -886,9 +1280,9 @@ function DocumentDownloadContent() {
     setSearchQuery('');
     setStatusFilter('ALL');
     setSelectedServiceId('ALL');
-    if (serviceParam) {
-      router.push(`/document-download?company=${encodeURIComponent(activeCompany.id)}`);
-    }
+    setSelectedProgram('ALL');
+    setSelectedYear('ALL');
+    router.push(buildUrl('ALL', 'ALL', 'ALL', activeCompany.id));
   };
 
   if (isAuthChecking || !currentUser) {
@@ -909,10 +1303,10 @@ function DocumentDownloadContent() {
     );
   }
 
-  const isEmployee = currentUser?.role === 'Employee';
-  const isMasterAdmin = currentUser?.role === 'MasterAdmin';
-  const isRestrictedRole = isEmployee || isMasterAdmin;
-  const hasAccess = !isRestrictedRole || hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc);
+  const hasAccess =
+    activeCompany.id === 'ALL' ||
+    !isRestrictedRole ||
+    hasCompanyAccess(activeCompany.id, activeCompany.name, activeCompany.roc);
 
   return (
     <div className="w-full min-h-screen bg-[#f1f5f9] flex flex-col justify-between font-sans text-slate-800">
@@ -1188,7 +1582,10 @@ function DocumentDownloadContent() {
                     selectedDocType !== 'ALL' ||
                     searchQuery ||
                     statusFilter !== 'ALL' ||
-                    selectedServiceId !== 'ALL') && (
+                    selectedServiceId !== 'ALL' ||
+                    selectedProgram !== 'ALL' ||
+                    selectedYear !== 'ALL' ||
+                    activeCompany.id !== 'ALL') && (
                     <button
                       type="button"
                       onClick={resetFilters}
@@ -1201,115 +1598,214 @@ function DocumentDownloadContent() {
                   )}
                 </div>
 
-                {/* Dropdowns Row: Service Card, Customer, Document Select & Document Validity */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {/* 1. Select Service Card */}
+                {/* Dropdowns Row: Company, Service Card, Customer, Program, Year, Document Select & Validity (Select2 Dropdowns) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+                  {/* 1. Select Company with "All Companies" */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Building2 size={14} className="text-blue-600" />
+                      <span>Select Company</span>
+                    </label>
+                    <Select2Search
+                      options={companyFilterOptions}
+                      value={activeCompany.id}
+                      onChange={(val) => {
+                        router.push(buildUrl(selectedServiceId, selectedProgram, selectedYear, val));
+                      }}
+                      placeholder="Select Company..."
+                      searchPlaceholder="Search company by name, ROC..."
+                      icon={<Building2 size={14} className="text-blue-600" />}
+                      minDropdownWidth="min-w-[280px] sm:min-w-[320px]"
+                    />
+                  </div>
+
+                  {/* 2. Select Service Card */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                       <Layers size={14} className="text-blue-600" />
                       <span>Select Service Card</span>
                     </label>
-                    <div className="relative">
-                      <select
-                        value={selectedServiceId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedServiceId(val);
-                          setSelectedDocType('ALL');
-                          if (val === 'ALL' || val === 'document-download') {
-                            router.push(`/document-download?company=${encodeURIComponent(activeCompany.id)}`);
-                          } else {
-                            router.push(
-                              `/document-download?company=${encodeURIComponent(activeCompany.id)}&service=${encodeURIComponent(val)}`
-                            );
-                          }
-                        }}
-                        className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
-                      >
-                        <option value="ALL">📁 All Services (Entire Repository)</option>
-                        {availableServices
-                          .filter((s) => s.id !== 'customer')
-                          .filter((s) => hasServiceCardAccess(s.id, s.title, currentUser))
-                          .map((svc) => (
-                            <option key={svc.id} value={svc.id}>
-                              {svc.id === 'document-download' ? '📥 Document Download (All)' : `📄 ${svc.title}`}
-                            </option>
-                          ))}
-                      </select>
-                      <ChevronDown
-                        size={15}
-                        className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                      />
-                    </div>
+                    <Select2Search
+                      options={serviceFilterOptions}
+                      value={selectedServiceId}
+                      onChange={(val) => {
+                        setSelectedServiceId(val);
+                        setSelectedDocType('ALL');
+                        router.push(buildUrl(val));
+                      }}
+                      placeholder="Select Service..."
+                      searchPlaceholder="Search service name or tag..."
+                      icon={<Layers size={14} className="text-blue-600" />}
+                      minDropdownWidth="min-w-[260px] sm:min-w-[300px]"
+                    />
                   </div>
 
-                  {/* 2. Select Customer with "All Customers" */}
+                  {/* 3. Select Customer with "All Customers" */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                       <Users size={14} className="text-blue-600" />
                       <span>Select Customer</span>
                     </label>
                     <CustomerSelect2
-                      customers={companyCustomers}
+                      customers={filteredCompanyCustomers}
                       selectedCustomerId={selectedCustomerId}
                       totalDocsCount={allGeneratedDocuments.length}
                       onSelect={(id) => setSelectedCustomerId(id)}
                     />
                   </div>
 
-                  {/* 3. Select Document with "All Documents" */}
+                  {/* 4. Select Program */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Layers size={14} className="text-indigo-600" />
+                      <span>Select Program</span>
+                    </label>
+                    <Select2Search
+                      options={programFilterOptions}
+                      value={selectedProgram}
+                      onChange={(val) => {
+                        setSelectedProgram(val);
+                        router.push(buildUrl(selectedServiceId, val));
+                      }}
+                      placeholder="Select Program..."
+                      searchPlaceholder="Search program name or code..."
+                      icon={<Layers size={14} className="text-indigo-600" />}
+                      minDropdownWidth="min-w-[260px] sm:min-w-[300px]"
+                    />
+                  </div>
+
+                  {/* 5. Select Year */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                      <Calendar size={14} className="text-amber-600" />
+                      <span>Select Year</span>
+                    </label>
+                    <Select2Search
+                      options={yearFilterOptions}
+                      value={selectedYear}
+                      onChange={(val) => {
+                        setSelectedYear(val);
+                        router.push(buildUrl(selectedServiceId, selectedProgram, val));
+                      }}
+                      placeholder="Select Year..."
+                      searchPlaceholder="Search year (e.g. 2026)..."
+                      icon={<Calendar size={14} className="text-amber-600" />}
+                      minDropdownWidth="min-w-[200px]"
+                    />
+                  </div>
+
+                  {/* 6. Select Document with "All Documents" */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                       <FileText size={14} className="text-blue-600" />
                       <span>Select Document</span>
                     </label>
-                    <div className="relative">
-                      <select
-                        value={selectedDocType}
-                        onChange={(e) => setSelectedDocType(e.target.value)}
-                        className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
-                      >
-                        <option value="ALL">
-                          📁 All Documents ({allGeneratedDocuments.length} total)
-                        </option>
-                        <optgroup label="Filter by Document Type:">
-                          {uniqueDocumentTypes.map((type, idx) => (
-                            <option key={idx} value={type}>
-                              📄 {type}
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
-                      <ChevronDown
-                        size={15}
-                        className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                      />
-                    </div>
+                    <Select2Search
+                      options={docTypeFilterOptions}
+                      value={selectedDocType}
+                      onChange={(val) => setSelectedDocType(val)}
+                      placeholder="Select Document..."
+                      searchPlaceholder="Search document name..."
+                      icon={<FileText size={14} className="text-blue-600" />}
+                      dropdownAlign="right"
+                      minDropdownWidth="min-w-[280px] sm:min-w-[320px]"
+                    />
                   </div>
 
-                  {/* 4. Document Validity Status Filter */}
+                  {/* 7. Document Validity Status Filter */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                       <ShieldCheck size={14} className="text-blue-600" />
                       <span>Document Validity</span>
                     </label>
-                    <div className="relative">
-                      <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'valid' | 'expired')}
-                        className="w-full min-h-[42px] px-3.5 py-2 bg-white border border-slate-300 hover:border-blue-500 focus:border-blue-600 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer transition-all shadow-xs appearance-none pr-9"
-                      >
-                        <option value="ALL">All Documents ({metrics.total})</option>
-                        <option value="valid">✅ Valid Document ({metrics.valid})</option>
-                        <option value="expired">⚠️ Expire Document ({metrics.expired})</option>
-                      </select>
-                      <ChevronDown
-                        size={15}
-                        className="text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                      />
-                    </div>
+                    <Select2Search
+                      options={validityFilterOptions}
+                      value={statusFilter}
+                      onChange={(val) => setStatusFilter(val as 'ALL' | 'valid' | 'expired')}
+                      placeholder="Select Status..."
+                      searchPlaceholder="Search validity status..."
+                      icon={<ShieldCheck size={14} className="text-blue-600" />}
+                      dropdownAlign="right"
+                      minDropdownWidth="min-w-[240px]"
+                    />
                   </div>
                 </div>
+
+                {/* Active Scoped Filters Pill Indicator */}
+                {(activeCompany.id !== 'ALL' || selectedProgram !== 'ALL' || selectedYear !== 'ALL' || (activeService && activeService.id !== 'document-download')) && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 flex-wrap text-xs">
+                    <span className="text-[11px] font-semibold text-slate-500">Active Filters:</span>
+                    {activeCompany.id !== 'ALL' && (
+                      <span className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                        <Building2 size={11} />
+                        <span>Company: {activeCompany.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            router.push(buildUrl(selectedServiceId, selectedProgram, selectedYear, 'ALL'));
+                          }}
+                          className="hover:text-blue-950 cursor-pointer ml-0.5"
+                          title="Show All Companies"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    )}
+                    {activeService && activeService.id !== 'document-download' && (
+                      <span className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                        <Layers size={11} />
+                        <span>Service: {activeService.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedServiceId('ALL');
+                            router.push(buildUrl('ALL', selectedProgram, selectedYear));
+                          }}
+                          className="hover:text-blue-950 cursor-pointer ml-0.5"
+                          title="Show All Services"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    )}
+                    {selectedProgram !== 'ALL' && (
+                      <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                        <Layers size={11} />
+                        <span>
+                          Program: {allPrograms.find((p) => String(p.id) === selectedProgram)?.name || selectedProgram}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProgram('ALL');
+                            router.push(buildUrl(selectedServiceId, 'ALL', selectedYear));
+                          }}
+                          className="hover:text-indigo-900 cursor-pointer ml-0.5"
+                          title="Show All Programs"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    )}
+                    {selectedYear !== 'ALL' && (
+                      <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-0.5 rounded-full font-bold text-[11px]">
+                        <Calendar size={11} />
+                        <span>Year: {selectedYear}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedYear('ALL');
+                            router.push(buildUrl(selectedServiceId, selectedProgram, 'ALL'));
+                          }}
+                          className="hover:text-amber-950 cursor-pointer ml-0.5"
+                          title="Show All Years"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* DOCUMENT LIST TABLE */}

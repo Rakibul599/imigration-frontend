@@ -47,6 +47,18 @@ export default function MasterAdminLoginPage() {
     setErrorMsg('');
   };
 
+  const handleRakibFill = () => {
+    setUsername('rakib');
+    setPassword('rakib');
+    setErrorMsg('');
+  };
+
+  const handleSuperAdminFill = () => {
+    setUsername('admin');
+    setPassword('admin');
+    setErrorMsg('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -102,21 +114,41 @@ export default function MasterAdminLoginPage() {
             {/* Form */}
             <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4">
               {/* Quick Fill Demo Helper */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-xs gap-2">
                 <div className="text-slate-700">
-                  <span className="font-bold text-[#0b4da2]">Demo Credentials:</span>
+                  <span className="font-bold text-[#0b4da2]">Authorized Credentials:</span>
                   <div className="font-mono text-[11px] text-slate-500 mt-0.5">
-                    User: <strong className="text-slate-800">masteradmin</strong> | Pass: <strong className="text-slate-800">password123</strong>
+                    Master Admin: <strong className="text-slate-800">rakib</strong> / <strong className="text-slate-800">masteradmin</strong> | Super Admin: <strong className="text-slate-800">admin</strong>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleQuickFill}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b4da2] hover:text-[#072a6b] hover:underline bg-transparent border-0 cursor-pointer p-0"
-                >
-                  <Sparkles size={12} />
-                  <span>Fill</span>
-                </button>
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleRakibFill}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b4da2] hover:text-[#072a6b] hover:underline bg-transparent border-0 cursor-pointer p-0"
+                  >
+                    <Sparkles size={12} />
+                    <span>Rakib</span>
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={handleQuickFill}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                  >
+                    <Sparkles size={12} />
+                    <span>Master Admin</span>
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={handleSuperAdminFill}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:text-amber-900 hover:underline bg-transparent border-0 cursor-pointer p-0"
+                  >
+                    <Sparkles size={12} />
+                    <span>Super Admin</span>
+                  </button>
+                </div>
               </div>
 
               {errorMsg && (
