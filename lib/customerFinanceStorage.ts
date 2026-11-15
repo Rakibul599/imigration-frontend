@@ -51,6 +51,9 @@ export interface CustomerDepositAmountRecord {
   nid_no?: string;
   company_id?: string;
   company_name?: string;
+  program_id?: string;
+  program_name?: string;
+  sector?: string;
   deposit_amount: number; // in RM
   target_amount?: number; // Snapshot of target amount
   remaining_pending?: number; // Remaining pending after this deposit (Target - Total Deposited)

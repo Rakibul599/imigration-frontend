@@ -107,7 +107,7 @@ export default function SuperAdminDashboard() {
   const dashboardTabs: DashboardTabItem[] = useMemo(() => [
     {
       id: 'companies',
-      label: 'Company Management',
+      label: 'Companies Dashboard',
       icon: Building2,
       badge: companies.length > 0 ? `${companies.length}` : undefined,
       description: 'Company Directory, Stat Cards & Treasury',

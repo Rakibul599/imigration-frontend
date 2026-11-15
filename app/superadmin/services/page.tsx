@@ -83,6 +83,7 @@ export default function SuperAdminServicesPage() {
     description: '',
     image: '/images/registration-document.svg',
     order_num: 1,
+    zero_cost: false,
   });
 
   const loadData = async () => {
@@ -174,6 +175,7 @@ export default function SuperAdminServicesPage() {
       description: '',
       image: '/images/registration-document.svg',
       order_num: services.length + 1,
+      zero_cost: false,
     });
     setUploadedFileName('');
     setEditingCard(null);
@@ -193,6 +195,7 @@ export default function SuperAdminServicesPage() {
       description: card.description || '',
       image: card.image || '/images/registration-document.svg',
       order_num: actualOrder,
+      zero_cost: Boolean(card.zero_cost),
     });
     setUploadedFileName('');
     setIsCreateModalOpen(true);
@@ -218,6 +221,7 @@ export default function SuperAdminServicesPage() {
           tag: formData.tag.trim() || undefined,
           image: formData.image.trim() || '/images/registration-document.svg',
           order_num: Number(formData.order_num) || 1,
+          zero_cost: formData.zero_cost,
         };
 
         const targetRank = Math.max(1, Math.min(services.length, Number(formData.order_num) || 1));
@@ -250,6 +254,7 @@ export default function SuperAdminServicesPage() {
           tag: formData.tag.trim() || undefined,
           image: formData.image.trim() || '/images/registration-document.svg',
           order_num: targetRank,
+          zero_cost: formData.zero_cost,
         });
 
         if (targetRank <= services.length) {
@@ -740,6 +745,11 @@ export default function SuperAdminServicesPage() {
                           {card.tag}
                         </span>
                       )}
+                      {card.zero_cost && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          Zero Cost
+                        </span>
+                      )}
                     </div>
 
                     {/* 4 Directional Arrow Icon Controls: Left, Right, Up, Down (No text names) */}
@@ -1184,6 +1194,27 @@ export default function SuperAdminServicesPage() {
                     placeholder="Short description displayed on the employer services portal card."
                     className="w-full bg-slate-50 border border-slate-300 focus:bg-white focus:border-[#0b4da2] rounded-xl px-3.5 py-2 text-xs text-slate-900 font-medium outline-none resize-none"
                   />
+                </div>
+
+                {/* Zero Cost Setting Toggle */}
+                <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="pr-3">
+                    <span className="block text-xs font-bold text-slate-800">
+                      Zero Cost Service
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5">
+                      Enable if this service card has zero fee. Cards with Zero Cost ON will be excluded from Customer Deposit Purpose and Cost Document tags.
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={formData.zero_cost}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, zero_cost: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
                 </div>
 
                 {/* Icon Upload & Presets */}

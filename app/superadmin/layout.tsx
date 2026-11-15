@@ -38,8 +38,10 @@ import {
   Sparkles,
   Target,
   UserCheck,
+  UserMinus,
   UserPlus,
   Users,
+  UserX,
   X,
 } from 'lucide-react';
 import {
@@ -77,6 +79,7 @@ export default function SuperAdminLayout({
   const [attendanceMenuOpen, setAttendanceMenuOpen] = useState(true);
   const [programMenuOpen, setProgramMenuOpen] = useState(true);
   const [agentMenuOpen, setAgentMenuOpen] = useState(true);
+  const [masterAdminMenuOpen, setMasterAdminMenuOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [companyCount, setCompanyCount] = useState<number>(0);
   const [pendingTrialCount, setPendingTrialCount] = useState<number>(0);
@@ -332,7 +335,13 @@ export default function SuperAdminLayout({
       pathname.startsWith('/companies/invoices')
     ) {
       setAccountsMenuOpen(true);
-    } else if (pathname.startsWith('/superadmin/companies') || pathname.startsWith('/companies')) {
+    } else if (
+      pathname === '/superadmin' ||
+      pathname.startsWith('/superadmin/companies') ||
+      pathname.startsWith('/companies') ||
+      pathname.startsWith('/superadmin/programs') ||
+      pathname.startsWith('/programs')
+    ) {
       setCompanyMenuOpen(true);
     }
     if (pathname.startsWith('/superadmin/employees')) {
@@ -349,6 +358,9 @@ export default function SuperAdminLayout({
     }
     if (pathname.startsWith('/superadmin/agents')) {
       setAgentMenuOpen(true);
+    }
+    if (pathname.startsWith('/superadmin/master-admins') || pathname.startsWith('/master-admins')) {
+      setMasterAdminMenuOpen(true);
     }
   }, [pathname]);
 
@@ -399,74 +411,66 @@ export default function SuperAdminLayout({
         title: 'Company  employe and worker management',
         items: [
           {
-            name: 'Dashboard Overview',
-            href: '/superadmin',
+            name: 'Companies Dashboard',
             icon: LayoutDashboard,
-            badge: 'Live',
-          },
-          {
-            name: 'Company Management',
-            icon: Building2,
             badge: pendingTrialCount > 0 ? `${pendingTrialCount} New` : companyCount > 0 ? `${companyCount}` : undefined,
             isGroup: true,
             children: [
               {
-                name: 'Create Company',
-                href: '/superadmin/companies/create',
-                icon: PlusCircle,
-              },
-              {
-                name: 'Company List',
+                name: 'Companies',
                 href: '/superadmin/companies',
                 icon: Building2,
                 badge: companyCount > 0 ? `${companyCount}` : undefined,
               },
               {
-                name: 'Company Sectors',
+                name: 'Company Sector',
                 href: '/superadmin/companies/sectors',
                 icon: Briefcase,
               },
               {
-                name: 'Trial Applications',
+                name: 'Programs',
+                href: '/superadmin/programs',
+                icon: BookOpen,
+                badge: programCount > 0 ? `${programCount}` : undefined,
+              },
+              {
+                name: 'Trial Application',
                 href: '/superadmin/companies/trial-applications',
                 icon: Sparkles,
                 badge: pendingTrialCount > 0 ? `${pendingTrialCount} New` : undefined,
               },
               {
-                name: 'Subscription Plans',
+                name: 'Subscription Plan',
                 href: '/superadmin/companies/plans',
                 icon: Layers,
               },
             ],
           },
           {
-            name: 'Program Management',
-            icon: BookOpen,
-            isGroup: true,
-            badge: programCount > 0 ? `${programCount}` : undefined,
-            children: [
-              {
-                name: 'Create Program',
-                href: '/superadmin/programs/create',
-                icon: PlusCircle,
-              },
-              {
-                name: 'Programs List',
-                href: '/superadmin/programs',
-                icon: BookOpen,
-              },
-              {
-                name: 'Program Customers',
-                href: '/superadmin/programs/customers',
-                icon: Users,
-              },
-            ],
-          },
-          {
             name: 'Master Admin Management',
-            href: '/superadmin/master-admins',
             icon: ShieldAlert,
             badge: masterAdminCount > 0 ? `${masterAdminCount}` : undefined,
+            isGroup: true,
+            children: [
+              {
+                name: 'Master Admin',
+                href: '/superadmin/master-admins',
+                icon: ShieldAlert,
+                badge: masterAdminCount > 0 ? `${masterAdminCount}` : undefined,
+              },
+              {
+                name: 'Employee Admin',
+                href: '/superadmin/employees',
+                icon: UserCheck,
+                badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+              },
+              {
+                name: 'Worker Admin',
+                href: '/superadmin/customers',
+                icon: Users,
+                badge: customerCount > 0 ? `${customerCount}` : undefined,
+              },
+            ],
           },
           {
             name: 'Employee Management',
@@ -500,20 +504,39 @@ export default function SuperAdminLayout({
           },
           {
             name: 'Customer Management',
-            icon: UserCheck,
+            icon: Users,
             badge: customerCount > 0 ? `${customerCount}` : undefined,
             isGroup: true,
             children: [
               {
-                name: 'Create Customer',
-                href: '/superadmin/customers/create',
-                icon: PlusCircle,
+                name: 'Customer Dashboard',
+                href: '/superadmin/customers/dashboard',
+                icon: LayoutDashboard,
               },
               {
-                name: 'Customer List',
-                href: '/superadmin/customers',
-                icon: Users,
-                badge: customerCount > 0 ? `${customerCount}` : undefined,
+                name: 'Active Customer',
+                href: '/superadmin/customers/active',
+                icon: UserCheck,
+              },
+              {
+                name: 'Inactive Customer',
+                href: '/superadmin/customers/inactive',
+                icon: UserX,
+              },
+              {
+                name: 'Runaway Customer',
+                href: '/superadmin/customers/runaway',
+                icon: UserMinus,
+              },
+              {
+                name: 'Black List Customer',
+                href: '/superadmin/customers/blacklist',
+                icon: ShieldAlert,
+              },
+              {
+                name: 'Future Customer',
+                href: '/superadmin/customers/future',
+                icon: Sparkles,
               },
               {
                 name: 'Customer Target Amount',
@@ -773,26 +796,35 @@ export default function SuperAdminLayout({
 
                     if (link.isGroup) {
                       const isChildActive = link.children?.some(
-                        (child) => pathname === child.href || pathname.startsWith(child.href)
+                        (child) =>
+                          pathname === child.href ||
+                          (child.href === '/superadmin/companies' && (pathname === '/superadmin' || pathname === '/companies')) ||
+                          (child.href === '/superadmin/programs' && pathname.startsWith('/superadmin/programs')) ||
+                          (child.href === '/superadmin/master-admins' && (pathname.startsWith('/superadmin/master-admins') || pathname.startsWith('/master-admins'))) ||
+                          pathname.startsWith(child.href)
                       );
                       const isGroupOpen =
-                        link.name === 'Company Management'
+                        link.name === 'Companies Dashboard' || link.name === 'Company Management'
                           ? companyMenuOpen
-                          : link.name === 'Account Management'
-                            ? accountsMenuOpen
-                            : link.name === 'Customer Management'
-                              ? customerMenuOpen
-                              : link.name === 'Attendance Management'
-                                ? attendanceMenuOpen
-                                : link.name === 'Program Management'
-                                  ? programMenuOpen
-                                  : link.name === 'Agent Management'
-                                    ? agentMenuOpen
-                                    : employeeMenuOpen;
+                          : link.name === 'Master Admin Management'
+                            ? masterAdminMenuOpen
+                            : link.name === 'Account Management'
+                              ? accountsMenuOpen
+                              : link.name === 'Customer Management'
+                                ? customerMenuOpen
+                                : link.name === 'Attendance Management'
+                                  ? attendanceMenuOpen
+                                  : link.name === 'Program Management'
+                                    ? programMenuOpen
+                                    : link.name === 'Agent Management'
+                                      ? agentMenuOpen
+                                      : employeeMenuOpen;
                       const toggleGroup = () => {
                         if (!sidebarOpen) setSidebarOpen(true);
-                        if (link.name === 'Company Management') {
+                        if (link.name === 'Companies Dashboard' || link.name === 'Company Management') {
                           setCompanyMenuOpen(!companyMenuOpen);
+                        } else if (link.name === 'Master Admin Management') {
+                          setMasterAdminMenuOpen(!masterAdminMenuOpen);
                         } else if (link.name === 'Account Management') {
                           setAccountsMenuOpen(!accountsMenuOpen);
                         } else if (link.name === 'Customer Management') {
@@ -869,8 +901,10 @@ export default function SuperAdminLayout({
                               {link.children?.map((child) => {
                                 const ChildIcon = child.icon;
                                 const isChildItemActive =
-                                  child.href === '/superadmin/companies'
-                                    ? pathname === '/superadmin/companies' || pathname === '/companies'
+                                  child.href === '/superadmin/master-admins'
+                                    ? pathname === '/superadmin/master-admins' || pathname.startsWith('/superadmin/master-admins') || pathname === '/master-admins' || pathname.startsWith('/master-admins')
+                                    : child.href === '/superadmin/companies'
+                                    ? pathname === '/superadmin/companies' || pathname === '/superadmin' || pathname === '/companies'
                                     : child.href === '/superadmin/companies/create'
                                       ? pathname === '/superadmin/companies/create' || pathname === '/companies/create'
                                       : child.href === '/superadmin/companies/sectors'
@@ -883,6 +917,18 @@ export default function SuperAdminLayout({
                                               ? pathname.startsWith('/superadmin/companies/trial-applications') || pathname.startsWith('/companies/trial-applications')
                                               : child.href === '/superadmin/companies/plans'
                                                 ? pathname.startsWith('/superadmin/companies/plans') || pathname.startsWith('/companies/plans')
+                                                : child.href === '/superadmin/customers/dashboard'
+                                                  ? pathname === '/superadmin/customers/dashboard' || pathname === '/superadmin/customers' || pathname.startsWith('/superadmin/customers/edit') || pathname.startsWith('/superadmin/customers/view') || pathname === '/customers/dashboard' || pathname === '/customers'
+                                                  : child.href === '/superadmin/customers/active'
+                                                    ? pathname.startsWith('/superadmin/customers/active') || pathname.startsWith('/customers/active')
+                                                    : child.href === '/superadmin/customers/inactive'
+                                                      ? pathname.startsWith('/superadmin/customers/inactive') || pathname.startsWith('/customers/inactive')
+                                                      : child.href === '/superadmin/customers/runaway'
+                                                        ? pathname.startsWith('/superadmin/customers/runaway') || pathname.startsWith('/customers/runaway')
+                                                        : child.href === '/superadmin/customers/blacklist'
+                                                          ? pathname.startsWith('/superadmin/customers/blacklist') || pathname.startsWith('/customers/blacklist')
+                                                          : child.href === '/superadmin/customers/future'
+                                                            ? pathname.startsWith('/superadmin/customers/future') || pathname.startsWith('/customers/future')
                                                 : child.href === '/superadmin/customers'
                                                   ? pathname === '/superadmin/customers' || pathname.startsWith('/superadmin/customers/edit') || pathname.startsWith('/superadmin/customers/view') || pathname === '/customers'
                                                   : child.href === '/superadmin/customers/create'
@@ -894,7 +940,7 @@ export default function SuperAdminLayout({
                                                         : child.href === '/superadmin/attendance/settings'
                                                           ? pathname === '/superadmin/attendance/settings' || pathname.startsWith('/superadmin/attendance/settings/')
                                                           : child.href === '/superadmin/programs'
-                                                            ? pathname === '/superadmin/programs' || pathname === '/programs'
+                                                            ? pathname.startsWith('/superadmin/programs') || pathname.startsWith('/programs')
                                                             : child.href === '/superadmin/programs/create'
                                                               ? pathname === '/superadmin/programs/create' || pathname === '/programs/create'
                                                               : pathname === child.href || pathname.startsWith(child.href + '/');
@@ -1140,7 +1186,7 @@ export default function SuperAdminLayout({
                 <ChevronRight size={13} className="text-slate-400" />
                 <span className="text-[#0b4da2] font-bold capitalize">
                   {pathname === '/superadmin'
-                    ? 'Dashboard Overview'
+                    ? 'Companies Dashboard'
                     : pathname.replace('/superadmin/', '').replace('-', ' ')}
                 </span>
               </div>

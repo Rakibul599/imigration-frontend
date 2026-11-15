@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   BookOpen,
@@ -43,6 +43,17 @@ import {
   fetchPrograms,
   deleteProgram,
 } from '@/lib/programStorage';
+import ProgramCustomersContent from '@/components/ProgramCustomersContent';
+
+export type ProgramsTabId = 'programs' | 'customers';
+
+export interface ProgramsTabItem {
+  id: ProgramsTabId;
+  label: string;
+  icon: any;
+  badge?: string | number;
+  description?: string;
+}
 
 const DEFAULT_PROGRAM_CARDS: PageStatCardConfig[] = [
   { id: 'total_programs', title: 'Total Programs', subtitle: 'All recruitment & deployment schemes', icon: 'BookOpen', order_num: 1 },
@@ -50,16 +61,39 @@ const DEFAULT_PROGRAM_CARDS: PageStatCardConfig[] = [
   { id: 'assigned_workers', title: 'Enrolled Workers', subtitle: 'Foreign workers assigned to schemes', icon: 'Users', order_num: 3 },
 ];
 
-export default function SuperAdminProgramsListPage() {
+function ProgramsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const pathname = usePathname();
-  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
+  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : pathname.startsWith('/superadmin') ? '/superadmin' : '';
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<ProgramsTabId>(
+    tabParam === 'customers' ? 'customers' : 'programs'
+  );
   const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
+
+  // Sync tab with URL parameter
+  useEffect(() => {
+    if (tabParam === 'customers') {
+      setActiveTab('customers');
+    } else if (tabParam === 'programs') {
+      setActiveTab('programs');
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tabId: ProgramsTabId) => {
+    setActiveTab(tabId);
+    if (tabId === 'customers') {
+      router.replace(`${rootPath}/programs?tab=customers`, { scroll: false });
+    } else {
+      router.replace(`${rootPath}/programs`, { scroll: false });
+    }
+  };
 
   // Manage Cards Modal State
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -155,6 +189,23 @@ export default function SuperAdminProgramsListPage() {
     return { total, uniqueSectors, enrolledWorkers };
   }, [programs]);
 
+  const programTabs: ProgramsTabItem[] = useMemo(() => [
+    {
+      id: 'programs',
+      label: 'Programs List',
+      icon: BookOpen,
+      badge: programs.length > 0 ? `${programs.length}` : undefined,
+      description: 'Recruitment & Deployment Schemes',
+    },
+    {
+      id: 'customers',
+      label: 'Program Customer',
+      icon: Users,
+      badge: metrics.enrolledWorkers > 0 ? `${metrics.enrolledWorkers}` : undefined,
+      description: 'Foreign Worker Enrollments & Schemes',
+    },
+  ], [programs.length, metrics.enrolledWorkers]);
+
   const handleDelete = async (id: number) => {
     setIsDeleting(true);
     try {
@@ -243,48 +294,106 @@ export default function SuperAdminProgramsListPage() {
         </div>
       )}
 
-      {/* Header section */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="min-w-0 flex-1">
-          <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
-            <BookOpen size={14} className="shrink-0" />
-            <span>Recruitment &amp; Deployment Schemes</span>
+      {/* ========================================================================= */}
+      {/* TOP TAB SYSTEM: Programs List vs Program Customer */}
+      {/* ========================================================================= */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-2 sm:p-2.5 shadow-xs">
+        <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none py-0.5">
+            {programTabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  id={`program-tab-${tab.id}`}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`group inline-flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer border ${
+                    isActive
+                      ? 'bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white border-transparent shadow-sm shadow-blue-900/15'
+                      : 'bg-slate-50/80 hover:bg-slate-100 text-slate-600 hover:text-slate-900 border-slate-200/90 hover:border-slate-300'
+                  }`}
+                >
+                  <Icon
+                    size={16}
+                    className={`shrink-0 transition-colors ${
+                      isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-700'
+                    }`}
+                  />
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                  {tab.badge !== undefined && (
+                    <span
+                      className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors ${
+                        isActive
+                          ? 'bg-white/20 text-white border border-white/20'
+                          : 'bg-blue-50 text-[#0b4da2] border border-blue-200/70'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            Program Management
-          </h1>
-          <p className="text-slate-500 text-sm mt-0.5 max-w-2xl leading-relaxed">
-            Configure foreign worker recruitment programs, government schemes, quotas, and worker assignments.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
-          <button
-            type="button"
-            onClick={() => setIsCardModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
-          >
-            <SlidersHorizontal size={14} className="text-slate-500 shrink-0" />
-            <span>Manage Cards</span>
-          </button>
-
-          <Link
-            href={`${rootPath}/programs/customers`}
-            className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
-          >
-            <Users size={14} className="text-slate-500 shrink-0" />
-            <span>Program Customers</span>
-          </Link>
-
-          <Link
-            href={`${rootPath}/programs/create`}
-            className="inline-flex items-center justify-center gap-2 h-10 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-sm hover:shadow whitespace-nowrap cursor-pointer"
-          >
-            <Plus size={15} className="shrink-0" />
-            <span>Create Program</span>
-          </Link>
+          <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-slate-200 shrink-0">
+            <span className="text-[11px] text-slate-400 font-medium bg-slate-50 px-2.5 py-1 rounded-lg border border-dashed border-slate-200">
+              Foreign Worker Schemes
+            </span>
+          </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* TAB 1: PROGRAMS LIST VIEW */}
+      {/* ========================================================================= */}
+      {activeTab === 'programs' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Header section */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
+                <BookOpen size={14} className="shrink-0" />
+                <span>Recruitment &amp; Deployment Schemes</span>
+              </div>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                Program Management
+              </h1>
+              <p className="text-slate-500 text-sm mt-0.5 max-w-2xl leading-relaxed">
+                Configure foreign worker recruitment programs, government schemes, quotas, and worker assignments.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => setIsCardModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 active:bg-slate-200 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+              >
+                <SlidersHorizontal size={14} className="text-slate-500 shrink-0" />
+                <span>Manage Cards</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleTabChange('customers')}
+                className="inline-flex items-center justify-center gap-2 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+              >
+                <Users size={14} className="text-slate-500 shrink-0" />
+                <span>Program Customers</span>
+              </button>
+
+              <Link
+                href={`${rootPath}/programs/create`}
+                className="inline-flex items-center justify-center gap-2 h-10 px-4 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-sm hover:shadow whitespace-nowrap cursor-pointer"
+              >
+                <Plus size={15} className="shrink-0" />
+                <span>Create Program</span>
+              </Link>
+            </div>
+          </div>
 
       {/* KPI Cards Grid */}
       {/* KPI Cards Grid */}
@@ -518,6 +627,26 @@ export default function SuperAdminProgramsListPage() {
           </div>
         </div>
       )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: PROGRAM CUSTOMERS VIEW */}
+      {/* ========================================================================= */}
+      {activeTab === 'customers' && (
+        <div className="animate-in fade-in duration-200">
+          <Suspense
+            fallback={
+              <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 max-w-7xl mx-auto">
+                <RefreshCw size={24} className="animate-spin text-indigo-600 mx-auto mb-3" />
+                <p className="text-xs font-semibold text-slate-600">Loading program customers...</p>
+              </div>
+            }
+          >
+            <ProgramCustomersContent onSwitchToProgramsTab={() => handleTabChange('programs')} />
+          </Suspense>
+        </div>
+      )}
 
       {/* Card Priority Customization Modal */}
       <CardPriorityModal
@@ -529,5 +658,20 @@ export default function SuperAdminProgramsListPage() {
         pageTitle="Program Schemes Cards"
       />
     </div>
+  );
+}
+
+export default function SuperAdminProgramsListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 max-w-7xl mx-auto">
+          <RefreshCw size={24} className="animate-spin text-indigo-600 mx-auto mb-3" />
+          <p className="text-xs font-semibold text-slate-600">Loading programs...</p>
+        </div>
+      }
+    >
+      <ProgramsPageContent />
+    </Suspense>
   );
 }

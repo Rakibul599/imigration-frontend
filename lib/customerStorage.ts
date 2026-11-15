@@ -39,7 +39,7 @@ export interface CustomerRecord {
   other_company_boss_phone?: string;
   other_company_address?: string;
   documents?: CustomerDocument[];
-  status: 'active' | 'pending' | 'inactive' | 'absent';
+  status: 'active' | 'pending' | 'inactive' | 'absent' | 'runaway' | 'blacklist';
   created_at?: string;
   updated_at?: string;
   // Legacy fields for backward compatibility

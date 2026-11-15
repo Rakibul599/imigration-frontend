@@ -155,7 +155,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
   });
 
   // Form states strictly matching user requirements
-  const [fullName, setFullName] = useState('');
+  const [fullName, setFullName] = useState(() => searchParams.get('name') || '');
   const [companyId, setCompanyId] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
     const initialComps = filterPermittedCompanies(getStoredCompanies(), portalType);
@@ -177,9 +177,9 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
   const [country, setCountry] = useState('Bangladesh');
   const [passportIssueDate, setPassportIssueDate] = useState('');
   const [passportExpireDate, setPassportExpireDate] = useState('');
-  const [leavingAddress, setLeavingAddress] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
+  const [leavingAddress, setLeavingAddress] = useState(() => searchParams.get('address') || searchParams.get('leaving_address') || '');
+  const [phone, setPhone] = useState(() => searchParams.get('phone') || '');
+  const [email, setEmail] = useState(() => searchParams.get('email') || '');
   const [workingSector, setWorkingSector] = useState('');
   const [workingAddress, setWorkingAddress] = useState('');
   const [basicSalary, setBasicSalary] = useState('RM 2,500');
@@ -190,7 +190,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
   const [profilePic, setProfilePic] = useState<string>('');
   const [profilePicName, setProfilePicName] = useState('');
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
-  const [status, setStatus] = useState<'active' | 'pending' | 'inactive' | 'absent'>('active');
+  const [status, setStatus] = useState<'active' | 'pending' | 'inactive' | 'absent' | 'runaway' | 'blacklist'>('active');
 
   // Target Amount states (Year-based targets)
   const currentTargetYear = useMemo(() => new Date().getFullYear(), []);
@@ -2396,6 +2396,30 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   className="text-purple-600 focus:ring-purple-500 disabled:opacity-75"
                 />
                 <span className="text-purple-700 font-semibold">Absent</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  disabled={effectiveIsViewMode}
+                  name="status"
+                  value="runaway"
+                  checked={status === 'runaway'}
+                  onChange={() => setStatus('runaway')}
+                  className="text-orange-600 focus:ring-orange-500 disabled:opacity-75"
+                />
+                <span className="text-orange-700 font-semibold">Runaway</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  disabled={effectiveIsViewMode}
+                  name="status"
+                  value="blacklist"
+                  checked={status === 'blacklist'}
+                  onChange={() => setStatus('blacklist')}
+                  className="text-rose-950 focus:ring-rose-900 disabled:opacity-75"
+                />
+                <span className="text-rose-900 font-bold">Black List</span>
               </label>
             </div>
           </div>

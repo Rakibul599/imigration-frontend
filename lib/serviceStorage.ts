@@ -12,6 +12,7 @@ export interface ServiceCard {
   order_num?: number;
   db_id?: number;
   status?: string;
+  zero_cost?: boolean;
 }
 
 const STORAGE_KEY = 'agency_service_cards_cache';
@@ -41,6 +42,7 @@ const initialDefaultCards: ServiceCard[] = defaultServices.map((s, index) => ({
   is_core: s.id === 'customer' || s.id === 'document-download',
   order_num: index + 1,
   status: 'active',
+  zero_cost: false,
 }));
 
 /**
@@ -119,6 +121,7 @@ export async function fetchServiceCards(): Promise<ServiceCard[]> {
           order_num: typeof item.order_num === 'number' ? item.order_num : (idx + 1),
           db_id: item.id,
           status: item.status || 'active',
+          zero_cost: Boolean(item.zero_cost),
         }));
 
         const sorted = sortCards(formatted);
@@ -154,6 +157,7 @@ export async function createServiceCard(
       image: cardData.image,
       tag: cardData.tag,
       order_num: cardData.order_num ?? (current.length + 1),
+      zero_cost: cardData.zero_cost ? 1 : 0,
     }),
   });
 
@@ -178,6 +182,7 @@ export async function createServiceCard(
     order_num: created.order_num ?? (cardData.order_num ?? (current.length + 1)),
     db_id: created.id,
     status: created.status || 'active',
+    zero_cost: created.zero_cost !== undefined ? Boolean(created.zero_cost) : Boolean(cardData.zero_cost),
   };
 
   const updated = sortCards([...current.filter((c) => c.id !== newCard.id && (!newCard.db_id || c.db_id !== newCard.db_id)), newCard]);
@@ -211,6 +216,7 @@ export async function updateServiceCard(
       image: updates.image,
       tag: updates.tag,
       order_num: updates.order_num,
+      zero_cost: updates.zero_cost !== undefined ? (updates.zero_cost ? 1 : 0) : (target.zero_cost ? 1 : 0),
     }),
   });
 
@@ -234,6 +240,7 @@ export async function updateServiceCard(
     order_num: typeof updatedBackend.order_num === 'number' ? updatedBackend.order_num : (updates.order_num ?? target.order_num),
     db_id: updatedBackend.id ?? target.db_id,
     id: updatedBackend.slug || target.id,
+    zero_cost: updatedBackend.zero_cost !== undefined ? Boolean(updatedBackend.zero_cost) : (updates.zero_cost !== undefined ? Boolean(updates.zero_cost) : target.zero_cost),
   };
 
   current[index] = merged;
@@ -282,6 +289,7 @@ export async function reorderServiceCards(newOrderList: ServiceCard[]): Promise<
           order_num: typeof item.order_num === 'number' ? item.order_num : (idx + 1),
           db_id: item.id,
           status: item.status || 'active',
+          zero_cost: Boolean(item.zero_cost),
         }));
         const sorted = sortCards(backendFormatted);
         saveServicesToCache(sorted);

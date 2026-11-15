@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -27,7 +27,21 @@ export default function FreeTrialDropdownButton({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dynamicPlans, setDynamicPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verticalPosition, setVerticalPosition] = useState<'down' | 'up'>('down');
+  const [horizontalPosition, setHorizontalPosition] = useState<'right' | 'left'>('right');
+  const [popoverCoords, setPopoverCoords] = useState<{
+    top?: number | string;
+    bottom?: number | string;
+    left?: number | string;
+    right?: number | string;
+    maxHeight?: number | string;
+  }>({
+    left: 'calc(100% + 14px)',
+    top: '0px',
+  });
+
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   // Load plans from backend dynamically
@@ -44,8 +58,118 @@ export default function FreeTrialDropdownButton({
       });
   }, []);
 
+  const updatePosition = useCallback(() => {
+    if (!wrapperRef.current) return;
+    const rect = wrapperRef.current.getBoundingClientRect();
+    const windowHeight = window.innerHeight;
+    const windowWidth = window.innerWidth;
+    const isDesktop = windowWidth >= 640;
+    const modalHeight = 420;
+    const modalWidth = 400;
+    const padding = 16;
+
+    const spaceBelow = windowHeight - rect.top;
+    const spaceAbove = rect.bottom;
+    const spaceRight = windowWidth - rect.right;
+    const spaceLeft = rect.left;
+    const effectiveMaxHeight = Math.min(modalHeight, windowHeight - padding * 2);
+
+    if (isDesktop) {
+      // Horizontal placement: right side by default unless right edge is too tight
+      let leftStyle: string | undefined = 'calc(100% + 14px)';
+      let rightStyle: string | undefined = 'auto';
+
+      if (spaceRight < modalWidth + padding && spaceLeft > spaceRight) {
+        setHorizontalPosition('left');
+        leftStyle = 'auto';
+        rightStyle = 'calc(100% + 14px)';
+      } else {
+        setHorizontalPosition('right');
+        leftStyle = 'calc(100% + 14px)';
+        rightStyle = 'auto';
+      }
+
+      // Vertical placement:
+      // If modal would overflow the bottom of the viewport and there is more room above
+      if (spaceBelow < modalHeight + padding && spaceAbove > spaceBelow) {
+        // Auto rise UP!
+        setVerticalPosition('up');
+
+        // Align modal bottom with button bottom:
+        let topOffset = rect.height - modalHeight;
+
+        // Clamp so it never overflows viewport top or bottom
+        const topInViewport = rect.top + topOffset;
+        if (topInViewport < padding) {
+          topOffset = padding - rect.top;
+        } else if (rect.bottom > windowHeight - padding) {
+          topOffset = windowHeight - padding - modalHeight - rect.top;
+        }
+
+        setPopoverCoords({
+          left: leftStyle,
+          right: rightStyle,
+          top: `${topOffset}px`,
+          bottom: 'auto',
+          maxHeight: `${effectiveMaxHeight}px`,
+        });
+      } else {
+        // Open DOWN!
+        setVerticalPosition('down');
+
+        // Align modal top with button top
+        let topOffset = 0;
+        if (rect.top + modalHeight > windowHeight - padding) {
+          topOffset = Math.max(padding - rect.top, windowHeight - padding - modalHeight - rect.top);
+        }
+
+        setPopoverCoords({
+          left: leftStyle,
+          right: rightStyle,
+          top: `${topOffset}px`,
+          bottom: 'auto',
+          maxHeight: `${effectiveMaxHeight}px`,
+        });
+      }
+    } else {
+      // Mobile: Below or Above the button
+      if (spaceBelow < modalHeight + padding && spaceAbove > spaceBelow) {
+        setVerticalPosition('up');
+        setPopoverCoords({
+          left: 0,
+          right: 'auto',
+          bottom: 'calc(100% + 8px)',
+          top: 'auto',
+          maxHeight: `${effectiveMaxHeight}px`,
+        });
+      } else {
+        setVerticalPosition('down');
+        setPopoverCoords({
+          left: 0,
+          right: 'auto',
+          top: 'calc(100% + 8px)',
+          bottom: 'auto',
+          maxHeight: `${effectiveMaxHeight}px`,
+        });
+      }
+    }
+  }, []);
+
+  // Recalculate position dynamically when open and during scroll/resize
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, { passive: true });
+    window.addEventListener('resize', updatePosition, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [dropdownOpen, updatePosition]);
+
   const handleMouseEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    updatePosition();
     setDropdownOpen(true);
   };
 
@@ -68,6 +192,7 @@ export default function FreeTrialDropdownButton({
 
   return (
     <div
+      ref={wrapperRef}
       className="relative inline-block text-left"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -98,32 +223,59 @@ export default function FreeTrialDropdownButton({
         )}
       </button>
 
-      {/* Floating Dropdown on Hover - strictly left-aligned to button, opens towards the right only when plans exist */}
+      {/* Floating Dropdown on Hover - Dynamically placed on right side, auto rising up or down based on screen space */}
       {dynamicPlans.length > 0 && (
         <div
-          className={`absolute mt-2 w-[340px] sm:w-[380px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-slate-200/90 p-3 transition-all duration-200 origin-top-left ${
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className={`absolute w-[340px] sm:w-[400px] h-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200/90 p-3.5 flex flex-col transition-all duration-200 ${
+            verticalPosition === 'up'
+              ? horizontalPosition === 'left'
+                ? 'origin-bottom sm:origin-bottom-right'
+                : 'origin-bottom sm:origin-bottom-left'
+              : horizontalPosition === 'left'
+              ? 'origin-top sm:origin-top-right'
+              : 'origin-top sm:origin-top-left'
+          } ${
             dropdownOpen
-              ? 'opacity-100 visible translate-y-0 scale-100 pointer-events-auto'
-              : 'opacity-0 invisible -translate-y-2 scale-95 pointer-events-none'
+              ? 'opacity-100 visible scale-100 pointer-events-auto'
+              : 'opacity-0 invisible scale-95 pointer-events-none'
           }`}
-          style={{ left: 0, right: 'auto', zIndex: 9999 }}
+          style={{
+            zIndex: 9999,
+            ...popoverCoords,
+          }}
         >
           {/* Transparent Hover Safety Bridge */}
-          <div className="absolute -top-3 left-0 w-full h-3" />
+          {/* Desktop: Horizontal bridge on both left and right sides */}
+          <div className="hidden sm:block absolute -left-5 top-0 w-5 h-full pointer-events-auto" />
+          <div className="hidden sm:block absolute -right-5 top-0 w-5 h-full pointer-events-auto" />
+          {/* Mobile: Vertical bridge */}
+          <div
+            className={`block sm:hidden absolute left-0 w-full h-4 pointer-events-auto ${
+              verticalPosition === 'up' ? '-bottom-4' : '-top-4'
+            }`}
+          />
 
           {/* Header banner */}
-          <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-xl border border-blue-100/70 mb-2 flex items-center justify-between">
+          <div className="shrink-0 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50/60 rounded-xl border border-blue-100/70 mb-2 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-xs font-bold text-[#0b4da2]">
-              <Sparkles size={14} className="text-amber-500" />
+              <Sparkles size={14} className="text-amber-500 shrink-0" />
               <span>Includes 3-Days Full Free Trial</span>
             </div>
-            <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider">
+            <span className="text-[10px] bg-emerald-600 text-white font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">
               No Risk
             </span>
           </div>
 
-          {/* Dynamic Plan Packages List */}
-          <div className="space-y-1.5 max-h-[310px] overflow-y-auto pr-1">
+          {/* Dynamic Plan Packages List - Scrollable */}
+          <div
+            className="flex-1 overflow-y-auto space-y-2 pr-1.5"
+            style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#94a3b8 #f1f5f9',
+            }}
+          >
             {dynamicPlans.map((pkg) => {
               const isPopular = pkg.is_popular;
               return (
@@ -199,9 +351,9 @@ export default function FreeTrialDropdownButton({
           </div>
 
           {/* Footer note */}
-          <div className="pt-2.5 mt-2 border-t border-slate-100 px-2 flex items-center justify-between text-[10px] text-slate-500">
+          <div className="shrink-0 pt-2.5 mt-2 border-t border-slate-100 px-2 flex items-center justify-between text-[10px] text-slate-500">
             <span className="flex items-center gap-1">
-              <ShieldCheck size={12} className="text-emerald-500" />
+              <ShieldCheck size={12} className="text-emerald-500 shrink-0" />
               <span>Super Admin review & approval</span>
             </span>
             <span className="font-semibold text-slate-700">Master Admin Access</span>

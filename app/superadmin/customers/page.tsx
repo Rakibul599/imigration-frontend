@@ -109,7 +109,7 @@ export default function SuperAdminCustomersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('ALL');
   const [selectedSector, setSelectedSector] = useState('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'pending' | 'inactive'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'active' | 'pending' | 'inactive' | 'absent' | 'runaway' | 'blacklist'>('ALL');
 
   // Inspection & Deletion Modals
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -412,6 +412,8 @@ export default function SuperAdminCustomersPage() {
               <option value="pending">Pending</option>
               <option value="inactive">Inactive</option>
               <option value="absent">Absent</option>
+              <option value="runaway">Runaway</option>
+              <option value="blacklist">Black List</option>
             </select>
           </div>
         </div>
@@ -563,6 +565,10 @@ export default function SuperAdminCustomersPage() {
                               ? 'bg-amber-50 text-amber-700 border border-amber-200'
                               : cust.status === 'absent'
                               ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                              : cust.status === 'runaway'
+                              ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                              : cust.status === 'blacklist'
+                              ? 'bg-rose-950 text-rose-100 border border-rose-900'
                               : 'bg-rose-50 text-rose-700 border border-rose-200'
                           }`}
                         >
@@ -574,10 +580,14 @@ export default function SuperAdminCustomersPage() {
                                 ? 'bg-amber-500'
                                 : cust.status === 'absent'
                                 ? 'bg-purple-500'
+                                : cust.status === 'runaway'
+                                ? 'bg-orange-500'
+                                : cust.status === 'blacklist'
+                                ? 'bg-rose-400'
                                 : 'bg-rose-500'
                             }`}
                           />
-                          <span className="capitalize">{cust.status || 'Active'}</span>
+                          <span className="capitalize">{cust.status === 'blacklist' ? 'Black List' : cust.status || 'Active'}</span>
                         </span>
                       </td>
 

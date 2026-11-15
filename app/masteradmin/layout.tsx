@@ -35,8 +35,10 @@ import {
   Sparkles,
   Target,
   UserCheck,
+  UserMinus,
   UserPlus,
   Users,
+  UserX,
   X,
 } from 'lucide-react';
 import {
@@ -329,7 +331,10 @@ export default function MasterAdminLayout({
       pathname.startsWith('/masteradmin/companies/invoices')
     ) {
       setAccountsMenuOpen(true);
-    } else if (pathname.startsWith('/masteradmin/companies')) {
+    } else if (
+      pathname.startsWith('/masteradmin/companies') ||
+      pathname.startsWith('/masteradmin/programs')
+    ) {
       setCompanyMenuOpen(true);
     }
     if (pathname.startsWith('/masteradmin/employees')) {
@@ -392,55 +397,32 @@ export default function MasterAdminLayout({
         title: 'Company  employe and worker management',
         items: [
           {
-            name: 'Dashboard Overview',
-            href: '/masteradmin',
+            name: 'Companies Dashboard',
             icon: LayoutDashboard,
-            badge: 'Live',
-          },
-          {
-            name: 'Company Management',
-            icon: Building2,
             badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
             isGroup: true,
             children: [
               {
-                name: 'Company List',
+                name: 'Companies',
                 href: '/masteradmin/companies',
                 icon: Building2,
                 badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
               },
               {
-                name: 'Company Sectors',
+                name: 'Company Sector',
                 href: '/masteradmin/companies/sectors',
                 icon: Briefcase,
               },
               {
-                name: 'Subscription Plans',
-                href: '/masteradmin/companies/plans',
-                icon: Layers,
-              },
-            ],
-          },
-          {
-            name: 'Program Management',
-            icon: BookOpen,
-            isGroup: true,
-            badge: programCount > 0 ? `${programCount}` : undefined,
-            children: [
-              {
-                name: 'Create Program',
-                href: '/masteradmin/programs/create',
-                icon: PlusCircle,
-              },
-              {
-                name: 'Programs List',
+                name: 'Programs',
                 href: '/masteradmin/programs',
                 icon: BookOpen,
+                badge: programCount > 0 ? `${programCount}` : undefined,
               },
               {
-                name: 'Program Customers',
-                href: '/masteradmin/programs/customers',
-                icon: Users,
+                name: 'Subscription Plan',
+                href: '/masteradmin/companies/plans',
+                icon: Layers,
               },
             ],
           },
@@ -476,20 +458,39 @@ export default function MasterAdminLayout({
           },
           {
             name: 'Customer Management',
-            icon: UserCheck,
+            icon: Users,
             badge: customerCount > 0 ? `${customerCount}` : undefined,
             isGroup: true,
             children: [
               {
-                name: 'Create Customer',
-                href: '/masteradmin/customers/create',
-                icon: PlusCircle,
+                name: 'Customer Dashboard',
+                href: '/masteradmin/customers/dashboard',
+                icon: LayoutDashboard,
               },
               {
-                name: 'Customer List',
-                href: '/masteradmin/customers',
-                icon: Users,
-                badge: customerCount > 0 ? `${customerCount}` : undefined,
+                name: 'Active Customer',
+                href: '/masteradmin/customers/active',
+                icon: UserCheck,
+              },
+              {
+                name: 'Inactive Customer',
+                href: '/masteradmin/customers/inactive',
+                icon: UserX,
+              },
+              {
+                name: 'Runaway Customer',
+                href: '/masteradmin/customers/runaway',
+                icon: UserMinus,
+              },
+              {
+                name: 'Black List Customer',
+                href: '/masteradmin/customers/blacklist',
+                icon: ShieldAlert,
+              },
+              {
+                name: 'Future Customer',
+                href: '/masteradmin/customers/future',
+                icon: Sparkles,
               },
               {
                 name: 'Customer Target Amount',
@@ -740,10 +741,14 @@ export default function MasterAdminLayout({
 
                     if (link.isGroup) {
                       const isChildActive = link.children?.some(
-                        (child) => pathname === child.href || pathname.startsWith(child.href)
+                        (child) =>
+                          pathname === child.href ||
+                          (child.href === '/masteradmin/companies' && (pathname === '/masteradmin' || pathname === '/companies')) ||
+                          (child.href === '/masteradmin/programs' && pathname.startsWith('/masteradmin/programs')) ||
+                          pathname.startsWith(child.href)
                       );
                       const isGroupOpen =
-                        link.name === 'Company Management'
+                        link.name === 'Companies Dashboard' || link.name === 'Company Management'
                           ? companyMenuOpen
                           : link.name === 'Account Management'
                             ? accountsMenuOpen
@@ -758,7 +763,7 @@ export default function MasterAdminLayout({
                                     : employeeMenuOpen;
                       const toggleGroup = () => {
                         if (!sidebarOpen) setSidebarOpen(true);
-                        if (link.name === 'Company Management') {
+                        if (link.name === 'Companies Dashboard' || link.name === 'Company Management') {
                           setCompanyMenuOpen(!companyMenuOpen);
                         } else if (link.name === 'Account Management') {
                           setAccountsMenuOpen(!accountsMenuOpen);

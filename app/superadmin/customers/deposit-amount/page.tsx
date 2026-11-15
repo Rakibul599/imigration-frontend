@@ -40,6 +40,12 @@ import {
   getStoredCustomerPendings,
   getFileUrl,
 } from '@/lib/customerFinanceStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
+import {
+  ServiceCard,
+  getStoredServices,
+  fetchServiceCards,
+} from '@/lib/serviceStorage';
 
 const PAYMENT_METHODS = [
   'Bank Transfer',
@@ -61,22 +67,35 @@ const MALAYSIAN_BANKS = [
   'Other / Cash CDM',
 ];
 
-export default function SuperadminCustomerDepositAmountPage() {
+export default function CustomerDepositAmountPage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [records, setRecords] = useState<CustomerDepositAmountRecord[]>([]);
+  const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
+    return typeof window !== 'undefined' ? getStoredServices() : [];
+  });
   // Selected customer
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
 
-  // Form states
+  // Service cards filtered: exclude core cards and exclude cards with zero_cost ON
+  const selectableServices = useMemo(() => {
+    return availableServices.filter(
+      (s) => s.id !== 'customer' && s.id !== 'document-download' && !s.zero_cost
+    );
+  }, [availableServices]);
+
+  // Form states - no default values/text
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formAmount, setFormAmount] = useState<number | ''>(1200);
-  const [formDate, setFormDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [formMethod, setFormMethod] = useState<typeof PAYMENT_METHODS[number]>('Bank Transfer');
-  const [formBank, setFormBank] = useState(MALAYSIAN_BANKS[0]);
+  const [formAmount, setFormAmount] = useState<number | ''>('');
+  const [formDate, setFormDate] = useState<string>('');
+  const [formProgram, setFormProgram] = useState<string>('');
+  const [formSector, setFormSector] = useState<string>('');
+  const [formMethod, setFormMethod] = useState<string>('');
+  const [formBank, setFormBank] = useState<string>('');
   const [formDepositedBy, setFormDepositedBy] = useState('');
   const [formReceiptNo, setFormReceiptNo] = useState('');
-  const [formPurpose, setFormPurpose] = useState('Passport Copy & Clearance Document');
+  const [formPurpose, setFormPurpose] = useState('');
   const [formReceiptUrl, setFormReceiptUrl] = useState<string | null>(null);
   const [formReceiptFilename, setFormReceiptFilename] = useState<string>('');
   const [formStatus, setFormStatus] = useState<'Payment Success' | 'Payment Pending'>('Payment Success');
@@ -93,6 +112,15 @@ export default function SuperadminCustomerDepositAmountPage() {
     setCompanies(getStoredCompanies());
     fetchCompaniesFromBackend().then((compList) => {
       if (Array.isArray(compList) && compList.length > 0) setCompanies(compList);
+    }).catch(() => {});
+
+    setPrograms(getStoredPrograms());
+    fetchPrograms().then((progList) => {
+      if (Array.isArray(progList) && progList.length > 0) setPrograms(progList);
+    }).catch(() => {});
+
+    fetchServiceCards().then((svcList) => {
+      if (Array.isArray(svcList) && svcList.length > 0) setAvailableServices(svcList);
     }).catch(() => {});
 
     setRecords(getStoredCustomerDeposits());
@@ -140,16 +168,27 @@ export default function SuperadminCustomerDepositAmountPage() {
     return companies.find((c) => String(c.id) === String(compId) || c.name.toLowerCase() === compId.toLowerCase()) || null;
   }, [companies, selectedCustomer]);
 
-  // Auto-fill Reference with Agent Name & Deposited By with Customer Name
+  // Auto-fill Program, Sector, Reference, and Deposited By when Customer is selected
   useEffect(() => {
     if (selectedCustomer && !editingId) {
+      const pName =
+        selectedCustomer.program_name ||
+        programs.find((p) => String(p.id) === String(selectedCustomer.program_id))?.name ||
+        '';
+      setFormProgram(pName);
+      setFormSector(selectedCustomer.working_sector || '');
       const agentVal = selectedCustomer.agent_name || selectedCustomer.agent_id || '';
       setFormReceiptNo(agentVal);
       if (!formDepositedBy) {
         setFormDepositedBy(selectedCustomer.full_name);
       }
+    } else if (!selectedCustomer && !editingId) {
+      setFormProgram('');
+      setFormSector('');
+      setFormReceiptNo('');
+      setFormDepositedBy('');
     }
-  }, [selectedCustomer, editingId]);
+  }, [selectedCustomer, programs, editingId]);
 
   const customerOptions: Select2Option[] = useMemo(() => {
     return customers.map((c) => ({
@@ -234,6 +273,10 @@ export default function SuperadminCustomerDepositAmountPage() {
       showToast('info', 'Please enter a valid deposit amount.');
       return;
     }
+    if (!formDate) {
+      showToast('info', 'Please enter deposit date.');
+      return;
+    }
     if (!formBank.trim()) {
       showToast('info', 'Please enter a bank name.');
       return;
@@ -256,15 +299,18 @@ export default function SuperadminCustomerDepositAmountPage() {
       nid_no: selectedCustomer.nid_no,
       company_id: selectedCustomer.company_id,
       company_name: companyInfo?.name || selectedCustomer.company_id,
+      program_id: selectedCustomer.program_id,
+      program_name: formProgram.trim(),
+      sector: formSector.trim(),
       deposit_amount: Number(formAmount),
       target_amount: targetSnapshot,
       remaining_pending: remainingPendingSnapshot,
       deposit_date: formDate,
-      payment_method: formMethod,
+      payment_method: (formMethod || 'Bank Transfer') as any,
       bank_name: formBank.trim(),
       receipt_no: formReceiptNo.trim(),
       deposited_by: formDepositedBy.trim(),
-      purpose: formPurpose,
+      purpose: formPurpose || 'Deposit Payment',
       receipt_url: formReceiptUrl || undefined,
       receipt_filename: formReceiptFilename || undefined,
       verification_status: formStatus,
@@ -283,7 +329,15 @@ export default function SuperadminCustomerDepositAmountPage() {
     );
 
     setEditingId(null);
-    setFormAmount(1200);
+    setFormAmount('');
+    setFormDate('');
+    setFormProgram('');
+    setFormSector('');
+    setFormBank('');
+    setFormPurpose('');
+    setFormMethod('');
+    setFormReceiptNo('');
+    setFormDepositedBy('');
     setFormReceiptUrl(null);
     setFormReceiptFilename('');
     setFormRemarks('');
@@ -331,17 +385,28 @@ export default function SuperadminCustomerDepositAmountPage() {
                 setSelectedCustomerId(val);
                 const cust = customers.find((c) => String(c.id) === String(val));
                 if (cust) {
+                  const pName =
+                    cust.program_name ||
+                    programs.find((p) => String(p.id) === String(cust.program_id))?.name ||
+                    '';
+                  setFormProgram(pName);
+                  setFormSector(cust.working_sector || '');
                   setFormReceiptNo(cust.agent_name || cust.agent_id || '');
                   setFormDepositedBy(cust.full_name);
+                } else {
+                  setFormProgram('');
+                  setFormSector('');
+                  setFormReceiptNo('');
+                  setFormDepositedBy('');
                 }
               }}
-              placeholder="Search by customer name, passport number, NID..."
+              placeholder=""
             />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <Link
-              href={selectedCustomerId ? `/superadmin/customers/deposit-amount/history?customerId=${selectedCustomerId}` : '/superadmin/customers/deposit-amount/history'}
+              href={selectedCustomerId ? `/customers/deposit-amount/history?customerId=${selectedCustomerId}` : '/customers/deposit-amount/history'}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors no-underline"
             >
               <Receipt size={14} />
@@ -349,7 +414,7 @@ export default function SuperadminCustomerDepositAmountPage() {
             </Link>
 
             <Link
-              href="/superadmin/customers"
+              href="/customers"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors no-underline"
             >
               <Users size={14} />
@@ -512,7 +577,7 @@ export default function SuperadminCustomerDepositAmountPage() {
         </div>
 
         <Link
-          href={selectedCustomerId ? `/superadmin/customers/deposit-amount/history?customerId=${selectedCustomerId}` : '/superadmin/customers/deposit-amount/history'}
+          href={selectedCustomerId ? `/customers/deposit-amount/history?customerId=${selectedCustomerId}` : '/customers/deposit-amount/history'}
           className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-colors cursor-pointer shrink-0 no-underline"
         >
           <Receipt size={14} />
@@ -543,7 +608,17 @@ export default function SuperadminCustomerDepositAmountPage() {
                 type="button"
                 onClick={() => {
                   setEditingId(null);
-                  setFormAmount(1200);
+                  setFormAmount('');
+                  setFormDate('');
+                  setFormProgram('');
+                  setFormSector('');
+                  setFormBank('');
+                  setFormPurpose('');
+                  setFormMethod('');
+                  setFormReceiptNo('');
+                  setFormDepositedBy('');
+                  setFormReceiptUrl(null);
+                  setFormReceiptFilename('');
                   setFormRemarks('');
                 }}
                 className="text-xs text-red-600 hover:text-red-700 font-semibold px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 cursor-pointer"
@@ -554,7 +629,7 @@ export default function SuperadminCustomerDepositAmountPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Grid 1: Amount, Date, Purpose, Method */}
+            {/* Grid 1: Amount, Date, Program, Sector, Purpose, Method, Bank, Deposited By, Ref, Status */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* 1. Deposit Amount */}
               <div>
@@ -570,7 +645,6 @@ export default function SuperadminCustomerDepositAmountPage() {
                     required
                     value={formAmount}
                     onChange={(e) => setFormAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="1200.00"
                     className="w-full pl-10 pr-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
                   />
                 </div>
@@ -590,16 +664,55 @@ export default function SuperadminCustomerDepositAmountPage() {
                 />
               </div>
 
-              {/* 3. Payment Purpose: Document Select */}
+              {/* 3. Program (Auto-filled on customer select) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Program <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formProgram}
+                  onChange={(e) => setFormProgram(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-medium text-slate-900"
+                />
+              </div>
+
+              {/* 4. Sector (Auto-filled on customer select) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Sector <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formSector}
+                  onChange={(e) => setFormSector(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-medium text-slate-900"
+                />
+              </div>
+
+              {/* 5. Payment Purpose: Service Cards & Documents Select */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Payment Purpose (Document) <span className="text-red-500">*</span>
                 </label>
                 <select
+                  required
                   value={formPurpose}
                   onChange={(e) => setFormPurpose(e.target.value)}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-medium"
                 >
+                  <option value="">Select Purpose (Document)</option>
+                  {selectableServices.length > 0 && (
+                    <optgroup label="Service Cards">
+                      {selectableServices.map((svc) => (
+                        <option key={svc.id} value={svc.title}>
+                          {svc.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                   {selectedCustomer?.documents && selectedCustomer.documents.length > 0 && (
                     <optgroup label="Customer Profile Documents">
                       {selectedCustomer.documents.map((d, i) => (
@@ -609,20 +722,10 @@ export default function SuperadminCustomerDepositAmountPage() {
                       ))}
                     </optgroup>
                   )}
-                  <optgroup label="Standard Documents & Fees">
-                    <option value="Passport Copy & Clearance Document">Passport Copy & Clearance Document</option>
-                    <option value="Immigration Levi Quota Document">Immigration Levi Quota Document</option>
-                    <option value="Calling Visa & Stamping Document">Calling Visa & Stamping Document</option>
-                    <option value="FOMEMA Medical Examination Report">FOMEMA Medical Examination Report</option>
-                    <option value="Foreign Worker Insurance & Bond">Foreign Worker Insurance & Bond</option>
-                    <option value="Work Permit Renewal Document">Work Permit Renewal Document</option>
-                    <option value="Airport Clearance & Logistics">Airport Clearance & Logistics</option>
-                    <option value="General Account Balance Deposit">General Account Balance Deposit</option>
-                  </optgroup>
                 </select>
               </div>
 
-              {/* 4. Payment Method - Positioned AFTER Payment Purpose */}
+              {/* 6. Payment Method */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Payment Method <span className="text-red-500">*</span>
@@ -632,13 +735,14 @@ export default function SuperadminCustomerDepositAmountPage() {
                   onChange={(e) => setFormMethod(e.target.value as any)}
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-semibold"
                 >
+                  <option value="">Select Payment Method</option>
                   {PAYMENT_METHODS.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
               </div>
 
-              {/* 5. Deposit Bank Name - ONLY TEXT INPUT */}
+              {/* 7. Deposit Bank Name */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Deposit Bank Name <span className="text-red-500">*</span>
@@ -648,12 +752,11 @@ export default function SuperadminCustomerDepositAmountPage() {
                   required
                   value={formBank}
                   onChange={(e) => setFormBank(e.target.value)}
-                  placeholder="e.g. Maybank, CIMB Bank, Public Bank..."
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-medium text-slate-900"
                 />
               </div>
 
-              {/* 6. Deposited By (Name) - Positioned immediately after Bank Name */}
+              {/* 8. Deposited By (Name) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Deposited By (Name) <span className="text-red-500">*</span>
@@ -663,12 +766,11 @@ export default function SuperadminCustomerDepositAmountPage() {
                   required
                   value={formDepositedBy}
                   onChange={(e) => setFormDepositedBy(e.target.value)}
-                  placeholder="e.g. Self, Sponsor, or Depositor Name"
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
                 />
               </div>
 
-              {/* 7. Reference No (Auto Agent Name) */}
+              {/* 9. Reference No (Auto Agent Name) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Reference No (Agent Name)
@@ -677,12 +779,11 @@ export default function SuperadminCustomerDepositAmountPage() {
                   type="text"
                   value={formReceiptNo}
                   onChange={(e) => setFormReceiptNo(e.target.value)}
-                  placeholder="Auto-filled with Agent Name or enter Ref"
                   className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
                 />
               </div>
 
-              {/* 8. Status: 2 Options (Payment Success, Payment Pending) */}
+              {/* 10. Status: 2 Options (Payment Success, Payment Pending) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   Payment Status <span className="text-red-500">*</span>
@@ -736,7 +837,6 @@ export default function SuperadminCustomerDepositAmountPage() {
                   type="text"
                   value={formRemarks}
                   onChange={(e) => setFormRemarks(e.target.value)}
-                  placeholder="e.g. Transaction details, online transfer notes..."
                   className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
                 />
               </div>

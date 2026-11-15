@@ -39,6 +39,7 @@ import {
   getStoredServices,
   fetchServiceCards,
 } from '@/lib/serviceStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
 
 const EXPENSE_CATEGORIES = [
   'Immigration Levi (JIM Direct)',
@@ -53,32 +54,34 @@ const EXPENSE_CATEGORIES = [
 
 export default function CustomerCompanyCostPage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [records, setRecords] = useState<CustomerCompanyCostRecord[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
 
   const [availableServices, setAvailableServices] = useState<ServiceCard[]>(() => {
     return typeof window !== 'undefined' ? getStoredServices() : [];
   });
 
+  // Service Tag options: exclude core cards and exclude cards with zero_cost ON
   const selectableServices = useMemo(() => {
     return availableServices.filter(
-      (s) => s.id !== 'customer' && s.id !== 'document-download'
+      (s) => s.id !== 'customer' && s.id !== 'document-download' && !s.zero_cost
     );
   }, [availableServices]);
 
   // Form states
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formCategory, setFormCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [formProgram, setFormProgram] = useState('');
+  const [formSector, setFormSector] = useState('');
   const [formDate, setFormDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [formSource, setFormSource] = useState('Company Treasury');
   const [formRefNo, setFormRefNo] = useState(`COST-${Date.now().toString().slice(-6)}`);
   const [formStatus, setFormStatus] = useState<'Paid' | 'Incurred' | 'Reconciled'>('Paid');
   const [formRemarks, setFormRemarks] = useState('');
 
-  // Multiple Documents list
+  // Multiple Documents list (no expire_date)
   const [documents, setDocuments] = useState<CompanyCostDocument[]>([
     {
       id: `doc_1`,
@@ -88,7 +91,6 @@ export default function CustomerCompanyCostPage() {
       service_category: 'General Document',
       value: 1200,
       issue_date: new Date().toISOString().split('T')[0],
-      expire_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     },
   ]);
 
@@ -100,6 +102,11 @@ export default function CustomerCompanyCostPage() {
     setCustomers(getStoredCustomers());
     fetchCustomersFromBackend().then((list) => {
       if (Array.isArray(list) && list.length > 0) setCustomers(list);
+    }).catch(() => {});
+
+    setPrograms(getStoredPrograms());
+    fetchPrograms().then((progList) => {
+      if (Array.isArray(progList) && progList.length > 0) setPrograms(progList);
     }).catch(() => {});
 
     fetchServiceCards().then((svcList) => {
@@ -126,6 +133,21 @@ export default function CustomerCompanyCostPage() {
     return customers.find((c) => String(c.id) === String(selectedCustomerId)) || null;
   }, [customers, selectedCustomerId]);
 
+  // Auto-fill Program and Sector when Customer is selected
+  useEffect(() => {
+    if (selectedCustomer && !editingId) {
+      const pName =
+        selectedCustomer.program_name ||
+        programs.find((p) => String(p.id) === String(selectedCustomer.program_id))?.name ||
+        '';
+      setFormProgram(pName);
+      setFormSector(selectedCustomer.working_sector || '');
+    } else if (!selectedCustomer && !editingId) {
+      setFormProgram('');
+      setFormSector('');
+    }
+  }, [selectedCustomer, programs, editingId]);
+
   const customerOptions: Select2Option[] = useMemo(() => {
     return customers.map((c) => ({
       value: String(c.id),
@@ -146,7 +168,6 @@ export default function CustomerCompanyCostPage() {
         service_category: 'General Document',
         value: 0,
         issue_date: new Date().toISOString().split('T')[0],
-        expire_date: '',
       },
     ]);
   };
@@ -221,7 +242,6 @@ export default function CustomerCompanyCostPage() {
       service_category: d.service_name || 'General Document',
       value: 0,
       issue_date: d.issue_date || '',
-      expire_date: d.expire_date || '',
       fileName: d.name || 'document',
       fileSize: d.size || '',
       fileType: d.type || '',
@@ -262,7 +282,7 @@ export default function CustomerCompanyCostPage() {
       company_id: selectedCustomer.company_id,
       company_name: selectedCustomer.company_id,
       total_cost_amount: calculatedTotalCost,
-      expense_category: formCategory,
+      expense_category: formProgram || 'General Cost',
       expense_date: formDate,
       payment_source: formSource,
       reference_no: formRefNo.trim(),
@@ -294,7 +314,6 @@ export default function CustomerCompanyCostPage() {
         service_category: 'General Document',
         value: 1200,
         issue_date: new Date().toISOString().split('T')[0],
-        expire_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       },
     ]);
   };
@@ -302,7 +321,18 @@ export default function CustomerCompanyCostPage() {
   const handleEdit = (r: CustomerCompanyCostRecord) => {
     setEditingId(String(r.id));
     setSelectedCustomerId(String(r.customer_id));
-    setFormCategory(r.expense_category);
+    const cust = customers.find((c) => String(c.id) === String(r.customer_id));
+    if (cust) {
+      const pName =
+        cust.program_name ||
+        programs.find((p) => String(p.id) === String(cust.program_id))?.name ||
+        '';
+      setFormProgram(pName);
+      setFormSector(cust.working_sector || '');
+    } else {
+      setFormProgram(r.expense_category || '');
+      setFormSector('');
+    }
     setFormDate(r.expense_date);
     setFormSource(r.payment_source || 'Company Treasury');
     setFormRefNo(r.reference_no || '');
@@ -324,12 +354,12 @@ export default function CustomerCompanyCostPage() {
         !searchTerm ||
         r.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.passport_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.reference_no?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCat = filterCategory === 'ALL' || r.expense_category === filterCategory;
+        r.reference_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.expense_category?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchStat = filterStatus === 'ALL' || r.status === filterStatus;
-      return matchSearch && matchCat && matchStat;
+      return matchSearch && matchStat;
     });
-  }, [records, searchTerm, filterCategory, filterStatus]);
+  }, [records, searchTerm, filterStatus]);
 
   const grandTotalCost = records.reduce((acc, r) => acc + (r.total_cost_amount || 0), 0);
   const totalDocumentsCount = records.reduce((acc, r) => acc + (r.documents?.length || 0), 0);
@@ -376,13 +406,13 @@ export default function CustomerCompanyCostPage() {
 
           <div className="flex items-center gap-2 flex-wrap">
             <Link
-              href="/superadmin/customers/pending-amount"
+              href="/customers/pending-amount"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors no-underline"
             >
               <span>← Pending Amount</span>
             </Link>
             <Link
-              href="/superadmin/customers"
+              href="/customers"
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors no-underline"
             >
               <Users size={14} />
@@ -509,20 +539,32 @@ export default function CustomerCompanyCostPage() {
               )}
             </div>
 
-            {/* Cost Category */}
+            {/* Program (Auto-filled on customer select) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Cost Category
+                Program <span className="text-red-500">*</span>
               </label>
-              <select
-                value={formCategory}
-                onChange={(e) => setFormCategory(e.target.value)}
-                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white"
-              >
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <input
+                type="text"
+                required
+                value={formProgram}
+                onChange={(e) => setFormProgram(e.target.value)}
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-medium text-slate-900"
+              />
+            </div>
+
+            {/* Sector (Auto-filled on customer select) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Sector <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={formSector}
+                onChange={(e) => setFormSector(e.target.value)}
+                className="w-full h-[38px] px-3 text-xs border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-hidden bg-white font-medium text-slate-900"
+              />
             </div>
 
             {/* Expense Date */}
@@ -584,7 +626,7 @@ export default function CustomerCompanyCostPage() {
             </div>
 
             {/* Remarks */}
-            <div>
+            <div className="md:col-span-2 lg:col-span-4">
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Remarks
               </label>
@@ -657,7 +699,6 @@ export default function CustomerCompanyCostPage() {
                         <th className="py-2.5 px-3 min-w-[180px]">Service Tag</th>
                         <th className="py-2.5 px-3 min-w-[130px]">Amount (RM) <span className="text-red-500">*</span></th>
                         <th className="py-2.5 px-3 min-w-[130px]">Issue Date</th>
-                        <th className="py-2.5 px-3 min-w-[130px]">Expire Date</th>
                         <th className="py-2.5 px-3 min-w-[200px]">File Attachment</th>
                         <th className="py-2.5 px-3 w-12 text-center">Action</th>
                       </tr>
@@ -720,14 +761,6 @@ export default function CustomerCompanyCostPage() {
                               type="date"
                               value={doc.issue_date || ''}
                               onChange={(e) => handleDocumentFieldChange(idx, 'issue_date', e.target.value)}
-                              className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-hidden text-slate-700 font-mono"
-                            />
-                          </td>
-                          <td className="py-2 px-3">
-                            <input
-                              type="date"
-                              value={doc.expire_date || ''}
-                              onChange={(e) => handleDocumentFieldChange(idx, 'expire_date', e.target.value)}
                               className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-hidden text-slate-700 font-mono"
                             />
                           </td>
@@ -852,17 +885,6 @@ export default function CustomerCompanyCostPage() {
             </div>
 
             <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-3 py-1.5 text-xs border border-slate-300 rounded-xl bg-white"
-            >
-              <option value="ALL">All Categories</option>
-              {EXPENSE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-
-            <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-3 py-1.5 text-xs border border-slate-300 rounded-xl bg-white"
@@ -882,7 +904,7 @@ export default function CustomerCompanyCostPage() {
                 <th className="py-3 px-4 min-w-[180px]">Customer Name</th>
                 <th className="py-3 px-4 min-w-[130px]">Passport No</th>
                 <th className="py-3 px-4 min-w-[160px]">Company / Employer</th>
-                <th className="py-3 px-4 min-w-[170px]">Cost Category</th>
+                <th className="py-3 px-4 min-w-[170px]">Program</th>
                 <th className="py-3 px-4 min-w-[120px]">Expense Date</th>
                 <th className="py-3 px-4 min-w-[130px]">Reference No</th>
                 <th className="py-3 px-4 min-w-[140px]">Payment Source</th>
@@ -1029,7 +1051,6 @@ export default function CustomerCompanyCostPage() {
                     <th className="py-2.5 px-3">Service Tag</th>
                     <th className="py-2.5 px-3 text-right">Amount (RM)</th>
                     <th className="py-2.5 px-3">Issue Date</th>
-                    <th className="py-2.5 px-3">Expire Date</th>
                     <th className="py-2.5 px-3 text-center">Attachment</th>
                   </tr>
                 </thead>
@@ -1053,7 +1074,6 @@ export default function CustomerCompanyCostPage() {
                         RM {(Number(d.value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">{d.issue_date || '—'}</td>
-                      <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">{d.expire_date || '—'}</td>
                       <td className="py-2.5 px-3 text-center">
                         {d.fileUrl || d.dataUrl || d.url ? (
                           <a
