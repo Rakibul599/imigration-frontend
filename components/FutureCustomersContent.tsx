@@ -24,6 +24,7 @@ import {
 import {
   FutureCustomerRecord,
   getStoredFutureCustomers,
+  fetchFutureCustomers,
   saveFutureCustomer,
   updateFutureCustomer,
   deleteFutureCustomer,
@@ -65,10 +66,18 @@ export default function FutureCustomersContent({
     setTimeout(() => setToast(null), 3500);
   };
 
-  const loadData = () => {
-    const list = getStoredFutureCustomers();
-    setCustomers(list);
-    setLoading(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const list = await fetchFutureCustomers();
+      setCustomers(list);
+    } catch {
+      setCustomers(getStoredFutureCustomers());
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -99,7 +108,7 @@ export default function FutureCustomersContent({
     setIsCreateModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formName.trim()) {
@@ -119,34 +128,44 @@ export default function FutureCustomersContent({
       return;
     }
 
-    if (editingCustomer) {
-      updateFutureCustomer(editingCustomer.id, {
-        customer_name: formName,
-        phone_no: formPhone,
-        email_no: formEmail,
-        leaving_address: formAddress,
-        status: formStatus,
-      });
-      showToast('success', `Future customer "${formName}" updated successfully.`);
-    } else {
-      saveFutureCustomer({
-        customer_name: formName,
-        phone_no: formPhone,
-        email_no: formEmail,
-        leaving_address: formAddress,
-        status: formStatus,
-      });
-      showToast('success', `Future customer "${formName}" created successfully.`);
+    setSubmitting(true);
+    try {
+      if (editingCustomer) {
+        await updateFutureCustomer(editingCustomer.id, {
+          customer_name: formName,
+          phone_no: formPhone,
+          email_no: formEmail,
+          leaving_address: formAddress,
+          status: formStatus,
+        });
+        showToast('success', `Future customer "${formName}" updated successfully.`);
+      } else {
+        await saveFutureCustomer({
+          customer_name: formName,
+          phone_no: formPhone,
+          email_no: formEmail,
+          leaving_address: formAddress,
+          status: formStatus,
+        });
+        showToast('success', `Future customer "${formName}" created successfully.`);
+      }
+      setIsCreateModalOpen(false);
+      setEditingCustomer(null);
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to save future customer');
+    } finally {
+      setSubmitting(false);
     }
-
-    setIsCreateModalOpen(false);
-    setEditingCustomer(null);
   };
 
-  const handleDelete = (id: number) => {
-    deleteFutureCustomer(id);
-    setDeleteConfirmId(null);
-    showToast('info', 'Future customer record deleted.');
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteFutureCustomer(id);
+      setDeleteConfirmId(null);
+      showToast('info', 'Future customer record deleted.');
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to delete record');
+    }
   };
 
   // Filtered customer list

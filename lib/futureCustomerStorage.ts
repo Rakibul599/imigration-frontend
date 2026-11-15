@@ -11,119 +11,171 @@ export interface FutureCustomerRecord {
   created_at: string;
 }
 
-const STORAGE_KEY = 'agency_future_customers_cache';
+const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
-const INITIAL_FUTURE_CUSTOMERS: FutureCustomerRecord[] = [
-  {
-    id: 1,
-    customer_name: 'Rafiqul Islam',
-    phone_no: '+60 11-2345 6789',
-    email_no: 'rafiqul.islam@example.com',
-    leaving_address: 'No 45, Jalan Putra Permai, Seri Kembangan, Selangor',
-    status: 'ready',
-    notes: 'Biometrics document submitted, waiting for visa approval',
-    created_at: '2026-11-10T08:30:00Z',
-  },
-  {
-    id: 2,
-    customer_name: 'Tanvir Hossain',
-    phone_no: '+60 17-8901 2345',
-    email_no: 'tanvir.hossain@example.com',
-    leaving_address: 'Block B-3-12, Vista Komanwel, Bukit Jalil, KL',
-    status: 'lead',
-    notes: 'Inquired about Construction sector permit',
-    created_at: '2026-11-12T11:15:00Z',
-  },
-  {
-    id: 3,
-    customer_name: 'Mehedi Hasan',
-    phone_no: '+60 19-3456 7890',
-    email_no: 'mehedi.hasan@example.com',
-    leaving_address: 'Lot 102, Kawasan Perindustrian Senai, Johor Bahru',
-    status: 'contacted',
-    notes: 'Scheduled for biometric screening next week',
-    created_at: '2026-11-14T09:45:00Z',
-  },
-];
+// In-memory cache for instant synchronous access (no localStorage data storage)
+let memoryFutureCustomers: FutureCustomerRecord[] = [];
 
-export function getStoredFutureCustomers(): FutureCustomerRecord[] {
-  if (typeof window === 'undefined') return INITIAL_FUTURE_CUSTOMERS;
+/**
+ * Fetch all future customers directly from backend database API
+ */
+export async function fetchFutureCustomers(
+  status?: string,
+  search?: string
+): Promise<FutureCustomerRecord[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_FUTURE_CUSTOMERS));
-      return INITIAL_FUTURE_CUSTOMERS;
+    const params = new URLSearchParams();
+    if (status && status !== 'ALL') params.append('status', status);
+    if (search && search.trim()) params.append('search', search.trim());
+
+    const url = `${API_BASE}/future-customers${params.toString() ? `?${params.toString()}` : ''}`;
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        memoryFutureCustomers = data;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('agency_future_customers_updated', { detail: data })
+          );
+        }
+        return data;
+      }
     }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : INITIAL_FUTURE_CUSTOMERS;
-  } catch {
-    return INITIAL_FUTURE_CUSTOMERS;
+  } catch (err) {
+    console.error('Failed to fetch future customers from backend API:', err);
   }
+  return memoryFutureCustomers;
 }
 
-export function saveFutureCustomer(data: {
+/**
+ * Synchronous getter returning latest in-memory cache
+ */
+export function getStoredFutureCustomers(): FutureCustomerRecord[] {
+  return memoryFutureCustomers;
+}
+
+/**
+ * Save a new future customer directly to Laravel backend database via POST /api/future-customers
+ */
+export async function saveFutureCustomer(data: {
   customer_name: string;
   phone_no: string;
   email_no: string;
   leaving_address: string;
   status?: 'lead' | 'contacted' | 'ready' | 'converted';
   notes?: string;
-}): FutureCustomerRecord {
-  const current = getStoredFutureCustomers();
-  const nextId = current.length > 0 ? Math.max(...current.map((c) => c.id)) + 1 : 1;
-  const newRecord: FutureCustomerRecord = {
-    id: nextId,
+}): Promise<FutureCustomerRecord> {
+  const payload = {
     customer_name: data.customer_name.trim(),
     phone_no: data.phone_no.trim(),
     email_no: data.email_no.trim(),
     leaving_address: data.leaving_address.trim(),
     status: data.status || 'lead',
     notes: data.notes?.trim() || '',
-    created_at: new Date().toISOString(),
   };
 
-  const updated = [newRecord, ...current];
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('agency_future_customers_updated', { detail: updated }));
+  const res = await fetch(`${API_BASE}/future-customers`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.message || 'Failed to save future customer to database');
   }
-  return newRecord;
+
+  const created: FutureCustomerRecord = await res.json();
+  memoryFutureCustomers = [created, ...memoryFutureCustomers.filter((c) => c.id !== created.id)];
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('agency_future_customers_updated', { detail: memoryFutureCustomers })
+    );
+  }
+
+  return created;
 }
 
-export function updateFutureCustomer(
+/**
+ * Update an existing future customer in database via PUT /api/future-customers/:id
+ */
+export async function updateFutureCustomer(
   id: number,
   patch: Partial<FutureCustomerRecord>
-): FutureCustomerRecord | null {
-  const current = getStoredFutureCustomers();
-  const index = current.findIndex((c) => c.id === id);
-  if (index === -1) return null;
+): Promise<FutureCustomerRecord> {
+  const res = await fetch(`${API_BASE}/future-customers/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(patch),
+  });
 
-  const updatedRecord = { ...current[index], ...patch };
-  current[index] = updatedRecord;
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.message || 'Failed to update future customer in database');
+  }
+
+  const updated: FutureCustomerRecord = await res.json();
+  const idx = memoryFutureCustomers.findIndex((c) => c.id === id);
+  if (idx >= 0) {
+    memoryFutureCustomers[idx] = updated;
+  } else {
+    memoryFutureCustomers.unshift(updated);
+  }
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-    window.dispatchEvent(new CustomEvent('agency_future_customers_updated', { detail: current }));
+    window.dispatchEvent(
+      new CustomEvent('agency_future_customers_updated', { detail: memoryFutureCustomers })
+    );
   }
-  return updatedRecord;
+
+  return updated;
 }
 
-export function deleteFutureCustomer(id: number): boolean {
-  const current = getStoredFutureCustomers();
-  const filtered = current.filter((c) => c.id !== id);
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-    window.dispatchEvent(new CustomEvent('agency_future_customers_updated', { detail: filtered }));
+/**
+ * Delete a future customer from database via DELETE /api/future-customers/:id
+ */
+export async function deleteFutureCustomer(id: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/future-customers/${id}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.message || 'Failed to delete future customer from database');
   }
+
+  memoryFutureCustomers = memoryFutureCustomers.filter((c) => c.id !== id);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('agency_future_customers_updated', { detail: memoryFutureCustomers })
+    );
+  }
+
   return true;
 }
 
+/**
+ * Event subscription for reactive updates
+ */
 export function subscribeToFutureCustomers(callback: (list: FutureCustomerRecord[]) => void) {
   if (typeof window === 'undefined') return () => {};
   const handler = (e: any) => {
-    callback(e.detail || getStoredFutureCustomers());
+    callback(e.detail || memoryFutureCustomers);
   };
   window.addEventListener('agency_future_customers_updated', handler);
   return () => window.removeEventListener('agency_future_customers_updated', handler);
 }
-
