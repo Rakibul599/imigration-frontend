@@ -5,8 +5,10 @@ import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
+  Calendar,
   Check,
   CheckCircle2,
+  Clock,
   Copy,
   Crown,
   Edit2,
@@ -29,6 +31,7 @@ import {
   Trash2,
   User,
   UserCheck,
+  UserMinus,
   Users,
   X,
 } from 'lucide-react';
@@ -56,6 +59,8 @@ export type MasterAdminRecord = {
   plain_password?: string;
   assigned_companies: string[];
   status: 'active' | 'inactive';
+  status_scheduled_date?: string | null;
+  status_scheduled_action?: 'active' | 'inactive' | null;
   subscription_package?: string | null;
   subscription_ends_at?: string | null;
   trial_status?: string | null;
@@ -133,7 +138,28 @@ export default function MasterAdminPermissionPage() {
   const [formAssignedCompanies, setFormAssignedCompanies] = useState<string[]>([]);
   const [formStatus, setFormStatus] = useState<'active' | 'inactive'>('active');
 
+  // Live 1-second countdown ticker
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  const [mounted, setMounted] = useState(false);
+
+  // Status Duration & Schedule Modal State
+  const [statusModalAdmin, setStatusModalAdmin] = useState<MasterAdminRecord | null>(null);
+  const [modalMode, setModalMode] = useState<'instant' | 'scheduled'>('instant');
+  const [modalInstantStatus, setModalInstantStatus] = useState<'active' | 'inactive'>('active');
+  const [modalScheduledDate, setModalScheduledDate] = useState<string>('');
+  const [modalScheduledTime, setModalScheduledTime] = useState<string>('23:59');
+  const [modalScheduledAction, setModalScheduledAction] = useState<'active' | 'inactive'>('inactive');
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
+
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+
+  useEffect(() => {
+    setMounted(true);
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchMasterAdmins = async () => {
     try {
@@ -419,6 +445,201 @@ export default function MasterAdminPermissionPage() {
       showToast('error', 'Failed to delete Master Admin.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getCountdownInfo = (scheduledDateStr?: string | null, scheduledAction?: string | null) => {
+    if (!scheduledDateStr) {
+      return {
+        status: 'none' as const,
+        label: '',
+        color: '',
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isUrgent: false,
+      };
+    }
+
+    let targetTime = new Date(scheduledDateStr).getTime();
+    if (isNaN(targetTime)) {
+      targetTime = new Date(scheduledDateStr.replace(' ', 'T')).getTime();
+    }
+
+    if (isNaN(targetTime)) {
+      return {
+        status: 'invalid' as const,
+        label: 'Invalid Date',
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isUrgent: false,
+      };
+    }
+
+    const diffMs = targetTime - currentTime;
+    if (diffMs <= 0) {
+      return {
+        status: 'expired' as const,
+        label: 'Expired',
+        color: 'text-rose-700 bg-rose-50 border-rose-300 font-bold',
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isUrgent: true,
+      };
+    }
+
+    const totalSecs = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    let label = '';
+    if (days > 0) {
+      label = `${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    } else if (hours > 0) {
+      label = `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    } else {
+      label = `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+    }
+
+    const isUrgent = days === 0 && hours < 24;
+    const isAutoActive = scheduledAction === 'active';
+
+    let color = '';
+    if (isAutoActive) {
+      color = isUrgent
+        ? 'text-emerald-800 bg-emerald-100 border-emerald-400 ring-1 ring-emerald-300 animate-pulse'
+        : 'text-emerald-700 bg-emerald-50 border-emerald-300';
+    } else {
+      color = isUrgent
+        ? 'text-rose-700 bg-rose-50 border-rose-300 ring-1 ring-rose-200 animate-pulse'
+        : 'text-amber-800 bg-amber-50 border-amber-300';
+    }
+
+    return {
+      status: 'active' as const,
+      label,
+      days,
+      hours,
+      minutes,
+      seconds,
+      color,
+      isUrgent,
+    };
+  };
+
+  const handleOpenStatusModal = (admin: MasterAdminRecord) => {
+    setStatusModalAdmin(admin);
+    setModalInstantStatus(admin.status);
+
+    if (admin.status_scheduled_date) {
+      setModalMode('scheduled');
+      const d = new Date(admin.status_scheduled_date);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      setModalScheduledDate(`${yyyy}-${mm}-${dd}`);
+      setModalScheduledTime(`${hh}:${min}`);
+      setModalScheduledAction(admin.status_scheduled_action || (admin.status === 'active' ? 'inactive' : 'active'));
+    } else {
+      setModalMode('instant');
+      setModalScheduledAction(admin.status === 'active' ? 'inactive' : 'active');
+      const defaultDate = new Date();
+      defaultDate.setDate(defaultDate.getDate() + 7);
+      const yyyy = defaultDate.getFullYear();
+      const mm = String(defaultDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(defaultDate.getDate()).padStart(2, '0');
+      setModalScheduledDate(`${yyyy}-${mm}-${dd}`);
+      setModalScheduledTime('23:59');
+    }
+  };
+
+  const handleSaveStatusModal = async () => {
+    if (!statusModalAdmin) return;
+    setIsSavingStatus(true);
+
+    const payload: {
+      status?: 'active' | 'inactive';
+      status_scheduled_date?: string | null;
+      status_scheduled_action?: 'active' | 'inactive' | null;
+    } = {};
+
+    if (modalMode === 'instant') {
+      payload.status = modalInstantStatus;
+      payload.status_scheduled_date = null;
+      payload.status_scheduled_action = null;
+    } else {
+      if (!modalScheduledDate) {
+        showToast('error', 'Please select a date for the scheduled status transition.');
+        setIsSavingStatus(false);
+        return;
+      }
+      const timePart = modalScheduledTime ? `${modalScheduledTime}:00` : '23:59:59';
+      payload.status_scheduled_date = `${modalScheduledDate} ${timePart}`;
+      payload.status_scheduled_action = modalScheduledAction;
+    }
+
+    try {
+      const res = await fetch(`${apiBase}/master-admins/${statusModalAdmin.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setMasterAdmins((prev) =>
+          prev.map((a) => (a.id === statusModalAdmin.id ? { ...a, ...payload } : a))
+        );
+        showToast(
+          'success',
+          modalMode === 'instant'
+            ? `Master Admin status updated to ${modalInstantStatus.toUpperCase()}.`
+            : `Status transition scheduled for ${modalScheduledDate} (${modalScheduledAction === 'active' ? 'Auto Activate' : 'Auto Deactivate'}).`
+        );
+        setStatusModalAdmin(null);
+      } else {
+        showToast('error', 'Failed to update Master Admin status.');
+      }
+    } catch {
+      showToast('error', 'Server error updating status.');
+    } finally {
+      setIsSavingStatus(false);
+    }
+  };
+
+  const handleClearSchedule = async () => {
+    if (!statusModalAdmin) return;
+    setIsSavingStatus(true);
+    try {
+      const payload = {
+        status_scheduled_date: null,
+        status_scheduled_action: null,
+      };
+      const res = await fetch(`${apiBase}/master-admins/${statusModalAdmin.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setMasterAdmins((prev) =>
+          prev.map((a) => (a.id === statusModalAdmin.id ? { ...a, ...payload } : a))
+        );
+        showToast('info', 'Scheduled status transition cancelled.');
+        setStatusModalAdmin(null);
+      }
+    } catch {
+      showToast('error', 'Failed to clear schedule.');
+    } finally {
+      setIsSavingStatus(false);
     }
   };
 
@@ -775,24 +996,59 @@ export default function MasterAdminPermissionPage() {
                         )}
                       </td>
 
-                      {/* Status */}
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleStatus(admin)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer transition-colors border-0 ${
-                            admin.status === 'active'
-                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              admin.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'
-                            }`}
-                          />
-                          <span>{admin.status === 'active' ? 'Active' : 'Inactive'}</span>
-                        </button>
+                      {/* Status Toggle Switch & Duration Status Countdown Badge */}
+                      <td className="py-3 px-4 text-center align-middle" suppressHydrationWarning>
+                        <div className="flex flex-col items-center justify-center gap-1.5 py-0.5" suppressHydrationWarning>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStatusModal(admin)}
+                            className="group inline-flex items-center gap-2 p-1 px-2.5 rounded-lg hover:bg-slate-100 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                            title="Click to manage instant status or schedule active/inactive duration date"
+                          >
+                            <span
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                                admin.status === 'active' ? 'bg-emerald-600' : 'bg-slate-300'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                  admin.status === 'active' ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </span>
+                            <span
+                              className={`text-[11px] font-bold uppercase tracking-wider ${
+                                admin.status === 'active' ? 'text-emerald-700' : 'text-slate-400'
+                              }`}
+                            >
+                              {admin.status === 'active' ? 'Active' : 'Inactive'}
+                            </span>
+                          </button>
+
+                          {/* Live Scheduled Transition Countdown Badge */}
+                          {admin.status_scheduled_date && (() => {
+                            const cd = getCountdownInfo(admin.status_scheduled_date, admin.status_scheduled_action);
+                            if (cd.status === 'none') return null;
+                            const isAutoActive = admin.status_scheduled_action === 'active';
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStatusModal(admin)}
+                                className={`inline-flex flex-col items-center justify-center gap-0.5 px-2.5 py-1 rounded-lg border transition-all cursor-pointer shadow-2xs group/cd hover:scale-[1.02] ${cd.color}`}
+                                title={`Scheduled to ${isAutoActive ? 'Auto Activate' : 'Auto Deactivate'} on ${new Date(admin.status_scheduled_date).toLocaleString()} - Click to edit or clear`}
+                                suppressHydrationWarning
+                              >
+                                <div className="inline-flex items-center gap-1 font-mono text-[11px] font-bold tabular-nums tracking-tight" suppressHydrationWarning>
+                                  <Clock size={11} className="shrink-0 animate-pulse text-current" />
+                                  <span>{mounted ? cd.label : '...'}</span>
+                                </div>
+                                <div className="text-[9px] font-extrabold uppercase tracking-wider opacity-90">
+                                  {isAutoActive ? 'Auto Activates' : 'Auto Deactivates'}
+                                </div>
+                              </button>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       {/* Actions */}
@@ -1346,6 +1602,285 @@ export default function MasterAdminPermissionPage() {
                   Done
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Duration & Transition Schedule Modal */}
+      {statusModalAdmin && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-[#0b4da2] font-bold">
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                    Manage Master Admin Status
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {statusModalAdmin.name} ({statusModalAdmin.username})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatusModalAdmin(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer border-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl gap-1 my-4">
+              <button
+                type="button"
+                onClick={() => setModalMode('instant')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border-0 ${
+                  modalMode === 'instant'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-transparent'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${modalInstantStatus === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                <span>Instant</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalMode('scheduled')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border-0 ${
+                  modalMode === 'scheduled'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 bg-transparent'
+                }`}
+              >
+                <Calendar size={14} className={modalMode === 'scheduled' ? 'text-amber-600' : ''} />
+                <span>Scheduled</span>
+              </button>
+            </div>
+
+            {/* MODE 1: Instant Toggle */}
+            {modalMode === 'instant' && (
+              <div className="space-y-3 py-1">
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    onClick={() => setModalInstantStatus('active')}
+                    className={`p-3.5 rounded-xl border flex items-center justify-center gap-2 cursor-pointer transition-all select-none ${
+                      modalInstantStatus === 'active'
+                        ? 'border-emerald-500 bg-emerald-50/80 ring-1 ring-emerald-300 text-emerald-950 font-bold shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700 font-medium'
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-xs">Active</span>
+                  </div>
+
+                  <div
+                    onClick={() => setModalInstantStatus('inactive')}
+                    className={`p-3.5 rounded-xl border flex items-center justify-center gap-2 cursor-pointer transition-all select-none ${
+                      modalInstantStatus === 'inactive'
+                        ? 'border-rose-400 bg-rose-50/80 ring-1 ring-rose-200 text-rose-950 font-bold shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700 font-medium'
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                    <span className="text-xs">Inactive</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MODE 2: Scheduled Status Change */}
+            {modalMode === 'scheduled' && (
+              <div className="space-y-3.5 py-1">
+                {/* Target Action */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    Action:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setModalScheduledAction('inactive')}
+                      className={`p-2.5 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        modalScheduledAction === 'inactive'
+                          ? 'border-rose-400 bg-rose-50 text-rose-800 ring-1 ring-rose-300'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <UserMinus size={14} className="text-rose-600" />
+                      <span>Auto Deactivate</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setModalScheduledAction('active')}
+                      className={`p-2.5 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        modalScheduledAction === 'active'
+                          ? 'border-emerald-400 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <UserCheck size={14} className="text-emerald-600" />
+                      <span>Auto Activate</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    Presets:
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {[
+                      { label: '+7 Days', days: 7 },
+                      { label: '+15 Days', days: 15 },
+                      { label: '+30 Days', days: 30 },
+                      { label: '+60 Days', days: 60 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.days}
+                        type="button"
+                        onClick={() => {
+                          const target = new Date();
+                          target.setDate(target.getDate() + preset.days);
+                          const yyyy = target.getFullYear();
+                          const mm = String(target.getMonth() + 1).padStart(2, '0');
+                          const dd = String(target.getDate()).padStart(2, '0');
+                          setModalScheduledDate(`${yyyy}-${mm}-${dd}`);
+                          setModalScheduledTime('23:59');
+                        }}
+                        className="flex-1 py-1.5 px-2 rounded-md bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 border border-slate-200 text-[11px] font-bold transition-all cursor-pointer"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Specific Date & Time Input */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Date:
+                    </label>
+                    <input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      value={modalScheduledDate}
+                      onChange={(e) => setModalScheduledDate(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-blue-500 focus:bg-white transition-all cursor-pointer"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Time:
+                    </label>
+                    <input
+                      type="time"
+                      value={modalScheduledTime}
+                      onChange={(e) => setModalScheduledTime(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-blue-500 focus:bg-white transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Countdown Preview Banner */}
+                {modalScheduledDate && (() => {
+                  const targetStr = `${modalScheduledDate} ${modalScheduledTime || '23:59'}:00`;
+                  const cd = getCountdownInfo(targetStr, modalScheduledAction);
+                  if (cd.status === 'none') return null;
+                  const isAutoActive = modalScheduledAction === 'active';
+                  return (
+                    <div
+                      className={`p-3 rounded-xl border flex items-center justify-between transition-all shadow-2xs ${
+                        isAutoActive
+                          ? 'bg-emerald-50/70 border-emerald-300'
+                          : 'bg-amber-50/70 border-amber-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock size={16} className={isAutoActive ? 'text-emerald-700 animate-pulse' : 'text-amber-700 animate-pulse'} />
+                        <div>
+                          <div className="text-[10px] font-bold text-slate-600 uppercase">
+                            Countdown Preview:
+                          </div>
+                          <div className="text-xs font-mono font-bold text-slate-900">
+                            {cd.label || 'Calculating...'}
+                          </div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                          isAutoActive
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-amber-600 text-white'
+                        }`}
+                      >
+                        {isAutoActive ? 'Auto Activates' : 'Auto Deactivates'}
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {/* Existing Schedule Notice with Live Countdown */}
+                {statusModalAdmin.status_scheduled_date && (
+                  (() => {
+                    const existingCd = getCountdownInfo(
+                      statusModalAdmin.status_scheduled_date,
+                      statusModalAdmin.status_scheduled_action
+                    );
+                    const isExistingAutoActive = statusModalAdmin.status_scheduled_action === 'active';
+                    return (
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                        <div className="text-[11px] text-slate-600">
+                          <span className="font-bold text-slate-800">Current Schedule:</span>{' '}
+                          {new Date(statusModalAdmin.status_scheduled_date).toLocaleString()} (
+                          {isExistingAutoActive ? 'Activate' : 'Deactivate'})
+                          {existingCd.label && (
+                            <span className="ml-1.5 font-mono font-bold text-slate-900">
+                              [{existingCd.label}]
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearSchedule}
+                          disabled={isSavingStatus}
+                          className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer border-0 bg-transparent disabled:opacity-50"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 mt-4">
+              <button
+                type="button"
+                onClick={() => setStatusModalAdmin(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border-0"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStatusModal}
+                disabled={isSavingStatus}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] transition-all shadow-sm cursor-pointer border-0 disabled:opacity-50"
+              >
+                {isSavingStatus ? 'Saving...' : 'Apply Status'}
+              </button>
             </div>
           </div>
         </div>

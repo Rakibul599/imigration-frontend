@@ -40,6 +40,8 @@ export interface CustomerRecord {
   other_company_address?: string;
   documents?: CustomerDocument[];
   status: 'active' | 'pending' | 'inactive' | 'absent' | 'runaway' | 'blacklist';
+  status_scheduled_date?: string | null;
+  status_scheduled_action?: string | null;
   created_at?: string;
   updated_at?: string;
   // Legacy fields for backward compatibility

@@ -28,19 +28,24 @@ import {
   Receipt,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Target,
   User,
   UserCheck,
+  UserMinus,
+  UserX,
   Users,
   Wallet,
   X,
 } from 'lucide-react';
-import { CustomerRecord, fetchCustomers, getFileUrl } from '@/lib/customerStorage';
+import { CustomerRecord, fetchCustomers, getFileUrl, fetchWorkingSectors, WorkingSector } from '@/lib/customerStorage';
 import { AgentRecord, fetchAgents, getStoredAgents } from '@/lib/agentStorage';
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
 import {
   fetchAllCustomerFinances,
   getCustomerFinanceBalance,
@@ -65,9 +70,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
   const [companies, setCompanies] = useState<Company[]>([]);
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
+  const [sectors, setSectors] = useState<WorkingSector[]>([]);
 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(queryCompanyId || 'ALL');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(queryAgentId || 'ALL');
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('ALL');
+  const [selectedSector, setSelectedSector] = useState<string>('ALL');
+  const [selectedYear, setSelectedYear] = useState<string>('ALL');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -80,16 +90,18 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
     if (queryAgentId) setSelectedAgentId(queryAgentId);
   }, [queryCompanyId, queryAgentId]);
 
-  // Initial load of Companies, Agents, Finances, and Customers
+  // Initial load of Companies, Agents, Programs, Sectors, Finances, and Customers
   useEffect(() => {
     let isMounted = true;
     async function loadInitialData() {
       setLoading(true);
       try {
-        const [comps, agts, custs] = await Promise.all([
+        const [comps, agts, custs, progs, secs] = await Promise.all([
           fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
           fetchAgents().catch(() => getStoredAgents()),
           fetchCustomers(),
+          fetchPrograms().catch(() => getStoredPrograms()),
+          fetchWorkingSectors().catch(() => []),
           fetchAllCustomerFinances().catch(() => {}),
         ]);
 
@@ -108,6 +120,8 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
           setCompanies(finalComps);
           setAgents(agts);
           setCustomers(finalCusts);
+          setPrograms(progs);
+          setSectors(secs);
 
           // If no specific company was passed, default to first company if available
           if (!queryCompanyId && finalComps.length > 0 && selectedCompanyId === 'ALL') {
@@ -134,9 +148,11 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
   const refreshData = async () => {
     setLoading(true);
     try {
-      const [custs, agts] = await Promise.all([
+      const [custs, agts, progs, secs] = await Promise.all([
         fetchCustomers(),
         fetchAgents(),
+        fetchPrograms().catch(() => getStoredPrograms()),
+        fetchWorkingSectors().catch(() => []),
         fetchAllCustomerFinances().catch(() => {}),
       ]);
       let finalCusts = custs;
@@ -149,6 +165,8 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
       }
       setCustomers(finalCusts);
       setAgents(agts);
+      setPrograms(progs);
+      setSectors(secs);
       setNotification({ type: 'success', message: 'Data refreshed successfully!' });
       setTimeout(() => setNotification(null), 3000);
     } catch {
@@ -170,12 +188,61 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
     return agents.find((a) => String(a.id) === selectedAgentId) || null;
   }, [agents, selectedAgentId]);
 
-  // Filter customers strictly by Company and Agent
+  // Unique sector options (API sectors + customers + defaults)
+  const availableSectors = useMemo(() => {
+    const set = new Set<string>();
+    sectors.forEach((s) => {
+      if (s.name && s.name.trim()) set.add(s.name.trim());
+    });
+    customers.forEach((c) => {
+      if (c.working_sector && c.working_sector.trim()) set.add(c.working_sector.trim());
+    });
+    const defaults = [
+      'Construction',
+      'Manufacturing',
+      'Plantation',
+      'Agriculture',
+      'Services',
+      'Cleaning',
+      'Hospitality',
+      'Security',
+      'F&B',
+      'IT / Office',
+      'Other',
+    ];
+    defaults.forEach((d) => set.add(d));
+    return Array.from(set).sort();
+  }, [sectors, customers]);
+
+  // Available recruitment / clearance years
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear + 2; y >= currentYear - 4; y--) {
+      years.add(String(y));
+    }
+    customers.forEach((cust) => {
+      if (cust.created_at) {
+        const y = cust.created_at.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+      if (cust.passport_issue_date) {
+        const y = cust.passport_issue_date.slice(0, 4);
+        if (/^\d{4}$/.test(y)) years.add(y);
+      }
+    });
+    agents.forEach((agt) => {
+      if (agt.year && /^\d{4}$/.test(agt.year)) years.add(agt.year);
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [customers, agents]);
+
+  // Filter customers strictly by Company, Agent, Program, Sector, and Year
   const agentWiseCustomers = useMemo(() => {
     return customers.filter((cust) => {
       // 1. Company match
       if (selectedCompanyId !== 'ALL') {
-        const matchesCompany = cust.company_id === selectedCompanyId;
+        const matchesCompany = cust.company_id && cust.company_id.toLowerCase() === selectedCompanyId.toLowerCase();
         if (!matchesCompany) return false;
       }
 
@@ -186,9 +253,28 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         if (!matchesAgentId && !matchesAgentName) return false;
       }
 
+      // 3. Program match
+      if (selectedProgramId !== 'ALL') {
+        const matchesProgram = cust.program_id ? String(cust.program_id) === selectedProgramId : false;
+        if (!matchesProgram) return false;
+      }
+
+      // 4. Sector match
+      if (selectedSector !== 'ALL') {
+        const matchesSector = cust.working_sector ? cust.working_sector.toLowerCase() === selectedSector.toLowerCase() : false;
+        if (!matchesSector) return false;
+      }
+
+      // 5. Year match
+      if (selectedYear !== 'ALL') {
+        const matchCreated = cust.created_at && cust.created_at.slice(0, 4) === selectedYear;
+        const matchPassport = cust.passport_issue_date && cust.passport_issue_date.slice(0, 4) === selectedYear;
+        if (!matchCreated && !matchPassport) return false;
+      }
+
       return true;
     });
-  }, [customers, selectedCompanyId, selectedAgentId, selectedAgent]);
+  }, [customers, selectedCompanyId, selectedAgentId, selectedAgent, selectedProgramId, selectedSector, selectedYear]);
 
   // Compute live financial summary for the selected Agent & Company
   const financialSummary = useMemo(() => {
@@ -212,6 +298,24 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
       totalPending,
       totalRemaining,
     };
+  }, [agentWiseCustomers]);
+
+  // Compute live customer counts by status for selected Agent & Company
+  const statusCounts = useMemo(() => {
+    let active = 0;
+    let inactive = 0;
+    let runaway = 0;
+    let blacklist = 0;
+
+    agentWiseCustomers.forEach((cust) => {
+      const st = (cust.status || '').toLowerCase().trim();
+      if (st === 'active') active++;
+      else if (st === 'inactive') inactive++;
+      else if (st === 'runaway') runaway++;
+      else if (st === 'blacklist') blacklist++;
+    });
+
+    return { active, inactive, runaway, blacklist };
   }, [agentWiseCustomers]);
 
   // Further filter for the interactive table (search term + status filter)
@@ -299,31 +403,49 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         </div>
       )}
 
-      {/* 1. SELECTION BAR (Company Selection & Agent Selection) */}
+      {/* 1. SELECTION BAR (Company, Agent, Program, Sector & Year) */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#0b4da2] border-b border-slate-100 pb-3">
-          <SlidersHorizontal size={15} />
-          <span>Select Employer &amp; Recruitment Agent</span>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#0b4da2]">
+            <SlidersHorizontal size={15} />
+            <span>Select Filters • Company, Agent, Program, Sector &amp; Year</span>
+          </div>
+
+          {(selectedCompanyId !== 'ALL' || selectedAgentId !== 'ALL' || selectedProgramId !== 'ALL' || selectedSector !== 'ALL' || selectedYear !== 'ALL') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCompanyId('ALL');
+                setSelectedAgentId('ALL');
+                setSelectedProgramId('ALL');
+                setSelectedSector('ALL');
+                setSelectedYear('ALL');
+              }}
+              className="text-xs text-[#0b4da2] hover:text-[#083a7c] font-semibold underline bg-transparent border-0 cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
           {/* Company Selector */}
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <Building2 size={14} className="text-[#0b4da2]" />
-                <span>Select Company / Employer</span>
+                <Building2 size={13} className="text-[#0b4da2]" />
+                <span>Company</span>
               </span>
-              <span className="text-[11px] text-slate-400 font-normal">
-                {companies.length} Registered Employers
+              <span className="text-[10px] text-slate-400 font-normal">
+                {companies.length}
               </span>
             </label>
             <select
               value={selectedCompanyId}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
             >
-              <option value="ALL">🏢 All Companies (Overview)</option>
+              <option value="ALL">🏢 All Companies</option>
               {companies.map((comp) => (
                 <option key={comp.id} value={comp.id}>
                   {comp.name} {comp.sector ? `• ${comp.sector}` : ''}
@@ -336,22 +458,97 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <Briefcase size={14} className="text-[#0b4da2]" />
-                <span>Select Recruitment Agent</span>
+                <Briefcase size={13} className="text-[#0b4da2]" />
+                <span>Agent</span>
               </span>
-              <span className="text-[11px] text-slate-400 font-normal">
-                {agents.length} Registered Agents
+              <span className="text-[10px] text-slate-400 font-normal">
+                {agents.length}
               </span>
             </label>
             <select
               value={selectedAgentId}
               onChange={(e) => setSelectedAgentId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
             >
-              <option value="ALL">👤 All Agents (Overview)</option>
+              <option value="ALL">👤 All Agents</option>
               {agents.map((agt) => (
                 <option key={agt.id} value={String(agt.id)}>
                   {agt.name} {agt.phone ? `(${agt.phone})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Program Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Layers size={13} className="text-[#0b4da2]" />
+                <span>Program</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {programs.length}
+              </span>
+            </label>
+            <select
+              value={selectedProgramId}
+              onChange={(e) => setSelectedProgramId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+            >
+              <option value="ALL">📁 All Programs</option>
+              {programs.map((prog) => (
+                <option key={prog.id} value={String(prog.id)}>
+                  {prog.name} {prog.category ? `(${prog.category})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sector Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Globe2 size={13} className="text-[#0b4da2]" />
+                <span>Sector</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {availableSectors.length}
+              </span>
+            </label>
+            <select
+              value={selectedSector}
+              onChange={(e) => setSelectedSector(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+            >
+              <option value="ALL">🌐 All Sectors</option>
+              {availableSectors.map((sec) => (
+                <option key={sec} value={sec}>
+                  {sec}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Calendar size={13} className="text-[#0b4da2]" />
+                <span>Year</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">
+                {availableYears.length}
+              </span>
+            </label>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+            >
+              <option value="ALL">📅 All Years</option>
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  Year {yr}
                 </option>
               ))}
             </select>
@@ -386,7 +583,7 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
               )}
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2.5 block">
-              Employer / Company
+              Company
             </span>
             <h3 className="text-sm sm:text-base font-black text-slate-900 m-0 mt-0.5 leading-snug">
               {selectedCompany ? selectedCompany.name : 'All Companies'}
@@ -447,90 +644,159 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         </div>
       </div>
 
-      {/* 3. FOUR METRIC STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Customer */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-blue-400 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Customer
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
-              <Users size={20} />
+      {/* 3. SEVEN METRIC STAT CARDS (4 Customer Statuses + 3 Financial Metrics) */}
+      <div className="space-y-4">
+        {/* Customer Status Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Total active customer */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-emerald-400 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total active customer
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <UserCheck size={20} />
+              </div>
             </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-emerald-700">
+                {statusCounts.active}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Active foreign workers
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">
-              {financialSummary.totalCustomers}
+
+          {/* Card 2: Inactive customer */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-rose-400 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Inactive customer
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                <UserX size={20} />
+              </div>
             </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Recruited foreign workers
+            <div className="mt-3">
+              <div className="text-2xl font-black text-rose-700">
+                {statusCounts.inactive}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Deactivated / expired workers
+              </div>
             </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-rose-500 opacity-80" />
           </div>
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#0b4da2] opacity-80" />
+
+          {/* Card 3: Runway customer */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Runway customer
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <UserMinus size={20} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-amber-700">
+                {statusCounts.runaway}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Reported runaway workers
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
+          </div>
+
+          {/* Card 4: Blacklist customer */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-slate-500 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Blacklist customer
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center">
+                <ShieldAlert size={20} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-slate-900">
+                {statusCounts.blacklist}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Flagged / blacklisted workers
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 opacity-80" />
+          </div>
         </div>
 
-        {/* Card 2: Total Deposit Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-emerald-400 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Deposit Amount
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Receipt size={20} />
+        {/* Financial Metrics Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Card 5: Total Target Amount */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-blue-400 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total Target Amount
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
+                <Target size={20} />
+              </div>
             </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-[#0b4da2] font-mono">
+                RM {financialSummary.totalTarget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Total target recruitment budget
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#0b4da2] opacity-80" />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-emerald-700 font-mono">
-              RM {financialSummary.totalDeposit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Collected customer deposits
-            </div>
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
-        </div>
 
-        {/* Card 3: Total Pending Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Pending Amount
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Clock size={20} />
+          {/* Card 6: Total deposit amount */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-emerald-400 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total deposit amount
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <Receipt size={20} />
+              </div>
             </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-emerald-700 font-mono">
+                RM {financialSummary.totalDeposit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Collected customer deposits
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-amber-700 font-mono">
-              RM {financialSummary.totalPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Pending unpaid payments
-            </div>
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
-        </div>
 
-        {/* Card 4: Total Remaining Amount */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-indigo-400 transition-all">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Total Remaining Amount
-            </span>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Coins size={20} />
+          {/* Card 7: Total Pending Amount */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total Pending Amount
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Clock size={20} />
+              </div>
             </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-amber-700 font-mono">
+                RM {financialSummary.totalPending.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Pending unpaid dues
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-indigo-900 font-mono">
-              RM {financialSummary.totalRemaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Net balance (Target - Deposit)
-            </div>
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 opacity-80" />
         </div>
       </div>
 

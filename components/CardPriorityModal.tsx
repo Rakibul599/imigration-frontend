@@ -126,10 +126,10 @@ export default function CardPriorityModal({
           ? {
               ...c,
               title: editTitle.trim() || c.title,
-              subtitle: editSubtitle.trim() || c.subtitle,
+              subtitle: '',
               icon: editIcon || c.icon,
-              metric_type: editMetricType,
-              custom_value: editMetricType === 'custom' ? editCustomValue : undefined,
+              metric_type: c.metric_type || 'custom',
+              custom_value: c.metric_type === 'custom' ? editCustomValue : c.custom_value,
             }
           : c
       )
@@ -177,11 +177,11 @@ export default function CardPriorityModal({
     const newCard: PageStatCardConfig = {
       id: uniqueId,
       title: newTitle.trim(),
-      subtitle: newSubtitle.trim() || undefined,
+      subtitle: '',
       icon: newIcon || 'Users',
       order_num: list.length + 1,
-      metric_type: newMetricType,
-      custom_value: newMetricType === 'custom' ? newCustomValue : undefined,
+      metric_type: 'custom',
+      custom_value: newCustomValue || '0',
       is_custom: true,
       visible: true,
     };
@@ -274,63 +274,19 @@ export default function CardPriorityModal({
                   />
                 </div>
 
-                {/* Subtitle */}
+                {/* Custom Value */}
                 <div>
                   <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    Subtitle / Helper Text
+                    Custom Number or Text Value
                   </label>
                   <input
                     type="text"
-                    value={newSubtitle}
-                    onChange={(e) => setNewSubtitle(e.target.value)}
-                    placeholder="e.g. Approved foreign worker quota..."
-                    className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    value={newCustomValue}
+                    onChange={(e) => setNewCustomValue(e.target.value)}
+                    placeholder="e.g. 500, RM 25,000, 95%..."
+                    className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-500 font-mono font-bold text-slate-800"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Metric Source / Type */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    Metric Value Source
-                  </label>
-                  <select
-                    value={newMetricType}
-                    onChange={(e) => setNewMetricType(e.target.value)}
-                    className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600 cursor-pointer"
-                  >
-                    {availableMetrics && availableMetrics.length > 0 ? (
-                      availableMetrics.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="custom">Custom Fixed Value (Enter Below)</option>
-                        <option value="total_customers">Total Customers Count</option>
-                        <option value="active_permits">Active Permits Count</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* Custom Value (if custom metric) */}
-                {newMetricType === 'custom' && (
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                      Custom Number or Text Value
-                    </label>
-                    <input
-                      type="text"
-                      value={newCustomValue}
-                      onChange={(e) => setNewCustomValue(e.target.value)}
-                      placeholder="e.g. 500, RM 25,000, 95%..."
-                      className="w-full h-9 px-3 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-500 font-mono font-bold text-slate-800"
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Icon selector */}
@@ -472,11 +428,6 @@ export default function CardPriorityModal({
                           </span>
                         )}
                       </div>
-                      {card.subtitle && (
-                        <p className="text-[11px] text-slate-400 m-0 truncate">
-                          {card.subtitle}
-                        </p>
-                      )}
                     </div>
                   </div>
 
@@ -525,55 +476,21 @@ export default function CardPriorityModal({
                         />
                       </div>
 
-                      <div>
-                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                          Card Subtitle
-                        </label>
-                        <input
-                          type="text"
-                          value={editSubtitle}
-                          onChange={(e) => setEditSubtitle(e.target.value)}
-                          placeholder="Card subtitle..."
-                          className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-400"
-                        />
-                      </div>
-                    </div>
-
-                    {availableMetrics && availableMetrics.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {card.metric_type === 'custom' && (
                         <div>
                           <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                            Metric Source
+                            Custom Value
                           </label>
-                          <select
-                            value={editMetricType}
-                            onChange={(e) => setEditMetricType(e.target.value)}
-                            className="w-full h-9 px-3 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:border-indigo-600 cursor-pointer"
-                          >
-                            {availableMetrics.map((opt) => (
-                              <option key={opt.id} value={opt.id}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
+                          <input
+                            type="text"
+                            value={editCustomValue}
+                            onChange={(e) => setEditCustomValue(e.target.value)}
+                            placeholder="e.g. 100, 250..."
+                            className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-600"
+                          />
                         </div>
-
-                        {editMetricType === 'custom' && (
-                          <div>
-                            <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                              Custom Value
-                            </label>
-                            <input
-                              type="text"
-                              value={editCustomValue}
-                              onChange={(e) => setEditCustomValue(e.target.value)}
-                              placeholder="e.g. 100, 250..."
-                              className="w-full h-9 px-3 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 outline-none focus:border-indigo-600"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1.5">

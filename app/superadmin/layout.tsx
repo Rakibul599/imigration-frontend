@@ -417,7 +417,7 @@ export default function SuperAdminLayout({
             isGroup: true,
             children: [
               {
-                name: 'Companies',
+                name: 'Acco Companies',
                 href: '/superadmin/companies',
                 icon: Building2,
                 badge: companyCount > 0 ? `${companyCount}` : undefined,
@@ -473,6 +473,42 @@ export default function SuperAdminLayout({
             ],
           },
           {
+            name: 'Foreign Customer Management',
+            icon: Users,
+            badge: customerCount > 0 ? `${customerCount}` : undefined,
+            isGroup: true,
+            children: [
+              {
+                name: 'Foreign Customer Dashboard',
+                href: '/superadmin/customers/dashboard',
+                icon: LayoutDashboard,
+              },
+            ],
+          },
+          {
+            name: 'Agent Management',
+            icon: Briefcase,
+            isGroup: true,
+            badge: agentCount > 0 ? `${agentCount}` : undefined,
+            children: [
+              {
+                name: 'Create Agent',
+                href: '/superadmin/agents/create',
+                icon: UserPlus,
+              },
+              {
+                name: 'Agent List',
+                href: '/superadmin/agents',
+                icon: Briefcase,
+              },
+              {
+                name: 'Agent Wise Customer',
+                href: '/superadmin/agents/customers',
+                icon: Users,
+              },
+            ],
+          },
+          {
             name: 'Employee Management',
             icon: Users,
             badge: employeeCount > 0 ? `${employeeCount}` : undefined,
@@ -499,87 +535,6 @@ export default function SuperAdminLayout({
                 href: '/superadmin/employees/resignations',
                 icon: FileText,
                 badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,
-              },
-            ],
-          },
-          {
-            name: 'Customer Management',
-            icon: Users,
-            badge: customerCount > 0 ? `${customerCount}` : undefined,
-            isGroup: true,
-            children: [
-              {
-                name: 'Customer Dashboard',
-                href: '/superadmin/customers/dashboard',
-                icon: LayoutDashboard,
-              },
-              {
-                name: 'Active Customer',
-                href: '/superadmin/customers/active',
-                icon: UserCheck,
-              },
-              {
-                name: 'Inactive Customer',
-                href: '/superadmin/customers/inactive',
-                icon: UserX,
-              },
-              {
-                name: 'Runaway Customer',
-                href: '/superadmin/customers/runaway',
-                icon: UserMinus,
-              },
-              {
-                name: 'Black List Customer',
-                href: '/superadmin/customers/blacklist',
-                icon: ShieldAlert,
-              },
-              {
-                name: 'Future Customer',
-                href: '/superadmin/customers/future',
-                icon: Sparkles,
-              },
-              {
-                name: 'Customer Target Amount',
-                href: '/superadmin/customers/target-amount',
-                icon: Target,
-              },
-              {
-                name: 'Customer Deposit Amount',
-                href: '/superadmin/customers/deposit-amount',
-                icon: DollarSign,
-              },
-              {
-                name: 'Customer Pending Amount',
-                href: '/superadmin/customers/pending-amount',
-                icon: Clock,
-              },
-              {
-                name: 'Customer Cost Amount',
-                href: '/superadmin/customers/company-cost',
-                icon: FileSpreadsheet,
-              },
-            ],
-          },
-          {
-            name: 'Agent Management',
-            icon: Briefcase,
-            isGroup: true,
-            badge: agentCount > 0 ? `${agentCount}` : undefined,
-            children: [
-              {
-                name: 'Create Agent',
-                href: '/superadmin/agents/create',
-                icon: UserPlus,
-              },
-              {
-                name: 'Agent List',
-                href: '/superadmin/agents',
-                icon: Briefcase,
-              },
-              {
-                name: 'Agent Wise Customer',
-                href: '/superadmin/agents/customers',
-                icon: Users,
               },
             ],
           },
@@ -801,6 +756,7 @@ export default function SuperAdminLayout({
                           (child.href === '/superadmin/companies' && (pathname === '/superadmin' || pathname === '/companies')) ||
                           (child.href === '/superadmin/programs' && pathname.startsWith('/superadmin/programs')) ||
                           (child.href === '/superadmin/master-admins' && (pathname.startsWith('/superadmin/master-admins') || pathname.startsWith('/master-admins'))) ||
+                          (child.href.includes('/customers/') && pathname.includes('/customers/')) ||
                           pathname.startsWith(child.href)
                       );
                       const isGroupOpen =
@@ -810,7 +766,7 @@ export default function SuperAdminLayout({
                             ? masterAdminMenuOpen
                             : link.name === 'Account Management'
                               ? accountsMenuOpen
-                              : link.name === 'Customer Management'
+                              : link.name === 'Customer Management' || link.name === 'Forgein Customer Management'
                                 ? customerMenuOpen
                                 : link.name === 'Attendance Management'
                                   ? attendanceMenuOpen
@@ -827,7 +783,7 @@ export default function SuperAdminLayout({
                           setMasterAdminMenuOpen(!masterAdminMenuOpen);
                         } else if (link.name === 'Account Management') {
                           setAccountsMenuOpen(!accountsMenuOpen);
-                        } else if (link.name === 'Customer Management') {
+                        } else if (link.name === 'Customer Management' || link.name === 'Forgein Customer Management') {
                           setCustomerMenuOpen(!customerMenuOpen);
                         } else if (link.name === 'Attendance Management') {
                           setAttendanceMenuOpen(!attendanceMenuOpen);

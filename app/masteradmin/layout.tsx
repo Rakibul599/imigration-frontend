@@ -403,7 +403,7 @@ export default function MasterAdminLayout({
             isGroup: true,
             children: [
               {
-                name: 'Companies',
+                name: 'Acco Companies',
                 href: '/masteradmin/companies',
                 icon: Building2,
                 badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
@@ -423,6 +423,42 @@ export default function MasterAdminLayout({
                 name: 'Subscription Plan',
                 href: '/masteradmin/companies/plans',
                 icon: Layers,
+              },
+            ],
+          },
+          {
+            name: 'Foreign Customer Management',
+            icon: Users,
+            badge: customerCount > 0 ? `${customerCount}` : undefined,
+            isGroup: true,
+            children: [
+              {
+                name: 'Foreign Customer Dashboard',
+                href: '/masteradmin/customers/dashboard',
+                icon: LayoutDashboard,
+              },
+            ],
+          },
+          {
+            name: 'Agent Management',
+            icon: Briefcase,
+            isGroup: true,
+            badge: agentCount > 0 ? `${agentCount}` : undefined,
+            children: [
+              {
+                name: 'Create Agent',
+                href: '/masteradmin/agents/create',
+                icon: UserPlus,
+              },
+              {
+                name: 'Agent List',
+                href: '/masteradmin/agents',
+                icon: Briefcase,
+              },
+              {
+                name: 'Agent Wise Customer',
+                href: '/masteradmin/agents/customers',
+                icon: Users,
               },
             ],
           },
@@ -453,87 +489,6 @@ export default function MasterAdminLayout({
                 href: '/masteradmin/employees/resignations',
                 icon: FileText,
                 badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,
-              },
-            ],
-          },
-          {
-            name: 'Customer Management',
-            icon: Users,
-            badge: customerCount > 0 ? `${customerCount}` : undefined,
-            isGroup: true,
-            children: [
-              {
-                name: 'Customer Dashboard',
-                href: '/masteradmin/customers/dashboard',
-                icon: LayoutDashboard,
-              },
-              {
-                name: 'Active Customer',
-                href: '/masteradmin/customers/active',
-                icon: UserCheck,
-              },
-              {
-                name: 'Inactive Customer',
-                href: '/masteradmin/customers/inactive',
-                icon: UserX,
-              },
-              {
-                name: 'Runaway Customer',
-                href: '/masteradmin/customers/runaway',
-                icon: UserMinus,
-              },
-              {
-                name: 'Black List Customer',
-                href: '/masteradmin/customers/blacklist',
-                icon: ShieldAlert,
-              },
-              {
-                name: 'Future Customer',
-                href: '/masteradmin/customers/future',
-                icon: Sparkles,
-              },
-              {
-                name: 'Customer Target Amount',
-                href: '/masteradmin/customers/target-amount',
-                icon: Target,
-              },
-              {
-                name: 'Customer Deposit Amount',
-                href: '/masteradmin/customers/deposit-amount',
-                icon: DollarSign,
-              },
-              {
-                name: 'Customer Pending Amount',
-                href: '/masteradmin/customers/pending-amount',
-                icon: Clock,
-              },
-              {
-                name: 'Customer Cost Amount',
-                href: '/masteradmin/customers/company-cost',
-                icon: FileSpreadsheet,
-              },
-            ],
-          },
-          {
-            name: 'Agent Management',
-            icon: Briefcase,
-            isGroup: true,
-            badge: agentCount > 0 ? `${agentCount}` : undefined,
-            children: [
-              {
-                name: 'Create Agent',
-                href: '/masteradmin/agents/create',
-                icon: UserPlus,
-              },
-              {
-                name: 'Agent List',
-                href: '/masteradmin/agents',
-                icon: Briefcase,
-              },
-              {
-                name: 'Agent Wise Customer',
-                href: '/masteradmin/agents/customers',
-                icon: Users,
               },
             ],
           },
@@ -745,6 +700,7 @@ export default function MasterAdminLayout({
                           pathname === child.href ||
                           (child.href === '/masteradmin/companies' && (pathname === '/masteradmin' || pathname === '/companies')) ||
                           (child.href === '/masteradmin/programs' && pathname.startsWith('/masteradmin/programs')) ||
+                          (child.href.includes('/customers/') && pathname.includes('/customers/')) ||
                           pathname.startsWith(child.href)
                       );
                       const isGroupOpen =
@@ -752,7 +708,7 @@ export default function MasterAdminLayout({
                           ? companyMenuOpen
                           : link.name === 'Account Management'
                             ? accountsMenuOpen
-                            : link.name === 'Customer Management'
+                            : link.name === 'Customer Management' || link.name === 'Forgein Customer Management'
                               ? customerMenuOpen
                               : link.name === 'Attendance Management'
                                 ? attendanceMenuOpen
@@ -767,7 +723,7 @@ export default function MasterAdminLayout({
                           setCompanyMenuOpen(!companyMenuOpen);
                         } else if (link.name === 'Account Management') {
                           setAccountsMenuOpen(!accountsMenuOpen);
-                        } else if (link.name === 'Customer Management') {
+                        } else if (link.name === 'Customer Management' || link.name === 'Forgein Customer Management') {
                           setCustomerMenuOpen(!customerMenuOpen);
                         } else if (link.name === 'Attendance Management') {
                           setAttendanceMenuOpen(!attendanceMenuOpen);

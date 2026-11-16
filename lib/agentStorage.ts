@@ -4,6 +4,12 @@ export interface AgentRecord {
   id: number;
   name: string;
   phone: string;
+  company_id?: string;
+  company_name?: string;
+  program_id?: string;
+  program_name?: string;
+  sector?: string;
+  year?: string;
   image?: string;
   notes?: string;
   created_at?: string;

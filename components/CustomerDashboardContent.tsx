@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 import {
   AlertCircle,
@@ -17,6 +18,7 @@ import {
   Coins,
   CreditCard,
   DollarSign,
+  Download,
   Edit2,
   Eye,
   FileCheck2,
@@ -31,6 +33,7 @@ import {
   Phone,
   PieChart,
   Plus,
+  Printer,
   Receipt,
   RefreshCw,
   RotateCcw,
@@ -83,6 +86,16 @@ import {
   resetStoredPageCards,
 } from '@/lib/pageCardStorage';
 import {
+  CustomerTargetAmountRecord,
+  CustomerDepositAmountRecord,
+  CustomerPendingAmountRecord,
+  CustomerCompanyCostRecord,
+  fetchCustomerTargets,
+  fetchCustomerDeposits,
+  fetchCustomerPendings,
+  fetchCustomerCompanyCosts,
+} from '@/lib/customerFinanceStorage';
+import {
   useDashboardCardDesign,
   useCardAnimationSettings,
   getServiceCardAnimationClass,
@@ -94,33 +107,29 @@ export interface CustomerDashboardCardItem extends PageStatCardConfig {
 }
 
 const DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS: PageStatCardConfig[] = [
-  { id: 'total_customers', title: 'TOTAL FOREIGN WORKERS', subtitle: 'All registered foreign workers', icon: 'Users', order_num: 1, metric_type: 'total_customers' },
-  { id: 'active_permits', title: 'ACTIVE PERMITS', subtitle: 'Authorized working permits', icon: 'UserCheck', order_num: 2, metric_type: 'active_permits' },
-  { id: 'inactive_workers', title: 'INACTIVE WORKERS', subtitle: 'Suspended worker accounts', icon: 'UserX', order_num: 3, metric_type: 'inactive_workers' },
-  { id: 'runaway_workers', title: 'RUNAWAY WORKERS', subtitle: 'Reported runaway alerts', icon: 'UserMinus', order_num: 4, metric_type: 'runaway_workers' },
-  { id: 'blacklist_workers', title: 'BLACK LIST WORKERS', subtitle: 'Barred & flagged records', icon: 'ShieldAlert', order_num: 5, metric_type: 'blacklist_workers' },
-  { id: 'future_candidates', title: 'FUTURE CANDIDATES', subtitle: 'Prospective leads for intake', icon: 'Sparkles', order_num: 6, metric_type: 'future_candidates' },
-  { id: 'passport_verified', title: 'PASSPORT VERIFIED', subtitle: 'Valid biometric passports', icon: 'CheckCircle2', order_num: 7, metric_type: 'passport_verified' },
-  { id: 'document_dossiers', title: 'DOCUMENT DOSSIERS', subtitle: 'Total uploaded dossiers', icon: 'FileText', order_num: 8, metric_type: 'document_dossiers' },
-  { id: 'target_wallet', title: 'TARGET BILLING WALLET', subtitle: 'Allocated worker target revenue', icon: 'Target', order_num: 9, metric_type: 'target_wallet' },
-  { id: 'deposit_wallet', title: 'TOTAL DEPOSIT WALLET', subtitle: 'Total customer advance deposits', icon: 'ArrowUpRight', order_num: 10, metric_type: 'deposit_wallet' },
-  { id: 'cost_wallet', title: 'TOTAL COST WALLET', subtitle: 'Total customer expenses & fees', icon: 'ArrowDownRight', order_num: 11, metric_type: 'cost_wallet' },
-  { id: 'pending_wallet', title: 'TOTAL PENDING DUES', subtitle: 'Net outstanding receivables', icon: 'Clock', order_num: 12, metric_type: 'pending_wallet' },
+  { id: 'total_customers', title: 'Total Customer', subtitle: '', icon: 'Users', order_num: 1, metric_type: 'total_customers' },
+  { id: 'active_customers', title: 'Active Customer', subtitle: '', icon: 'UserCheck', order_num: 2, metric_type: 'active_customers' },
+  { id: 'inactive_customers', title: 'Inactive Customer', subtitle: '', icon: 'UserX', order_num: 3, metric_type: 'inactive_customers' },
+  { id: 'runaway_customers', title: 'Runaway Customer', subtitle: '', icon: 'UserMinus', order_num: 4, metric_type: 'runaway_customers' },
+  { id: 'blacklist_customers', title: 'Black List Customer', subtitle: '', icon: 'ShieldAlert', order_num: 5, metric_type: 'blacklist_customers' },
+  { id: 'future_customers', title: 'Future Customer', subtitle: '', icon: 'Sparkles', order_num: 6, metric_type: 'future_customers' },
+  { id: 'target_amount', title: 'Customer Target Amount', subtitle: '', icon: 'Target', order_num: 7, metric_type: 'target_wallet' },
+  { id: 'deposit_amount', title: 'Customer Deposit Amount', subtitle: '', icon: 'DollarSign', order_num: 8, metric_type: 'deposit_wallet' },
+  { id: 'pending_amount', title: 'Customer Pending Amount', subtitle: '', icon: 'Clock', order_num: 9, metric_type: 'pending_wallet' },
+  { id: 'cost_amount', title: 'Customer Cost Amount', subtitle: '', icon: 'FileSpreadsheet', order_num: 10, metric_type: 'cost_wallet' },
 ];
 
 const CUSTOMER_CARD_METRIC_OPTIONS = [
-  { id: 'total_customers', label: 'Total Foreign Workers (Live Count)' },
-  { id: 'active_permits', label: 'Active Permits (Live Count)' },
-  { id: 'inactive_workers', label: 'Inactive Workers (Live Count)' },
-  { id: 'runaway_workers', label: 'Runaway Workers (Live Count)' },
-  { id: 'blacklist_workers', label: 'Black List Workers (Live Count)' },
-  { id: 'future_candidates', label: 'Future Candidates (Live Count)' },
-  { id: 'passport_verified', label: 'Passport Biometrics Verified (Live Count)' },
-  { id: 'document_dossiers', label: 'Document Dossiers (Live Count)' },
-  { id: 'target_wallet', label: 'Target Billing Wallet (RM Amount)' },
-  { id: 'deposit_wallet', label: 'Deposit Wallet (RM Amount)' },
-  { id: 'cost_wallet', label: 'Cost Wallet (RM Amount)' },
-  { id: 'pending_wallet', label: 'Pending Dues Wallet (RM Amount)' },
+  { id: 'total_customers', label: 'Total Customer (Live Count)' },
+  { id: 'active_customers', label: 'Active Customer (Live Count)' },
+  { id: 'inactive_customers', label: 'Inactive Customer (Live Count)' },
+  { id: 'runaway_customers', label: 'Runaway Customer (Live Count)' },
+  { id: 'blacklist_customers', label: 'Black List Customer (Live Count)' },
+  { id: 'future_customers', label: 'Future Customer (Live Count)' },
+  { id: 'target_wallet', label: 'Customer Target Amount (RM Value)' },
+  { id: 'deposit_wallet', label: 'Customer Deposit Amount (RM Value)' },
+  { id: 'pending_wallet', label: 'Customer Pending Amount (RM Value)' },
+  { id: 'cost_wallet', label: 'Customer Cost Amount (RM Value)' },
   { id: 'custom', label: 'Custom Value / Fixed Number' },
 ];
 
@@ -147,6 +156,10 @@ export default function CustomerDashboardContent({
   const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [futureCustomers, setFutureCustomers] = useState<FutureCustomerRecord[]>([]);
+  const [targetRecords, setTargetRecords] = useState<CustomerTargetAmountRecord[]>([]);
+  const [depositRecords, setDepositRecords] = useState<CustomerDepositAmountRecord[]>([]);
+  const [pendingRecords, setPendingRecords] = useState<CustomerPendingAmountRecord[]>([]);
+  const [costRecords, setCostRecords] = useState<CustomerCompanyCostRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Top Card Select2 Filters (matching Companies Dashboard)
@@ -166,6 +179,25 @@ export default function CustomerDashboardContent({
   const [tableSectorFilter, setTableSectorFilter] = useState('ALL');
   const [tableCompanyFilter, setTableCompanyFilter] = useState('ALL');
 
+  // Export Dropdown State & Ref
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Deletion Modal & Toast
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
@@ -176,7 +208,17 @@ export default function CustomerDashboardContent({
   };
 
   useEffect(() => {
-    setCards(getStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS));
+    const stored = getStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
+    const hasLegacy = stored.some(
+      (c) => c.id === 'passport_verified' || c.id === 'document_dossiers' || c.title === 'TOTAL FOREIGN WORKERS'
+    );
+    if (hasLegacy || stored.length !== 10) {
+      saveStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
+      setCards(DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
+    } else {
+      setCards(stored);
+    }
+
     const handleUpdate = (e: any) => {
       setCards(e.detail || getStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS));
     };
@@ -199,17 +241,26 @@ export default function CustomerDashboardContent({
   const loadData = async () => {
     setLoading(true);
     try {
-      const [comps, secList, custList, progList] = await Promise.all([
+      const [comps, secList, custList, progList, futureList, targets, deposits, pendings, costs] = await Promise.all([
         fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
         fetchWorkingSectors(),
         fetchCustomers(),
         fetchPrograms().catch(() => getStoredPrograms()),
+        getStoredFutureCustomers(),
+        fetchCustomerTargets().catch(() => []),
+        fetchCustomerDeposits().catch(() => []),
+        fetchCustomerPendings().catch(() => []),
+        fetchCustomerCompanyCosts().catch(() => []),
       ]);
       setCompanies(comps);
       setSectors(secList);
       setCustomers(custList);
       setPrograms(progList);
-      setFutureCustomers(getStoredFutureCustomers());
+      setFutureCustomers(futureList || []);
+      setTargetRecords(targets || []);
+      setDepositRecords(deposits || []);
+      setPendingRecords(pendings || []);
+      setCostRecords(costs || []);
     } catch (err) {
       console.error('Failed to load customer dashboard data:', err);
     } finally {
@@ -428,41 +479,69 @@ export default function CustomerDashboardContent({
           theme: { bg: 'bg-amber-50', text: 'text-amber-700', valColor: 'text-amber-600' },
         };
       }
-      case 'target_wallet': {
-        const targetSum = list.length * 3500;
+      case 'target_wallet':
+      case 'target_amount':
+      case 'customer_target_amount': {
+        const relevantTargets = targetRecords.filter((t) => {
+          if (selectedCompanyCardId !== 'ALL' && t.company_id && t.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return true;
+        });
+        const targetSum = relevantTargets.length > 0
+          ? relevantTargets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0)
+          : list.length * 3500;
         return {
           value: `RM ${targetSum.toLocaleString()}`,
-          sub: 'Worker target quota ledger • View Targets →',
           isLink: true,
           link: `${baseRoute}/target-amount`,
           theme: { bg: 'bg-blue-50', text: 'text-[#0b4da2]', valColor: 'text-slate-900' },
         };
       }
-      case 'deposit_wallet': {
-        const depositSum = list.length * 2800;
+      case 'deposit_wallet':
+      case 'deposit_amount':
+      case 'customer_deposit_amount': {
+        const relevantDeposits = depositRecords.filter((d) => {
+          if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return true;
+        });
+        const depositSum = relevantDeposits.length > 0
+          ? relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0)
+          : list.length * 2800;
         return {
           value: `RM ${depositSum.toLocaleString()}`,
-          sub: 'Total advance deposits • View Deposits →',
           isLink: true,
           link: `${baseRoute}/deposit-amount`,
           theme: { bg: 'bg-emerald-50', text: 'text-emerald-700', valColor: 'text-emerald-600' },
         };
       }
-      case 'cost_wallet': {
-        const costSum = list.length * 1200;
+      case 'cost_wallet':
+      case 'cost_amount':
+      case 'customer_cost_amount': {
+        const relevantCosts = costRecords.filter((c) => {
+          if (selectedCompanyCardId !== 'ALL' && c.company_id && c.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return true;
+        });
+        const costSum = relevantCosts.length > 0
+          ? relevantCosts.reduce((sum, c) => sum + (Number(c.total_cost_amount) || 0), 0)
+          : list.length * 1200;
         return {
           value: `RM ${costSum.toLocaleString()}`,
-          sub: 'Worker permit processing costs',
           isLink: true,
           link: `${baseRoute}/company-cost`,
           theme: { bg: 'bg-rose-50', text: 'text-rose-700', valColor: 'text-rose-600' },
         };
       }
-      case 'pending_wallet': {
-        const pendingSum = list.length * 700;
+      case 'pending_wallet':
+      case 'pending_amount':
+      case 'customer_pending_amount': {
+        const relevantPendings = pendingRecords.filter((p) => {
+          if (selectedCompanyCardId !== 'ALL' && p.company_id && p.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return true;
+        });
+        const pendingSum = relevantPendings.length > 0
+          ? relevantPendings.reduce((sum, p) => sum + (Number(p.pending_amount) || 0), 0)
+          : list.length * 700;
         return {
           value: `RM ${pendingSum.toLocaleString()}`,
-          sub: 'Outstanding pending balance • View Pending →',
           isLink: true,
           link: `${baseRoute}/pending-amount`,
           theme: { bg: 'bg-amber-50', text: 'text-amber-700', valColor: 'text-amber-600' },
@@ -520,6 +599,414 @@ export default function CustomerDashboardContent({
       return matchSearch && matchStatus && matchSector && matchCompany;
     });
   }, [customers, searchTerm, tableStatusFilter, tableSectorFilter, tableCompanyFilter]);
+
+  const getCustomerExportRow = (cust: CustomerRecord, idx: number) => {
+    const compMatch = companies.find(
+      (c) => c.id.toLowerCase() === (cust.company_id || '').toLowerCase()
+    );
+    const companyName = compMatch ? compMatch.name : cust.company_id || cust.other_company_name || '—';
+    const docCount = Array.isArray(cust.documents) ? cust.documents.length : 0;
+
+    return {
+      sl: idx + 1,
+      name: cust.full_name || '',
+      passport: cust.passport_no || '—',
+      nid: cust.nid_no || '—',
+      company: companyName,
+      sector: cust.working_sector || 'General',
+      salary: cust.basic_salary || '—',
+      phone: cust.phone || cust.worker_phone || '—',
+      email: cust.email || '—',
+      country: cust.country || 'Malaysia / Expat',
+      dossiers: docCount,
+      status: (cust.status || 'active').toUpperCase(),
+      agent: cust.agent_name || '—',
+      program: cust.program_name || '—',
+    };
+  };
+
+  const handleExportExcel = () => {
+    setIsExportOpen(false);
+    if (!filteredCustomers || filteredCustomers.length === 0) {
+      alert('No customers found to export.');
+      return;
+    }
+
+    const data = filteredCustomers.map((cust, idx) => {
+      const row = getCustomerExportRow(cust, idx);
+      return {
+        '#': row.sl,
+        'Worker Name': row.name,
+        'Country': row.country,
+        'Passport No': row.passport,
+        'NID No': row.nid,
+        'Employer Company': row.company,
+        'Sector': row.sector,
+        'Basic Salary': row.salary,
+        'Phone': row.phone,
+        'Email': row.email,
+        'Dossiers Count': row.dossiers,
+        'Status': row.status,
+        'Agent': row.agent,
+        'Program': row.program,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    worksheet['!cols'] = [
+      { wch: 5 },  // #
+      { wch: 25 }, // Worker Name
+      { wch: 18 }, // Country
+      { wch: 16 }, // Passport No
+      { wch: 16 }, // NID No
+      { wch: 28 }, // Company
+      { wch: 18 }, // Sector
+      { wch: 14 }, // Basic Salary
+      { wch: 18 }, // Phone
+      { wch: 24 }, // Email
+      { wch: 14 }, // Dossiers
+      { wch: 14 }, // Status
+      { wch: 18 }, // Agent
+      { wch: 18 }, // Program
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Foreign Customers');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `foreign_customers_${today}.xlsx`);
+  };
+
+  const handleExportCSV = () => {
+    setIsExportOpen(false);
+    if (!filteredCustomers || filteredCustomers.length === 0) {
+      alert('No customers found to export.');
+      return;
+    }
+
+    const headers = [
+      '#',
+      'Worker Name',
+      'Country',
+      'Passport No',
+      'NID No',
+      'Employer Company',
+      'Sector',
+      'Basic Salary',
+      'Phone',
+      'Email',
+      'Dossiers Count',
+      'Status',
+      'Agent',
+      'Program',
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filteredCustomers.map((cust, idx) => {
+      const row = getCustomerExportRow(cust, idx);
+      return [
+        row.sl,
+        escapeCSV(row.name),
+        escapeCSV(row.country),
+        escapeCSV(row.passport),
+        escapeCSV(row.nid),
+        escapeCSV(row.company),
+        escapeCSV(row.sector),
+        escapeCSV(row.salary),
+        escapeCSV(row.phone),
+        escapeCSV(row.email),
+        row.dossiers,
+        escapeCSV(row.status),
+        escapeCSV(row.agent),
+        escapeCSV(row.program),
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `foreign_customers_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPDF = () => {
+    setIsExportOpen(false);
+    if (!filteredCustomers || filteredCustomers.length === 0) {
+      alert('No customers found to export.');
+      return;
+    }
+
+    const today = new Date().toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const rowsHtml = filteredCustomers
+      .map((cust, idx) => {
+        const row = getCustomerExportRow(cust, idx);
+        const isAct = row.status === 'ACTIVE';
+        const isRunaway = row.status === 'RUNAWAY';
+        const isBlacklist = row.status === 'BLACKLIST';
+        const badgeClass = isAct
+          ? 'badge-active'
+          : isRunaway
+          ? 'badge-runaway'
+          : isBlacklist
+          ? 'badge-blacklist'
+          : 'badge-inactive';
+
+        return `
+          <tr>
+            <td style="text-align: center;">${row.sl}</td>
+            <td style="font-weight: 600;">
+              <div>${row.name || '—'}</div>
+              <div style="font-size: 9px; color: #64748b; font-weight: normal;">${row.country}</div>
+            </td>
+            <td style="font-family: monospace;">${row.passport}</td>
+            <td style="font-family: monospace;">${row.nid}</td>
+            <td style="font-weight: 500;">${row.company}</td>
+            <td>${row.sector}</td>
+            <td style="font-family: monospace;">${row.salary}</td>
+            <td style="font-family: monospace;">${row.phone}</td>
+            <td style="text-align: center; font-family: monospace;">${row.dossiers}</td>
+            <td style="text-align: center;">
+              <span class="badge ${badgeClass}">${row.status}</span>
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const totalActive = filteredCustomers.filter((c) => c.status === 'active').length;
+    const totalInactive = filteredCustomers.filter((c) => c.status === 'inactive').length;
+    const totalRunaway = filteredCustomers.filter((c) => c.status === 'runaway').length;
+    const totalBlacklist = filteredCustomers.filter((c) => c.status === 'blacklist').length;
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Foreign Customer Registry Report - ${today}</title>
+        <style>
+          @page {
+            size: landscape;
+            margin: 8mm;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #1e293b;
+            margin: 0;
+            padding: 16px;
+            font-size: 11px;
+            background: #fff;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0b4da2;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+          }
+          .title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #0b4da2;
+            margin: 0;
+          }
+          .subtitle {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
+          }
+          .meta {
+            text-align: right;
+            font-size: 11px;
+            color: #475569;
+          }
+          .summary-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+          }
+          .summary-card {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #f8fafc;
+          }
+          .summary-card .lbl {
+            font-size: 9px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #64748b;
+          }
+          .summary-card .val {
+            font-size: 13px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-top: 2px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          th {
+            background: #0b4da2;
+            color: #ffffff;
+            font-weight: 700;
+            text-align: left;
+            padding: 6px 7px;
+            border: 1px solid #083c7e;
+            white-space: nowrap;
+          }
+          td {
+            padding: 5px 7px;
+            border: 1px solid #e2e8f0;
+            vertical-align: middle;
+          }
+          tr:nth-child(even) {
+            background: #f8fafc;
+          }
+          .badge {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .badge-active {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+          }
+          .badge-inactive {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+          }
+          .badge-runaway {
+            background: #ffedd5;
+            color: #c2410c;
+            border: 1px solid #fed7aa;
+          }
+          .badge-blacklist {
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #020617;
+          }
+          .footer {
+            margin-top: 12px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: #94a3b8;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 class="title">FOREIGN CUSTOMER REGISTRY REPORT</h1>
+            <div class="subtitle">Foreign Customer / Worker Directory</div>
+          </div>
+          <div class="meta">
+            <div><strong>Report Date:</strong> ${today}</div>
+            <div><strong>Total Filtered:</strong> ${filteredCustomers.length} Records</div>
+          </div>
+        </div>
+
+        <div class="summary-bar">
+          <div class="summary-card">
+            <div class="lbl">Total Listed</div>
+            <div class="val">${filteredCustomers.length}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Active Permits</div>
+            <div class="val" style="color: #15803d;">${totalActive}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Inactive</div>
+            <div class="val" style="color: #b91c1c;">${totalInactive}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Runaway Alerts</div>
+            <div class="val" style="color: #c2410c;">${totalRunaway}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Blacklist</div>
+            <div class="val" style="color: #0f172a;">${totalBlacklist}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25px; text-align: center;">#</th>
+              <th>Worker Name</th>
+              <th>Passport</th>
+              <th>NID No</th>
+              <th>Employer Company</th>
+              <th>Sector</th>
+              <th>Salary</th>
+              <th>Contact</th>
+              <th style="text-align: center;">Dossiers</th>
+              <th style="text-align: center;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <span>Generated by Foreign Customer Management System</span>
+          <span>Confidential</span>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+    } else {
+      window.print();
+    }
+  };
 
   const activeStatCards = useMemo(() => {
     return (cards && cards.length > 0 ? cards : DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS)
@@ -732,10 +1219,10 @@ export default function CustomerDashboardContent({
 
             const cardClasses = `admin-stat-card ${animClass} ${
               isGlass
-                ? `dashboard-card-glass rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[130px] no-underline ${
+                ? `dashboard-card-glass rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[105px] no-underline ${
                     metrics.isLink && metrics.link ? 'cursor-pointer active:scale-[0.99]' : ''
                   }`
-                : `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline border-slate-200 hover:border-blue-400 ${
+                : `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[105px] no-underline border-slate-200 hover:border-blue-400 ${
                     metrics.isLink && metrics.link
                       ? 'cursor-pointer hover:border-[#0b4da2] hover:ring-2 hover:ring-blue-100 active:scale-[0.99]'
                       : ''
@@ -767,18 +1254,6 @@ export default function CustomerDashboardContent({
                 >
                   {metrics.value}
                 </div>
-
-                {/* Bottom Row: Subtitle / Link */}
-                {metrics.isLink && metrics.link ? (
-                  <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium group-hover:underline">
-                    <TrendingUp size={12} className="shrink-0" />
-                    <span className="truncate">{metrics.sub}</span>
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-slate-500 mt-1 truncate" title={metrics.sub}>
-                    {metrics.sub}
-                  </div>
-                )}
               </>
             );
 
@@ -814,11 +1289,11 @@ export default function CustomerDashboardContent({
       {/* ========================================================================= */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3.5">
         {/* Search Bar & Dropdown Filters (with Status Dropdown) */}
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+        <div className="flex flex-col 2xl:flex-row items-stretch 2xl:items-center justify-between gap-3">
           {/* Search Bar */}
-          <div className="relative w-full lg:w-80 shrink-0">
+          <div className="relative w-full 2xl:w-72 shrink-0">
             <Search
-              size={16}
+              size={15}
               className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
             />
             <input
@@ -826,73 +1301,73 @@ export default function CustomerDashboardContent({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search worker by name, passport, NID, phone..."
-              className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all shadow-xs"
+              className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all shadow-xs"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 bg-transparent border-0 cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 bg-transparent border-0 cursor-pointer"
               >
                 <X size={13} />
               </button>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
             {/* Status Dropdown Filter */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <select
                 value={tableStatusFilter}
                 onChange={(e) => setTableStatusFilter(e.target.value as any)}
-                className="appearance-none bg-white hover:bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-8 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:border-[#0b4da2] shadow-2xs cursor-pointer min-w-[170px]"
+                className="appearance-none bg-white hover:bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-7 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:border-[#0b4da2] shadow-2xs cursor-pointer w-36 sm:w-40 truncate"
                 title="Filter table by status"
               >
                 <option value="all">All Customer ({statusCounts.all})</option>
-                <option value="active">Active Customer ({statusCounts.active})</option>
-                <option value="inactive">Inactive Customer ({statusCounts.inactive})</option>
-                <option value="runaway">Runaway Customer ({statusCounts.runaway})</option>
-                <option value="blacklist">Black List Customer ({statusCounts.blacklist})</option>
-                <option value="absent">Absent Customer ({statusCounts.absent})</option>
-                <option value="pending">Pending Customer ({statusCounts.pending})</option>
+                <option value="active">Active ({statusCounts.active})</option>
+                <option value="inactive">Inactive ({statusCounts.inactive})</option>
+                <option value="runaway">Runaway ({statusCounts.runaway})</option>
+                <option value="blacklist">Black List ({statusCounts.blacklist})</option>
+                <option value="absent">Absent ({statusCounts.absent})</option>
+                <option value="pending">Pending ({statusCounts.pending})</option>
               </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
 
             {/* Sector Dropdown Filter */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <select
                 value={tableSectorFilter}
                 onChange={(e) => setTableSectorFilter(e.target.value)}
-                className="appearance-none bg-white hover:bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-8 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer min-w-[160px]"
+                className="appearance-none bg-white hover:bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-7 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer w-32 sm:w-36 truncate"
                 title="Filter table by sector"
               >
-                <option value="ALL">All Working Sectors</option>
+                <option value="ALL">All Sectors</option>
                 {sectors.map((s) => (
                   <option key={s.id} value={s.name}>
                     {s.name}
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
 
             {/* Employer Company Dropdown Filter */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <select
                 value={tableCompanyFilter}
                 onChange={(e) => setTableCompanyFilter(e.target.value)}
-                className="appearance-none bg-white hover:bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-8 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer min-w-[170px] max-w-[220px] truncate"
+                className="appearance-none bg-white hover:bg-slate-50 border border-slate-300 rounded-lg pl-3 pr-7 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer w-36 sm:w-44 truncate"
                 title="Filter table by company"
               >
-                <option value="ALL">All Employer Companies</option>
+                <option value="ALL">All Companies</option>
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
 
             {/* Reset Filters button */}
@@ -905,13 +1380,62 @@ export default function CustomerDashboardContent({
                   setTableCompanyFilter('ALL');
                   setSearchTerm('');
                 }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-2 rounded-lg transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-2 rounded-lg transition-colors cursor-pointer shrink-0"
                 title="Reset all filters"
               >
                 <RotateCcw size={12} />
                 <span>Reset</span>
               </button>
             )}
+
+            {/* Export Dropdown Button (Excel, CSV, PDF) */}
+            <div className="relative inline-block text-left shrink-0" ref={exportDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportOpen(!isExportOpen)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors cursor-pointer border border-emerald-700 shrink-0 whitespace-nowrap"
+                title="Export Foreign Customer List"
+              >
+                <Download size={13} className="shrink-0" />
+                <span>Export</span>
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-200 ${isExportOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isExportOpen && (
+                <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-white shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                    Export ({filteredCustomers.length} records)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
+                    <span>Export Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileText size={15} className="text-blue-600 shrink-0" />
+                    <span>Export CSV (.csv)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportPDF}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <Printer size={15} className="text-rose-600 shrink-0" />
+                    <span>Export PDF (.pdf)</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

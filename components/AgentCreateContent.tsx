@@ -1,23 +1,31 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   AlertCircle,
   ArrowLeft,
   Briefcase,
+  Building2,
+  Calendar,
   Camera,
   CheckCircle2,
   FileText,
+  Globe2,
+  Layers,
   Phone,
   Save,
   Upload,
   User,
-  Users,
   X,
 } from 'lucide-react';
-import { createAgent, AgentRecord } from '@/lib/agentStorage';
+import { createAgent } from '@/lib/agentStorage';
+import { Company } from '@/lib/companies';
+import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
+import { fetchWorkingSectors, WorkingSector } from '@/lib/customerStorage';
+import { getMasterAdminUser } from '@/lib/auth';
 
 interface AgentCreateContentProps {
   portalType: 'superadmin' | 'frontend_superadmin' | 'masteradmin';
@@ -27,15 +35,98 @@ interface AgentCreateContentProps {
 export default function AgentCreateContent({ portalType, backUrl }: AgentCreateContentProps) {
   const router = useRouter();
 
+  // Form State
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [companyId, setCompanyId] = useState('');
+  const [programId, setProgramId] = useState('');
+  const [sector, setSector] = useState('');
+  const [year, setYear] = useState('');
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState('');
   const [imageName, setImageName] = useState('');
+
+  // Dropdown Data
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
+  const [sectors, setSectors] = useState<WorkingSector[]>([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Load Companies, Programs, and Sectors
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
+      fetchPrograms().catch(() => getStoredPrograms()),
+      fetchWorkingSectors().catch(() => []),
+    ]).then(([comps, progs, secs]) => {
+      if (!isMounted) return;
+      let finalComps = comps;
+      if (portalType === 'masteradmin') {
+        const user = getMasterAdminUser();
+        const scope = Array.isArray(user?.assigned_companies) ? user!.assigned_companies : [];
+        if (scope.length > 0 && !scope.includes('*')) {
+          finalComps = comps.filter((c: Company) =>
+            scope.some((sId) => sId.toLowerCase() === c.id.toLowerCase())
+          );
+        }
+      }
+      setCompanies(finalComps);
+      setPrograms(progs);
+      setSectors(secs);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [portalType]);
+
+  // Year options: past 3 years to future 4 years
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => {
+    const list: number[] = [];
+    for (let y = currentYear - 3; y <= currentYear + 4; y++) {
+      list.push(y);
+    }
+    return list;
+  }, [currentYear]);
+
+  // Sector options: combine backend sectors with standard fallback list
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>();
+    sectors.forEach((s) => {
+      if (s.name && s.name.trim()) set.add(s.name.trim());
+    });
+    const defaults = [
+      'Construction',
+      'Manufacturing',
+      'Plantation',
+      'Agriculture',
+      'Services',
+      'Cleaning',
+      'Hospitality',
+      'Security',
+      'F&B',
+      'IT / Office',
+      'Other',
+    ];
+    defaults.forEach((d) => set.add(d));
+    return Array.from(set).sort();
+  }, [sectors]);
+
+  const handleCompanyChange = (cId: string) => {
+    setCompanyId(cId);
+    if (!sector && cId) {
+      const found = companies.find((c) => c.id === cId);
+      if (found?.sector) {
+        setSector(found.sector);
+      }
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,11 +169,20 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
     setIsSubmitting(true);
     setFeedback(null);
 
+    const selectedComp = companies.find((c) => c.id === companyId);
+    const selectedProg = programs.find((p) => String(p.id) === programId);
+
     try {
       await createAgent({
         name: name.trim(),
         phone: phone.trim(),
-        notes: notes.trim(),
+        company_id: companyId || undefined,
+        company_name: selectedComp?.name || undefined,
+        program_id: programId || undefined,
+        program_name: selectedProg?.name || undefined,
+        sector: sector || undefined,
+        year: year || undefined,
+        notes: notes.trim() || undefined,
         image: image || undefined,
       });
 
@@ -98,7 +198,7 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
   };
 
   return (
-    <div className="space-y-6 pb-12 max-w-3xl mx-auto">
+    <div className="space-y-6 pb-12 max-w-4xl mx-auto">
       {/* Top Breadcrumb & Return Action */}
       <div className="flex items-center justify-between gap-4">
         <Link
@@ -152,7 +252,7 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
             Register New Agency Partner
           </h2>
           <p className="text-xs text-slate-500 mt-1 m-0">
-            Register authorized recruitment agents, attach official contact info, portrait picture, and specialization remarks.
+            Register authorized recruitment agents, assign company, program, sector, year, contact information, and portrait.
           </p>
         </div>
 
@@ -224,52 +324,162 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
           </div>
         </div>
 
-        {/* Input Fields */}
-        <div className="space-y-4">
-          {/* Agent Full Name */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Agent Name <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <User size={15} />
-              </span>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Md. Rafiqul Islam / Ahmad Farhan"
-                className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
-              />
+        {/* Organized Form Sections */}
+        <div className="space-y-5">
+          {/* Section 1: Basic Identity (Agent Name & Phone) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Agent Full Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Agent Name <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                  <User size={15} />
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Md. Rafiqul Islam / Ahmad Farhan"
+                  className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Phone / WhatsApp */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Phone / WhatsApp Number <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Phone size={15} />
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. +880 1712-345678 or +60 19-876 5432"
+                  className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Phone / WhatsApp */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Phone / WhatsApp Number <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <Phone size={15} />
-              </span>
-              <input
-                type="text"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="e.g. +880 1712-345678 or +60 19-876 5432"
-                className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
-              />
+          {/* Section 2: Affiliation & Program Categorization (Company, Program, Sector, Year) */}
+          <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-4">
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200/80 pb-2">
+              <Building2 size={14} className="text-[#0b4da2]" />
+              <span>Agency Affiliation &amp; Recruitment Scope</span>
             </div>
-            <p className="text-[10px] text-slate-400 mt-1 m-0">
-              Include country code (e.g. +880, +60, +62) for WhatsApp quick-chat integration.
-            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Company Select */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Building2 size={13} className="text-[#0b4da2]" />
+                    <span>Company</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={companyId}
+                    onChange={(e) => handleCompanyChange(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
+                  >
+                    <option value="">-- Select Company --</option>
+                    {companies.map((comp) => (
+                      <option key={comp.id} value={comp.id}>
+                        {comp.name} {comp.sector ? `• ${comp.sector}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Program Select */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Layers size={13} className="text-[#0b4da2]" />
+                    <span>Program</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={programId}
+                    onChange={(e) => setProgramId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
+                  >
+                    <option value="">-- Select Program --</option>
+                    {programs.map((prog) => (
+                      <option key={prog.id} value={String(prog.id)}>
+                        {prog.name} {prog.category ? `(${prog.category})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Sector Select */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Globe2 size={13} className="text-[#0b4da2]" />
+                    <span>Sector</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={sector}
+                    onChange={(e) => setSector(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
+                  >
+                    <option value="">-- Select Working Sector --</option>
+                    {sectorOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Year Select */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#0b4da2]" />
+                    <span>Year</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={year}
+                    onChange={(e) => setYear(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
+                  >
+                    <option value="">-- Select Recruitment Year --</option>
+                    {yearOptions.map((y) => (
+                      <option key={y} value={String(y)}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Notes & Remarks */}
+          {/* Section 3: Notes & Remarks */}
           <div>
             <label className="block text-xs font-bold text-slate-800 mb-1.5">
               Recruitment Remarks &amp; Specialization <span className="text-slate-400 font-normal">(Optional)</span>

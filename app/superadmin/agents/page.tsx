@@ -39,7 +39,10 @@ import {
   updateAgent,
   deleteAgent,
 } from '@/lib/agentStorage';
-import { getFileUrl } from '@/lib/customerStorage';
+import { getFileUrl, fetchWorkingSectors, WorkingSector } from '@/lib/customerStorage';
+import { Company } from '@/lib/companies';
+import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
+import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
 
 const DEFAULT_AGENT_CARDS: PageStatCardConfig[] = [
   { id: 'total_agents', title: 'Total Agents', subtitle: 'All registered recruitment agents', icon: 'Users', order_num: 1 },
@@ -71,13 +74,70 @@ export default function SuperAdminAgentManagementPage() {
   // Photo upload ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Form State (Name, Phone, Note, Image)
+  // Dropdown data
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
+  const [sectors, setSectors] = useState<WorkingSector[]>([]);
+
+  // Form State
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    company_id: '',
+    company_name: '',
+    program_id: '',
+    program_name: '',
+    sector: '',
+    year: '',
     notes: '',
     image: '',
   });
+
+  // Load companies, programs, sectors
+  useEffect(() => {
+    Promise.all([
+      fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
+      fetchPrograms().catch(() => getStoredPrograms()),
+      fetchWorkingSectors().catch(() => []),
+    ]).then(([comps, progs, secs]) => {
+      setCompanies(comps);
+      setPrograms(progs);
+      setSectors(secs);
+    });
+  }, []);
+
+  // Year options: past 3 years to future 4 years
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => {
+    const list: number[] = [];
+    for (let y = currentYear - 3; y <= currentYear + 4; y++) {
+      list.push(y);
+    }
+    return list;
+  }, [currentYear]);
+
+  // Sector options
+  const sectorOptions = useMemo(() => {
+    const set = new Set<string>();
+    sectors.forEach((s) => {
+      if (s.name && s.name.trim()) set.add(s.name.trim());
+    });
+    const defaults = [
+      'Construction',
+      'Manufacturing',
+      'Plantation',
+      'Agriculture',
+      'Services',
+      'Cleaning',
+      'Hospitality',
+      'Security',
+      'F&B',
+      'IT / Office',
+      'Other',
+    ];
+    defaults.forEach((d) => set.add(d));
+    return Array.from(set).sort();
+  }, [sectors]);
 
   // Load cards layout and data
   useEffect(() => {
@@ -154,6 +214,12 @@ export default function SuperAdminAgentManagementPage() {
     setFormData({
       name: '',
       phone: '',
+      company_id: '',
+      company_name: '',
+      program_id: '',
+      program_name: '',
+      sector: '',
+      year: '',
       notes: '',
       image: '',
     });
@@ -166,6 +232,12 @@ export default function SuperAdminAgentManagementPage() {
     setFormData({
       name: agent.name || '',
       phone: agent.phone || '',
+      company_id: agent.company_id || '',
+      company_name: agent.company_name || '',
+      program_id: agent.program_id || '',
+      program_name: agent.program_name || '',
+      sector: agent.sector || '',
+      year: agent.year || '',
       notes: agent.notes || '',
       image: agent.image || '',
     });
@@ -201,11 +273,20 @@ export default function SuperAdminAgentManagementPage() {
     }
 
     setIsSubmitting(true);
+    const selectedComp = companies.find((c) => c.id === formData.company_id);
+    const selectedProg = programs.find((p) => String(p.id) === formData.program_id);
+
     try {
       if (editingAgent) {
         const updated = await updateAgent(editingAgent.id, {
           name: formData.name.trim(),
           phone: formData.phone.trim(),
+          company_id: formData.company_id || undefined,
+          company_name: selectedComp?.name || formData.company_name || undefined,
+          program_id: formData.program_id || undefined,
+          program_name: selectedProg?.name || formData.program_name || undefined,
+          sector: formData.sector || undefined,
+          year: formData.year || undefined,
           notes: formData.notes.trim() || undefined,
           image: formData.image || undefined,
         });
@@ -215,6 +296,12 @@ export default function SuperAdminAgentManagementPage() {
         const created = await createAgent({
           name: formData.name.trim(),
           phone: formData.phone.trim(),
+          company_id: formData.company_id || undefined,
+          company_name: selectedComp?.name || undefined,
+          program_id: formData.program_id || undefined,
+          program_name: selectedProg?.name || undefined,
+          sector: formData.sector || undefined,
+          year: formData.year || undefined,
           notes: formData.notes.trim() || undefined,
           image: formData.image || undefined,
         });
@@ -502,6 +589,30 @@ export default function SuperAdminAgentManagementPage() {
                             <span className="text-[10px] text-slate-400 font-mono">
                               Agent ID #{agent.id}
                             </span>
+                            {(agent.company_name || agent.program_name || agent.sector || agent.year) && (
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                {agent.company_name && (
+                                  <span className="inline-flex items-center text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                    {agent.company_name}
+                                  </span>
+                                )}
+                                {agent.program_name && (
+                                  <span className="inline-flex items-center text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                    {agent.program_name}
+                                  </span>
+                                )}
+                                {agent.sector && (
+                                  <span className="inline-flex items-center text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    {agent.sector}
+                                  </span>
+                                )}
+                                {agent.year && (
+                                  <span className="inline-flex items-center text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                    {agent.year}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -723,6 +834,97 @@ export default function SuperAdminAgentManagementPage() {
                 <span className="text-[10px] text-slate-400 mt-1 block">
                   Include country code for direct WhatsApp messaging support
                 </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50/70 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Company
+                  </label>
+                  <select
+                    value={formData.company_id}
+                    onChange={(e) => {
+                      const cId = e.target.value;
+                      const comp = companies.find((c) => c.id === cId);
+                      setFormData((p) => ({
+                        ...p,
+                        company_id: cId,
+                        company_name: comp?.name || '',
+                        sector: !p.sector && comp?.sector ? comp.sector : p.sector,
+                      }));
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  >
+                    <option value="">-- Select Company --</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.sector ? `• ${c.sector}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Program
+                  </label>
+                  <select
+                    value={formData.program_id}
+                    onChange={(e) => {
+                      const pId = e.target.value;
+                      const prog = programs.find((p) => String(p.id) === pId);
+                      setFormData((p) => ({
+                        ...p,
+                        program_id: pId,
+                        program_name: prog?.name || '',
+                      }));
+                    }}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  >
+                    <option value="">-- Select Program --</option>
+                    {programs.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Sector
+                  </label>
+                  <select
+                    value={formData.sector}
+                    onChange={(e) => setFormData((p) => ({ ...p, sector: e.target.value }))}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  >
+                    <option value="">-- Select Sector --</option>
+                    {sectorOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Year
+                  </label>
+                  <select
+                    value={formData.year}
+                    onChange={(e) => setFormData((p) => ({ ...p, year: e.target.value }))}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                  >
+                    <option value="">-- Select Year --</option>
+                    {yearOptions.map((y) => (
+                      <option key={y} value={String(y)}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>

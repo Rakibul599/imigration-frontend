@@ -295,7 +295,7 @@ export default function EmployeeLayout({
         title: 'Customer',
         items: [
           {
-            name: 'Customer Management',
+            name: 'Forgein Customer Management',
             icon: UserCheck,
             badge: customerCount > 0 ? `${customerCount}` : undefined,
             isGroup: true,

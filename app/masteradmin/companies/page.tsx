@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 import {
   AlertCircle,
@@ -12,14 +13,19 @@ import {
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Coins,
   CreditCard,
+  Download,
   Edit2,
   ExternalLink,
   Eye,
+  FileSpreadsheet,
+  FileText,
   Filter,
   Layers,
+  Printer,
   RotateCcw,
   Search,
   ShieldAlert,
@@ -120,6 +126,25 @@ export default function MasterAdminCompaniesPage() {
 
   // Current logged in Master Admin user
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+  // Export Dropdown State & Ref
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const assignedList = useMemo(() => {
     return (currentUser && Array.isArray(currentUser.assigned_companies))
@@ -344,6 +369,411 @@ export default function MasterAdminCompaniesPage() {
       return matchSearch && matchSector && matchCardCompany && matchesProgram && matchesYear;
     });
   }, [permittedCompanies, searchTerm, selectedSector, selectedSingleCompany, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
+
+  const getCompanyExportRow = (company: Company, idx: number) => {
+    const planName = company.subscription_plan_key
+      ? company.subscription_plan_key
+          .split('_')
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ')
+      : 'Standard';
+
+    const expiryStr = company.subscription_expires_at
+      ? new Date(company.subscription_expires_at).toLocaleDateString('en-GB')
+      : 'No Expiry';
+
+    return {
+      sl: idx + 1,
+      name: company.name || '',
+      roc: company.roc || '',
+      sector: company.sector || '',
+      status: (company.status || 'active').toUpperCase(),
+      activeWorkers: getCompanyActiveWorkers(company),
+      inactiveWorkers: getCompanyInactiveWorkers(company),
+      incomeWallet: getCompanyIncomeWallet(company),
+      costWallet: getCompanyCostWallet(company),
+      profitWallet: getCompanyProfitWallet(company),
+      plan: planName,
+      subStatus: (company.subscription_status || '').replace(/_/g, ' ').toUpperCase() || 'STANDARD',
+      expiry: expiryStr,
+      phone: company.phone || company.telephone || '',
+      email: company.email || '',
+      address: company.address || '',
+    };
+  };
+
+  const handleExportExcel = () => {
+    setIsExportOpen(false);
+    if (!filteredCompanies || filteredCompanies.length === 0) {
+      alert('No companies found to export.');
+      return;
+    }
+
+    const data = filteredCompanies.map((c, idx) => {
+      const row = getCompanyExportRow(c, idx);
+      return {
+        '#': row.sl,
+        'Company Name': row.name,
+        'ROC': row.roc,
+        'Sector': row.sector,
+        'Status': row.status,
+        'Active Workers': row.activeWorkers,
+        'Inactive Workers': row.inactiveWorkers,
+        'Income Wallet (RM)': row.incomeWallet,
+        'Cost Wallet (RM)': row.costWallet,
+        'Profit Wallet (RM)': row.profitWallet,
+        'Subscription Plan': row.plan,
+        'Subscription Status': row.subStatus,
+        'Subscription Expiry': row.expiry,
+        'Phone': row.phone,
+        'Email': row.email,
+        'Address': row.address,
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    worksheet['!cols'] = [
+      { wch: 5 },  // #
+      { wch: 30 }, // Company Name
+      { wch: 18 }, // ROC
+      { wch: 18 }, // Sector
+      { wch: 12 }, // Status
+      { wch: 16 }, // Active Workers
+      { wch: 16 }, // Inactive Workers
+      { wch: 20 }, // Income Wallet
+      { wch: 18 }, // Cost Wallet
+      { wch: 18 }, // Profit Wallet
+      { wch: 20 }, // Plan
+      { wch: 20 }, // Sub Status
+      { wch: 18 }, // Expiry
+      { wch: 18 }, // Phone
+      { wch: 26 }, // Email
+      { wch: 35 }, // Address
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Companies');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `companies_list_${today}.xlsx`);
+  };
+
+  const handleExportCSV = () => {
+    setIsExportOpen(false);
+    if (!filteredCompanies || filteredCompanies.length === 0) {
+      alert('No companies found to export.');
+      return;
+    }
+
+    const headers = [
+      '#',
+      'Company Name',
+      'ROC',
+      'Sector',
+      'Status',
+      'Active Workers',
+      'Inactive Workers',
+      'Income Wallet (RM)',
+      'Cost Wallet (RM)',
+      'Profit Wallet (RM)',
+      'Subscription Plan',
+      'Subscription Status',
+      'Subscription Expiry',
+      'Phone',
+      'Email',
+      'Address',
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filteredCompanies.map((c, idx) => {
+      const row = getCompanyExportRow(c, idx);
+      return [
+        row.sl,
+        escapeCSV(row.name),
+        escapeCSV(row.roc),
+        escapeCSV(row.sector),
+        escapeCSV(row.status),
+        row.activeWorkers,
+        row.inactiveWorkers,
+        row.incomeWallet,
+        row.costWallet,
+        row.profitWallet,
+        escapeCSV(row.plan),
+        escapeCSV(row.subStatus),
+        escapeCSV(row.expiry),
+        escapeCSV(row.phone),
+        escapeCSV(row.email),
+        escapeCSV(row.address),
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `companies_list_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPDF = () => {
+    setIsExportOpen(false);
+    if (!filteredCompanies || filteredCompanies.length === 0) {
+      alert('No companies found to export.');
+      return;
+    }
+
+    const today = new Date().toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const rowsHtml = filteredCompanies
+      .map((c, idx) => {
+        const row = getCompanyExportRow(c, idx);
+        return `
+          <tr>
+            <td style="text-align: center;">${row.sl}</td>
+            <td style="font-weight: 600;">${row.name || '—'}</td>
+            <td style="font-family: monospace;">${row.roc || '—'}</td>
+            <td>${row.sector || '—'}</td>
+            <td style="text-align: center;">
+              <span class="badge ${row.status.toLowerCase() === 'inactive' ? 'badge-inactive' : 'badge-active'}">
+                ${row.status}
+              </span>
+            </td>
+            <td style="text-align: center; font-family: monospace; font-weight: 600;">${row.activeWorkers.toLocaleString()}</td>
+            <td style="text-align: center; font-family: monospace;">${row.inactiveWorkers.toLocaleString()}</td>
+            <td style="text-align: right; font-family: monospace; color: #1d4ed8; font-weight: 600;">RM ${row.incomeWallet.toLocaleString()}</td>
+            <td style="text-align: right; font-family: monospace; color: #be123c;">RM ${row.costWallet.toLocaleString()}</td>
+            <td style="text-align: right; font-family: monospace; color: #047857; font-weight: 600;">RM ${row.profitWallet.toLocaleString()}</td>
+            <td style="text-align: center;">${row.plan}</td>
+            <td style="text-align: center; font-family: monospace; font-size: 10px;">${row.expiry}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const totalActiveWorkers = filteredCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
+    const totalIncome = filteredCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
+    const totalCost = filteredCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
+    const totalProfit = filteredCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Companies Registry Report - ${today}</title>
+        <style>
+          @page {
+            size: landscape;
+            margin: 8mm;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #1e293b;
+            margin: 0;
+            padding: 16px;
+            font-size: 11px;
+            background: #fff;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0b4da2;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+          }
+          .title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #0b4da2;
+            margin: 0;
+          }
+          .subtitle {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
+          }
+          .meta {
+            text-align: right;
+            font-size: 11px;
+            color: #475569;
+          }
+          .summary-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+          }
+          .summary-card {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #f8fafc;
+          }
+          .summary-card .lbl {
+            font-size: 9px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #64748b;
+          }
+          .summary-card .val {
+            font-size: 13px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-top: 2px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          th {
+            background: #22a34a;
+            color: #ffffff;
+            font-weight: 700;
+            text-align: left;
+            padding: 6px 7px;
+            border: 1px solid #16a34a;
+            white-space: nowrap;
+          }
+          td {
+            padding: 5px 7px;
+            border: 1px solid #e2e8f0;
+            vertical-align: middle;
+          }
+          tr:nth-child(even) {
+            background: #f8fafc;
+          }
+          .badge {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+          .badge-active {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+          }
+          .badge-inactive {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+          }
+          .footer {
+            margin-top: 12px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: #94a3b8;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 class="title">COMPANIES REGISTRY REPORT</h1>
+            <div class="subtitle">Foreign Customer / Companies Management System</div>
+          </div>
+          <div class="meta">
+            <div><strong>Report Date:</strong> ${today}</div>
+            <div><strong>Total Filtered:</strong> ${filteredCompanies.length} Companies</div>
+          </div>
+        </div>
+
+        <div class="summary-bar">
+          <div class="summary-card">
+            <div class="lbl">Total Listed Companies</div>
+            <div class="val">${filteredCompanies.length}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Total Active Workers</div>
+            <div class="val" style="color: #15803d;">${totalActiveWorkers.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Total Income Wallet</div>
+            <div class="val" style="color: #1d4ed8;">RM ${totalIncome.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Total Cost Wallet</div>
+            <div class="val" style="color: #be123c;">RM ${totalCost.toLocaleString()}</div>
+          </div>
+          <div class="summary-card">
+            <div class="lbl">Total Profit Wallet</div>
+            <div class="val" style="color: #047857;">RM ${totalProfit.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25px; text-align: center;">#</th>
+              <th>Company Name</th>
+              <th>ROC</th>
+              <th>Sector</th>
+              <th style="text-align: center;">Status</th>
+              <th style="text-align: center;">Active Workers</th>
+              <th style="text-align: center;">Inactive Workers</th>
+              <th style="text-align: right;">Income (RM)</th>
+              <th style="text-align: right;">Cost (RM)</th>
+              <th style="text-align: right;">Profit (RM)</th>
+              <th style="text-align: center;">Subscription</th>
+              <th style="text-align: center;">Expiry Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <span>Generated by Companies Management System</span>
+          <span>Confidential</span>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+    } else {
+      window.print();
+    }
+  };
 
   // Aggregated totals strictly for selected scope (single company or all permitted)
   const totalActiveWorkers = useMemo(() => {
@@ -967,6 +1397,55 @@ export default function MasterAdminCompaniesPage() {
             >
               <RotateCcw size={15} />
             </button>
+
+            {/* Export Dropdown Button (Excel, CSV, PDF) */}
+            <div className="relative inline-block text-left shrink-0" ref={exportDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportOpen(!isExportOpen)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer border border-emerald-700"
+                title="Export Companies List"
+              >
+                <Download size={14} className="shrink-0" />
+                <span>Export</span>
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-200 ${isExportOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isExportOpen && (
+                <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-white shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                    Export ({filteredCompanies.length} records)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
+                    <span>Export Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileText size={15} className="text-blue-600 shrink-0" />
+                    <span>Export CSV (.csv)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportPDF}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <Printer size={15} className="text-rose-600 shrink-0" />
+                    <span>Export PDF (.pdf)</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
