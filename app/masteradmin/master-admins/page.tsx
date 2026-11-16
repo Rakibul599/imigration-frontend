@@ -6,6 +6,8 @@ import {
   AlertCircle,
   Building2,
   Calendar,
+  CalendarClock,
+  CalendarPlus,
   Check,
   CheckCircle2,
   Clock,
@@ -15,6 +17,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Hourglass,
   KeyRound,
   Link2,
   Lock,
@@ -28,6 +31,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Timer,
   Trash2,
   User,
   UserCheck,
@@ -73,6 +77,7 @@ const DEFAULT_MASTER_ADMIN_CARDS: PageStatCardConfig[] = [
   { id: 'total_master_admins', title: 'Total Master Admins', subtitle: 'Registered administrative operators', icon: 'ShieldAlert', order_num: 1 },
   { id: 'active_status', title: 'Active Status', subtitle: 'Currently authorized & verified', icon: 'UserCheck', order_num: 2 },
   { id: 'company_permissions', title: 'Company Permissions', subtitle: 'Total assigned company slots', icon: 'Building2', order_num: 3 },
+  { id: 'active_plans', title: 'Active Plan Subscriptions', subtitle: 'Valid ongoing plan contracts', icon: 'Crown', order_num: 4 },
 ];
 
 export default function MasterAdminPermissionPage() {
@@ -150,6 +155,16 @@ export default function MasterAdminPermissionPage() {
   const [modalScheduledTime, setModalScheduledTime] = useState<string>('23:59');
   const [modalScheduledAction, setModalScheduledAction] = useState<'active' | 'inactive'>('inactive');
   const [isSavingStatus, setIsSavingStatus] = useState(false);
+
+  // Extend Plan Duration Modal State
+  const [extendModalAdmin, setExtendModalAdmin] = useState<MasterAdminRecord | null>(null);
+  const [extendPlanPackage, setExtendPlanPackage] = useState<string>('');
+  const [extensionMode, setExtensionMode] = useState<'days' | 'date'>('days');
+  const [extensionDays, setExtensionDays] = useState<number>(30);
+  const [extensionBase, setExtensionBase] = useState<'from_current' | 'from_today'>('from_current');
+  const [customTargetDate, setCustomTargetDate] = useState<string>('');
+  const [customTargetTime, setCustomTargetTime] = useState<string>('23:59');
+  const [isSavingExtension, setIsSavingExtension] = useState<boolean>(false);
 
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
@@ -535,6 +550,213 @@ export default function MasterAdminPermissionPage() {
     };
   };
 
+  const getPlanCountdownInfo = (endDateStr?: string | null) => {
+    if (!endDateStr) {
+      return {
+        status: 'none' as const,
+        label: 'No Duration',
+        dateFormatted: '',
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isExpired: false,
+        isUrgent: false,
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
+
+    let targetTime = new Date(endDateStr).getTime();
+    if (isNaN(targetTime)) {
+      targetTime = new Date(endDateStr.replace(' ', 'T')).getTime();
+    }
+
+    if (isNaN(targetTime)) {
+      return {
+        status: 'invalid' as const,
+        label: 'Invalid Date',
+        dateFormatted: '',
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isExpired: false,
+        isUrgent: false,
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
+
+    const d = new Date(targetTime);
+    const dateFormatted = d.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const diffMs = targetTime - currentTime;
+    if (diffMs <= 0) {
+      return {
+        status: 'expired' as const,
+        label: 'Expired',
+        dateFormatted,
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isExpired: true,
+        isUrgent: true,
+        color: 'text-rose-700 bg-rose-50 border-rose-300 ring-1 ring-rose-200 font-bold',
+      };
+    }
+
+    const totalSecs = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    let label = '';
+    if (days > 0) {
+      label = `${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    } else if (hours > 0) {
+      label = `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    } else {
+      label = `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+    }
+
+    const isUrgent = days <= 3;
+    const isWarning = days <= 7 && days > 3;
+
+    let color = 'text-emerald-800 bg-emerald-50/90 border-emerald-300 hover:bg-emerald-100';
+    if (isUrgent) {
+      color = 'text-rose-800 bg-rose-50 border-rose-300 ring-1 ring-rose-200 animate-pulse hover:bg-rose-100';
+    } else if (isWarning) {
+      color = 'text-amber-900 bg-amber-50 border-amber-300 ring-1 ring-amber-200 hover:bg-amber-100';
+    } else if (days <= 14) {
+      color = 'text-blue-800 bg-blue-50/90 border-blue-300 hover:bg-blue-100';
+    }
+
+    return {
+      status: 'active' as const,
+      label,
+      dateFormatted,
+      days,
+      hours,
+      minutes,
+      seconds,
+      isExpired: false,
+      isUrgent,
+      color,
+    };
+  };
+
+  const EXTENSION_PRESETS = [
+    { label: '+7 Days', days: 7, desc: '1 Week' },
+    { label: '+15 Days', days: 15, desc: 'Half Mo' },
+    { label: '+30 Days', days: 30, desc: '1 Month' },
+    { label: '+60 Days', days: 60, desc: '2 Months' },
+    { label: '+90 Days', days: 90, desc: '3 Months' },
+    { label: '+180 Days', days: 180, desc: '6 Months' },
+    { label: '+365 Days', days: 365, desc: '1 Year' },
+  ];
+
+  const openExtendPlanModal = (admin: MasterAdminRecord) => {
+    setExtendModalAdmin(admin);
+    setExtendPlanPackage(admin.subscription_package || (subscriptionPlans[0]?.plan_key ?? ''));
+    setExtensionMode('days');
+    setExtensionDays(30);
+
+    const isFuture = admin.subscription_ends_at && new Date(admin.subscription_ends_at).getTime() > Date.now();
+    setExtensionBase(isFuture ? 'from_current' : 'from_today');
+
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    setCustomTargetDate(`${yyyy}-${mm}-${dd}`);
+    setCustomTargetTime('23:59');
+  };
+
+  const calculatePreviewEndDate = (): Date => {
+    if (!extendModalAdmin) return new Date();
+
+    if (extensionMode === 'date') {
+      if (!customTargetDate) return new Date();
+      const timePart = customTargetTime || '23:59';
+      const parsed = new Date(`${customTargetDate}T${timePart}:00`);
+      return isNaN(parsed.getTime()) ? new Date() : parsed;
+    }
+
+    let baseDate = new Date();
+    const currentEnd = extendModalAdmin.subscription_ends_at
+      ? new Date(extendModalAdmin.subscription_ends_at)
+      : null;
+
+    if (extensionBase === 'from_current' && currentEnd && currentEnd.getTime() > Date.now()) {
+      baseDate = new Date(currentEnd.getTime());
+    }
+
+    const result = new Date(baseDate.getTime());
+    result.setDate(result.getDate() + Number(extensionDays || 0));
+    return result;
+  };
+
+  const handleSaveExtendPlan = async () => {
+    if (!extendModalAdmin) return;
+    setIsSavingExtension(true);
+
+    try {
+      const newEndDate = calculatePreviewEndDate();
+      const payload: any = {
+        subscription_ends_at: newEndDate.toISOString(),
+      };
+      if (extendPlanPackage) {
+        payload.subscription_package = extendPlanPackage;
+      }
+
+      const res = await fetch(`${apiBase}/master-admins/${extendModalAdmin.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const updated = await res.json().catch(() => null);
+        setMasterAdmins((prev) =>
+          prev.map((a) =>
+            a.id === extendModalAdmin.id
+              ? {
+                  ...a,
+                  subscription_ends_at: updated?.subscription_ends_at || payload.subscription_ends_at,
+                  subscription_package: payload.subscription_package || a.subscription_package,
+                  trial_status: 'paid_active',
+                }
+              : a
+          )
+        );
+
+        const formatted = newEndDate.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+        showToast(
+          'success',
+          `Plan duration for ${extendModalAdmin.name} extended successfully until ${formatted}!`
+        );
+        setExtendModalAdmin(null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to update plan duration.');
+      }
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to extend plan duration.');
+    } finally {
+      setIsSavingExtension(false);
+    }
+  };
+
   const handleOpenStatusModal = (admin: MasterAdminRecord) => {
     setStatusModalAdmin(admin);
     setModalInstantStatus(admin.status);
@@ -685,6 +907,9 @@ export default function MasterAdminPermissionPage() {
   // Statistics
   const totalAdmins = masterAdmins.length;
   const activeAdmins = masterAdmins.filter((a) => a.status === 'active').length;
+  const activePlanAdmins = masterAdmins.filter(
+    (a) => a.subscription_ends_at && new Date(a.subscription_ends_at).getTime() > currentTime
+  ).length;
   const totalAssignedSlots = masterAdmins.reduce(
     (acc, a) => acc + (a.assigned_companies?.length || 0),
     0
@@ -752,7 +977,7 @@ export default function MasterAdminPermissionPage() {
       </div>
 
       {/* KPI Stats Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${cards.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
         {cards.map((card) => {
           let value: number = 0;
           let themeColor = 'text-slate-900';
@@ -770,6 +995,10 @@ export default function MasterAdminPermissionPage() {
             value = totalAssignedSlots;
             themeColor = 'text-[#0b4da2]';
             iconBg = 'bg-purple-50 text-purple-600';
+          } else if (card.id === 'active_plans') {
+            value = activePlanAdmins;
+            themeColor = 'text-amber-600';
+            iconBg = 'bg-amber-50 text-amber-600';
           }
 
           return (
@@ -870,6 +1099,7 @@ export default function MasterAdminPermissionPage() {
                 <th className="py-3 px-4">Password</th>
                 <th className="py-3 px-4">Permitted Companies (Multi)</th>
                 <th className="py-3 px-4 text-center">Subscription</th>
+                <th className="py-3 px-4 text-center">Plan Countdown</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -877,7 +1107,7 @@ export default function MasterAdminPermissionPage() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredAdmins.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <ShieldAlert size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm font-semibold text-slate-600 m-0">
                       No Master Administrators Found
@@ -996,6 +1226,46 @@ export default function MasterAdminPermissionPage() {
                         )}
                       </td>
 
+                      {/* Plan-wise Live Countdown Column */}
+                      {/* Plan-wise Live Countdown Column (Clean 1-line pill) */}
+                      <td className="py-3 px-4 text-center align-middle whitespace-nowrap" suppressHydrationWarning>
+                        {admin.subscription_ends_at ? (
+                          (() => {
+                            const planCd = getPlanCountdownInfo(admin.subscription_ends_at);
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => openExtendPlanModal(admin)}
+                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold whitespace-nowrap tabular-nums transition-all cursor-pointer shadow-2xs group/plan hover:scale-[1.02] ${planCd.color}`}
+                                title={`Plan expires on ${planCd.dateFormatted} • Click to extend duration`}
+                                suppressHydrationWarning
+                              >
+                                <Timer
+                                  size={13}
+                                  className={`shrink-0 ${planCd.isUrgent ? 'animate-pulse text-rose-600' : 'text-current'}`}
+                                />
+                                <span className="font-mono font-bold tracking-tight">
+                                  {mounted ? planCd.label : '...'}
+                                </span>
+                                <span className="text-[10px] font-sans font-medium opacity-65 border-l border-current/25 pl-1.5">
+                                  {planCd.dateFormatted}
+                                </span>
+                              </button>
+                            );
+                          })()
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openExtendPlanModal(admin)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 hover:bg-amber-50 text-slate-500 hover:text-amber-800 border border-dashed border-slate-300 hover:border-amber-300 transition-all text-xs font-medium cursor-pointer shadow-2xs whitespace-nowrap"
+                            title="Click to set plan duration"
+                          >
+                            <CalendarPlus size={12} className="text-amber-600 shrink-0" />
+                            <span>+ Set Plan</span>
+                          </button>
+                        )}
+                      </td>
+
                       {/* Status Toggle Switch & Duration Status Countdown Badge */}
                       <td className="py-3 px-4 text-center align-middle" suppressHydrationWarning>
                         <div className="flex flex-col items-center justify-center gap-1.5 py-0.5" suppressHydrationWarning>
@@ -1025,7 +1295,7 @@ export default function MasterAdminPermissionPage() {
                             </span>
                           </button>
 
-                          {/* Live Scheduled Transition Countdown Badge */}
+                          {/* Live Scheduled Transition Countdown Badge (Clean 1-line pill) */}
                           {admin.status_scheduled_date && (() => {
                             const cd = getCountdownInfo(admin.status_scheduled_date, admin.status_scheduled_action);
                             if (cd.status === 'none') return null;
@@ -1034,17 +1304,15 @@ export default function MasterAdminPermissionPage() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenStatusModal(admin)}
-                                className={`inline-flex flex-col items-center justify-center gap-0.5 px-2.5 py-1 rounded-lg border transition-all cursor-pointer shadow-2xs group/cd hover:scale-[1.02] ${cd.color}`}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold whitespace-nowrap transition-all cursor-pointer shadow-2xs group/cd hover:scale-[1.02] ${cd.color}`}
                                 title={`Scheduled to ${isAutoActive ? 'Auto Activate' : 'Auto Deactivate'} on ${new Date(admin.status_scheduled_date).toLocaleString()} - Click to edit or clear`}
                                 suppressHydrationWarning
                               >
-                                <div className="inline-flex items-center gap-1 font-mono text-[11px] font-bold tabular-nums tracking-tight" suppressHydrationWarning>
-                                  <Clock size={11} className="shrink-0 animate-pulse text-current" />
-                                  <span>{mounted ? cd.label : '...'}</span>
-                                </div>
-                                <div className="text-[9px] font-extrabold uppercase tracking-wider opacity-90">
-                                  {isAutoActive ? 'Auto Activates' : 'Auto Deactivates'}
-                                </div>
+                                <Clock size={11} className="shrink-0 animate-pulse text-current" />
+                                <span className="font-mono font-bold tabular-nums">{mounted ? cd.label : '...'}</span>
+                                <span className="text-[9px] font-extrabold uppercase tracking-wider opacity-85 border-l border-current/25 pl-1.5">
+                                  {isAutoActive ? 'Auto On' : 'Auto Off'}
+                                </span>
                               </button>
                             );
                           })()}
@@ -1054,6 +1322,17 @@ export default function MasterAdminPermissionPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5 justify-end">
+                          {/* Extend Plan Duration Action Button */}
+                          <button
+                            type="button"
+                            onClick={() => openExtendPlanModal(admin)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 hover:text-amber-900 hover:border-amber-300 transition-all cursor-pointer shadow-2xs shrink-0"
+                            title={`Extend or manage plan duration for @${admin.username}`}
+                          >
+                            <CalendarPlus size={13} className="text-amber-600" />
+                            <span className="text-[11px] font-bold">Extend Plan</span>
+                          </button>
+
                           {/* Direct Copy Link Button */}
                           <button
                             type="button"
@@ -1880,6 +2159,288 @@ export default function MasterAdminPermissionPage() {
                 className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#0b4da2] hover:bg-[#083a7c] transition-all shadow-sm cursor-pointer border-0 disabled:opacity-50"
               >
                 {isSavingStatus ? 'Saving...' : 'Apply Status'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Extend Plan Duration Modal */}
+      {extendModalAdmin && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0">
+                  <CalendarPlus size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                    Extend Master Admin Plan Duration
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {extendModalAdmin.name} (@{extendModalAdmin.username})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExtendModalAdmin(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              {/* Current Status Overview */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Current Package:</span>
+                  <span className="font-bold text-slate-800">
+                    {subscriptionPlans.find((p) => p.plan_key === extendModalAdmin.subscription_package)?.name ||
+                      extendModalAdmin.subscription_package ||
+                      'No package'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Current Expiration:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {extendModalAdmin.subscription_ends_at
+                      ? new Date(extendModalAdmin.subscription_ends_at).toLocaleString()
+                      : 'Not Set'}
+                  </span>
+                </div>
+                {extendModalAdmin.subscription_ends_at && (() => {
+                  const currCd = getPlanCountdownInfo(extendModalAdmin.subscription_ends_at);
+                  return (
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                      <span className="text-slate-500 font-medium">Status / Countdown:</span>
+                      <span className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold ${currCd.color}`}>
+                        {currCd.isExpired ? 'Expired' : currCd.label}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Package Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Subscription Package / Tier
+                </label>
+                <select
+                  value={extendPlanPackage}
+                  onChange={(e) => setExtendPlanPackage(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="">No Plan / Keep Custom</option>
+                  {subscriptionPlans.map((plan) => (
+                    <option key={plan.plan_key} value={plan.plan_key}>
+                      {plan.name} ({plan.duration_days ? `${plan.duration_days} Days` : 'Plan'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Mode Switch: Add Days vs Exact Target Date */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Extension Method
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExtensionMode('days')}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      extensionMode === 'days'
+                        ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    Add Days / Presets
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExtensionMode('date')}
+                    className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      extensionMode === 'date'
+                        ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    Exact Date &amp; Time
+                  </button>
+                </div>
+              </div>
+
+              {extensionMode === 'days' ? (
+                <>
+                  {/* Presets */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Quick Extension Presets
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {EXTENSION_PRESETS.map((preset) => (
+                        <button
+                          key={preset.days}
+                          type="button"
+                          onClick={() => setExtensionDays(preset.days)}
+                          className={`py-2 px-1 rounded-lg text-xs font-bold transition-all cursor-pointer border flex flex-col items-center justify-center ${
+                            extensionDays === preset.days
+                              ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                          }`}
+                        >
+                          <span>{preset.label}</span>
+                          <span className="text-[9px] font-normal opacity-80">{preset.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Days Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Or Custom Days to Add
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max="3650"
+                        value={extensionDays || ''}
+                        onChange={(e) => setExtensionDays(Math.max(1, parseInt(e.target.value) || 0))}
+                        placeholder="e.g. 45"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100 font-mono"
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold">
+                        Days
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Extension Base Option (if active and in future) */}
+                  {extendModalAdmin.subscription_ends_at &&
+                    new Date(extendModalAdmin.subscription_ends_at).getTime() > Date.now() && (
+                      <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 text-xs space-y-2">
+                        <span className="font-bold text-blue-900 block">Extension Starting Point:</span>
+                        <div className="space-y-1.5">
+                          <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium">
+                            <input
+                              type="radio"
+                              name="extensionBase"
+                              checked={extensionBase === 'from_current'}
+                              onChange={() => setExtensionBase('from_current')}
+                              className="text-[#0b4da2]"
+                            />
+                            <span>Add to existing expiration date (keeps unused days)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium">
+                            <input
+                              type="radio"
+                              name="extensionBase"
+                              checked={extensionBase === 'from_today'}
+                              onChange={() => setExtensionBase('from_today')}
+                              className="text-[#0b4da2]"
+                            />
+                            <span>Reset and extend from today</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                </>
+              ) : (
+                /* Date & Time Picker */
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      New Expiry Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={customTargetDate}
+                      onChange={(e) => setCustomTargetDate(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Expiry Time
+                    </label>
+                    <input
+                      type="time"
+                      value={customTargetTime}
+                      onChange={(e) => setCustomTargetTime(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Live Preview Box */}
+              {(() => {
+                const previewDate = calculatePreviewEndDate();
+                const diffMs = previewDate.getTime() - Date.now();
+                const totalSecs = Math.max(0, Math.floor(diffMs / 1000));
+                const totalDays = Math.floor(totalSecs / 86400);
+
+                return (
+                  <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-300 space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-900 text-xs font-bold">
+                      <Sparkles size={14} className="text-emerald-600" />
+                      <span>New Expiration Preview</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <span className="text-slate-600">New End Date:</span>
+                      <span className="font-mono font-extrabold text-emerald-800 text-sm">
+                        {previewDate.toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })}{' '}
+                        {previewDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600">Total Days Remaining:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        ~{totalDays} days from now
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setExtendModalAdmin(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveExtendPlan}
+                disabled={isSavingExtension}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-all cursor-pointer shadow-xs border-0"
+              >
+                {isSavingExtension ? (
+                  <>
+                    <RotateCcw size={14} className="animate-spin" />
+                    <span>Applying...</span>
+                  </>
+                ) : (
+                  <>
+                    <CalendarPlus size={14} />
+                    <span>Apply &amp; Extend Duration</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
