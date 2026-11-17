@@ -1,18 +1,22 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
   Building2,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Clock,
+  Download,
   Edit2,
+  FileSpreadsheet,
   FileText,
   KeyRound,
   Plus,
   Power,
+  Printer,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -21,8 +25,10 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  UserX,
   X,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 import CardPriorityModal from '@/components/CardPriorityModal';
 import { DynamicCardIcon } from '@/components/DynamicCardIcon';
@@ -32,6 +38,7 @@ import {
   saveStoredPageCards,
   resetStoredPageCards,
 } from '@/lib/pageCardStorage';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 import { Company } from '@/lib/companies';
 import { fetchCompaniesFromBackend, getStoredCompanies } from '@/lib/companyStorage';
 
@@ -62,12 +69,14 @@ export type EmployeeRecord = {
 };
 
 const DEFAULT_EMPLOYEE_CARDS: PageStatCardConfig[] = [
-  { id: 'total_accounts', title: 'Total Employees', subtitle: '', icon: 'Users', order_num: 1 },
-  { id: 'active_logins', title: 'Active Accounts', subtitle: '', icon: 'UserCheck', order_num: 2 },
-  { id: 'available_companies', title: 'Companies', subtitle: '', icon: 'Building2', order_num: 3 },
+  { id: 'total_employees', title: 'Total Employees', subtitle: '', icon: 'Users', order_num: 1 },
+  { id: 'active_employees', title: 'Total Active Employees', subtitle: '', icon: 'UserCheck', order_num: 2 },
+  { id: 'inactive_employees', title: 'Inactive Employees', subtitle: '', icon: 'UserX', order_num: 3 },
 ];
 
 export default function SuperAdminEmployeesPage() {
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -109,7 +118,26 @@ export default function SuperAdminEmployeesPage() {
   const [cards, setCards] = useState<PageStatCardConfig[]>(DEFAULT_EMPLOYEE_CARDS);
 
   useEffect(() => {
-    setCards(getStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS));
+    let initialCards = getStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS);
+    const hasLegacy = initialCards.some((c) => c.id === 'available_companies' || c.id === 'total_accounts' || c.id === 'active_logins');
+    if (hasLegacy) {
+      initialCards = initialCards
+        .filter((c) => c.id !== 'available_companies')
+        .map((c) => {
+          if (c.id === 'total_accounts') {
+            return { ...c, id: 'total_employees', title: c.title === 'Total Employees' ? 'Total Employees' : c.title, icon: 'Users' };
+          }
+          if (c.id === 'active_logins') {
+            return { ...c, id: 'active_employees', title: c.title === 'Active Accounts' ? 'Total Active Employees' : c.title, icon: 'UserCheck' };
+          }
+          return c;
+        });
+      if (!initialCards.some((c) => c.id === 'inactive_employees')) {
+        initialCards.push({ id: 'inactive_employees', title: 'Inactive Employees', subtitle: '', icon: 'UserX', order_num: 3 });
+      }
+      saveStoredPageCards('employees', initialCards);
+    }
+    setCards(initialCards);
     const handleUpdate = (e: any) => {
       setCards(e.detail || getStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS));
     };
@@ -127,6 +155,124 @@ export default function SuperAdminEmployeesPage() {
     const reset = resetStoredPageCards('employees', DEFAULT_EMPLOYEE_CARDS);
     setCards(reset);
     setNotification({ type: 'info', message: 'Cards reset to default layout.' });
+  };
+
+  // Export Dropdown State & Ref
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleExportExcel = () => {
+    setIsExportOpen(false);
+    if (!filteredEmployees || filteredEmployees.length === 0) {
+      alert('No employee records found to export.');
+      return;
+    }
+
+    const data = filteredEmployees.map((emp, idx) => ({
+      SL: idx + 1,
+      'Employee Code': emp.employee_code || `EMP-${emp.id}`,
+      'Full Name': emp.name || '',
+      Email: emp.email || '',
+      Role: emp.role || 'Employee',
+      'Reporting Admin': emp.master_admin_name || 'Super Admin',
+      'Assigned Companies': (emp.assigned_companies || []).join(', ') || 'All Companies',
+      Status: (emp.status || 'active').toUpperCase(),
+      'Created Date': emp.created_at ? new Date(emp.created_at).toLocaleDateString('en-GB') : '—',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    worksheet['!cols'] = [
+      { wch: 6 },
+      { wch: 18 },
+      { wch: 24 },
+      { wch: 28 },
+      { wch: 14 },
+      { wch: 20 },
+      { wch: 30 },
+      { wch: 14 },
+      { wch: 16 },
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `employees_list_${today}.xlsx`);
+  };
+
+  const handleExportCSV = () => {
+    setIsExportOpen(false);
+    if (!filteredEmployees || filteredEmployees.length === 0) {
+      alert('No employee records found to export.');
+      return;
+    }
+
+    const headers = [
+      'SL',
+      'Employee Code',
+      'Full Name',
+      'Email',
+      'Role',
+      'Reporting Admin',
+      'Assigned Companies',
+      'Status',
+      'Created Date',
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows = [
+      headers.join(','),
+      ...filteredEmployees.map((emp, idx) =>
+        [
+          idx + 1,
+          escapeCSV(emp.employee_code || `EMP-${emp.id}`),
+          escapeCSV(emp.name || ''),
+          escapeCSV(emp.email || ''),
+          escapeCSV(emp.role || 'Employee'),
+          escapeCSV(emp.master_admin_name || 'Super Admin'),
+          escapeCSV((emp.assigned_companies || []).join('; ') || 'All Companies'),
+          escapeCSV((emp.status || 'active').toUpperCase()),
+          escapeCSV(emp.created_at ? new Date(emp.created_at).toLocaleDateString('en-GB') : '—'),
+        ].join(',')
+      ),
+    ];
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `employees_list_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    setIsExportOpen(false);
+    if (!filteredEmployees || filteredEmployees.length === 0) {
+      alert('No employee records found to print.');
+      return;
+    }
+    window.print();
   };
 
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
@@ -484,6 +630,10 @@ export default function SuperAdminEmployeesPage() {
     return filteredEmployees.filter((e) => e.status === 'active').length;
   }, [filteredEmployees]);
 
+  const inactiveCount = useMemo(() => {
+    return filteredEmployees.filter((e) => e.status !== 'active').length;
+  }, [filteredEmployees]);
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -519,6 +669,55 @@ export default function SuperAdminEmployeesPage() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Export Dropdown Button (Excel, CSV, Print) */}
+            <div className="relative inline-block text-left shrink-0" ref={exportDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportOpen(!isExportOpen)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer border border-emerald-700"
+                title="Export Employees List"
+              >
+                <Download size={14} className="shrink-0" />
+                <span>Export</span>
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-200 ${isExportOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isExportOpen && (
+                <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-white shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                    Export ({filteredEmployees.length} records)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
+                    <span>Export Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileText size={15} className="text-blue-600 shrink-0" />
+                    <span>Export CSV (.csv)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent border-t border-slate-100"
+                  >
+                    <Printer size={15} className="text-purple-600 shrink-0" />
+                    <span>Print / Save as PDF</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <Link
               href="/superadmin/employees/resignations"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs transition-all no-underline"
@@ -577,29 +776,39 @@ export default function SuperAdminEmployeesPage() {
 
       {/* KPI Cards (Exact Dashboard Card Design, Dynamic from Card Priority Config) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {cards.map((card) => {
+        {cards.filter((card) => card.visible !== false).map((card) => {
           let value: number = 0;
           let themeColor = 'text-slate-900';
           let iconBg = 'bg-blue-50 text-[#0b4da2]';
 
-          if (card.id === 'total_accounts') {
+          if (card.id === 'total_employees' || card.id === 'total_accounts') {
             value = filteredEmployees.length;
             themeColor = 'text-slate-900';
             iconBg = 'bg-blue-50 text-[#0b4da2]';
-          } else if (card.id === 'active_logins') {
+          } else if (card.id === 'active_employees' || card.id === 'active_logins') {
             value = activeCount;
             themeColor = 'text-emerald-600';
             iconBg = 'bg-emerald-50 text-emerald-600';
+          } else if (card.id === 'inactive_employees') {
+            value = inactiveCount;
+            themeColor = 'text-rose-600';
+            iconBg = 'bg-rose-50 text-rose-600';
           } else if (card.id === 'available_companies') {
             value = selectedCompanyId === 'ALL' ? companies.length : 1;
             themeColor = 'text-slate-900';
             iconBg = 'bg-indigo-50 text-indigo-600';
+          } else if (card.custom_value !== undefined) {
+            value = Number(card.custom_value) || 0;
           }
 
           return (
             <div
               key={card.id}
-              className="admin-stat-card bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-4 shadow-xs transition-all flex flex-col justify-between group min-h-[92px]"
+              className={`admin-stat-card transition-all flex flex-col justify-between group min-h-[92px] ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-xl p-4'
+                  : 'bg-white border border-slate-200 hover:border-slate-300 rounded-xl p-4 shadow-xs'
+              }`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider truncate">

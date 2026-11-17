@@ -27,6 +27,7 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  UserX,
   X,
   FileText,
 } from 'lucide-react';
@@ -387,7 +388,7 @@ export default function MasterAdminEmployeesPage() {
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Staff Members
+              Total Employees
             </span>
             <div className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
               {filteredEmployees.length}
@@ -402,7 +403,7 @@ export default function MasterAdminEmployeesPage() {
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Active Status
+              Total Active Employees
             </span>
             <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-1">
               {filteredEmployees.filter((e) => e.status === 'active').length}
@@ -417,15 +418,15 @@ export default function MasterAdminEmployeesPage() {
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
           <div>
             <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
-              Permitted Scope
+              Inactive Employees
             </span>
-            <div className="text-2xl font-bold text-purple-700 tracking-tight mt-1">
-              {permittedCompanies.length}
+            <div className="text-2xl font-bold text-rose-600 tracking-tight mt-1">
+              {filteredEmployees.filter((e) => e.status !== 'active').length}
             </div>
-            <div className="text-[11px] text-purple-600 mt-1">Available company assignments</div>
+            <div className="text-[11px] text-rose-600 mt-1">Inactive / suspended accounts</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-            <Building2 size={20} />
+          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <UserX size={20} />
           </div>
         </div>
       </div>

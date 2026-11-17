@@ -17,6 +17,7 @@ import {
   Edit2,
   ExternalLink,
   Eye,
+  FileSpreadsheet,
   FileText,
   Filter,
   Globe2,
@@ -33,6 +34,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
+  TrendingUp,
   User,
   UserCheck,
   UserMinus,
@@ -52,7 +54,16 @@ import {
   getStoredCustomerTargets,
   getStoredCustomerDeposits,
   CustomerFinanceBalance,
+  CustomerCompanyCostRecord,
+  getStoredCompanyCosts,
+  fetchCustomerCompanyCosts,
 } from '@/lib/customerFinanceStorage';
+import {
+  useDashboardCardDesign,
+  useCardAnimationSettings,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+} from '@/lib/themeSettings';
 import { getMasterAdminUser } from '@/lib/auth';
 
 interface AgentWiseCustomersContentProps {
@@ -64,6 +75,24 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
+  const {
+    animation: cardAnimation,
+    duration: cardDuration,
+    stagger: cardStagger,
+    animTriggerKey,
+  } = useCardAnimationSettings();
+
+  const getCardThemeClasses = (index: number, hoverBorder: string = 'hover:border-blue-400') => {
+    const animClass = getServiceCardAnimationClass(cardAnimation, index);
+    return `admin-stat-card ${animClass} relative overflow-hidden group transition-all flex flex-col justify-between min-h-[120px] ${
+      isGlass
+        ? 'dashboard-card-glass rounded-2xl p-5'
+        : `bg-white border border-slate-200 rounded-2xl p-5 shadow-xs ${hoverBorder}`
+    }`;
+  };
+
   const queryCompanyId = searchParams.get('company_id') || searchParams.get('company') || '';
   const queryAgentId = searchParams.get('agent_id') || '';
 
@@ -72,6 +101,7 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [programs, setPrograms] = useState<ProgramRecord[]>([]);
   const [sectors, setSectors] = useState<WorkingSector[]>([]);
+  const [costRecords, setCostRecords] = useState<CustomerCompanyCostRecord[]>([]);
 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(queryCompanyId || 'ALL');
   const [selectedAgentId, setSelectedAgentId] = useState<string>(queryAgentId || 'ALL');
@@ -96,13 +126,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
     async function loadInitialData() {
       setLoading(true);
       try {
-        const [comps, agts, custs, progs, secs] = await Promise.all([
+        const [comps, agts, custs, progs, secs, _finances, costs] = await Promise.all([
           fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
           fetchAgents().catch(() => getStoredAgents()),
           fetchCustomers(),
           fetchPrograms().catch(() => getStoredPrograms()),
           fetchWorkingSectors().catch(() => []),
           fetchAllCustomerFinances().catch(() => {}),
+          fetchCustomerCompanyCosts().catch(() => getStoredCompanyCosts()),
         ]);
 
         if (isMounted) {
@@ -122,6 +153,7 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
           setCustomers(finalCusts);
           setPrograms(progs);
           setSectors(secs);
+          setCostRecords(costs || getStoredCompanyCosts());
 
           // If no specific company was passed, default to first company if available
           if (!queryCompanyId && finalComps.length > 0 && selectedCompanyId === 'ALL') {
@@ -145,15 +177,25 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
     };
   }, []);
 
+  // Listen for background company cost updates
+  useEffect(() => {
+    const handleCostUpdate = () => {
+      setCostRecords(getStoredCompanyCosts());
+    };
+    window.addEventListener('companyCostsUpdated', handleCostUpdate);
+    return () => window.removeEventListener('companyCostsUpdated', handleCostUpdate);
+  }, []);
+
   const refreshData = async () => {
     setLoading(true);
     try {
-      const [custs, agts, progs, secs] = await Promise.all([
+      const [custs, agts, progs, secs, _finances, costs] = await Promise.all([
         fetchCustomers(),
         fetchAgents(),
         fetchPrograms().catch(() => getStoredPrograms()),
         fetchWorkingSectors().catch(() => []),
         fetchAllCustomerFinances().catch(() => {}),
+        fetchCustomerCompanyCosts().catch(() => getStoredCompanyCosts()),
       ]);
       let finalCusts = custs;
       if (portalType === 'masteradmin') {
@@ -167,6 +209,7 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
       setAgents(agts);
       setPrograms(progs);
       setSectors(secs);
+      setCostRecords(costs || getStoredCompanyCosts());
       setNotification({ type: 'success', message: 'Data refreshed successfully!' });
       setTimeout(() => setNotification(null), 3000);
     } catch {
@@ -281,6 +324,9 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
     let totalTarget = 0;
     let totalDeposit = 0;
     let totalPending = 0;
+    let totalCost = 0;
+
+    const custIdSet = new Set(agentWiseCustomers.map((c) => String(c.id)));
 
     agentWiseCustomers.forEach((cust) => {
       const bal = getCustomerFinanceBalance(cust.id);
@@ -289,7 +335,23 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
       totalPending += bal.net_pending;
     });
 
+    costRecords.forEach((c) => {
+      if (c.customer_id && custIdSet.has(String(c.customer_id))) {
+        totalCost += Number(c.total_cost_amount) || 0;
+      }
+    });
+
+    if (totalCost === 0 && selectedCompanyId !== 'ALL') {
+      costRecords.forEach((c) => {
+        if (c.company_id && String(c.company_id).toLowerCase() === selectedCompanyId.toLowerCase()) {
+          totalCost += Number(c.total_cost_amount) || 0;
+        }
+      });
+    }
+
     const totalRemaining = Math.max(0, totalTarget - totalDeposit);
+    const revenueBasis = totalTarget > 0 ? totalTarget : totalDeposit;
+    const totalProfit = Math.max(0, revenueBasis - totalCost);
 
     return {
       totalCustomers: agentWiseCustomers.length,
@@ -297,8 +359,10 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
       totalDeposit,
       totalPending,
       totalRemaining,
+      totalCost,
+      totalProfit,
     };
-  }, [agentWiseCustomers]);
+  }, [agentWiseCustomers, costRecords, selectedCompanyId]);
 
   // Compute live customer counts by status for selected Agent & Company
   const statusCounts = useMemo(() => {
@@ -355,7 +419,7 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-[#0b4da2] transition-colors no-underline"
           >
             <ArrowLeft size={16} />
-            <span>Back to Agent Directory</span>
+            <span>Back to Agent Dashboard</span>
           </Link>
           <span className="text-slate-300">•</span>
           <span className="text-xs text-[#0b4da2] font-bold">
@@ -557,7 +621,7 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
       </div>
 
       {/* 2. OVERVIEW HEADER CARD (Left: Company Image & Name, Right: Agent Pic & Name) */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs">
+      <div className={isGlass ? "dashboard-card-glass rounded-2xl p-5 sm:p-6 shadow-xs" : "bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs"}>
         <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
           <div className="flex items-center gap-2">
             <ShieldCheck size={16} className="text-[#0b4da2]" />
@@ -649,7 +713,11 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         {/* Customer Status Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total active customer */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-emerald-400 transition-all">
+          <div
+            key={`stat-card-0-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(0, cardDuration, cardStagger)}
+            className={getCardThemeClasses(0, 'hover:border-emerald-400')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Total active customer
@@ -666,11 +734,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Active foreign workers
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
           </div>
 
           {/* Card 2: Inactive customer */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-rose-400 transition-all">
+          <div
+            key={`stat-card-1-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(1, cardDuration, cardStagger)}
+            className={getCardThemeClasses(1, 'hover:border-rose-400')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Inactive customer
@@ -687,11 +758,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Deactivated / expired workers
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-rose-500 opacity-80" />
           </div>
 
           {/* Card 3: Runway customer */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-all">
+          <div
+            key={`stat-card-2-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(2, cardDuration, cardStagger)}
+            className={getCardThemeClasses(2, 'hover:border-amber-400')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Runway customer
@@ -708,11 +782,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Reported runaway workers
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
           </div>
 
           {/* Card 4: Blacklist customer */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-slate-500 transition-all">
+          <div
+            key={`stat-card-3-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(3, cardDuration, cardStagger)}
+            className={getCardThemeClasses(3, 'hover:border-slate-500')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Blacklist customer
@@ -729,14 +806,17 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Flagged / blacklisted workers
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800 opacity-80" />
           </div>
         </div>
 
-        {/* Financial Metrics Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Financial Metrics Cards (4 cards per row) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 5: Total Target Amount */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-blue-400 transition-all">
+          <div
+            key={`stat-card-4-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(4, cardDuration, cardStagger)}
+            className={getCardThemeClasses(4, 'hover:border-blue-400')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Total Target Amount
@@ -753,11 +833,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Total target recruitment budget
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#0b4da2] opacity-80" />
           </div>
 
           {/* Card 6: Total deposit amount */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-emerald-400 transition-all">
+          <div
+            key={`stat-card-5-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(5, cardDuration, cardStagger)}
+            className={getCardThemeClasses(5, 'hover:border-emerald-400')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Total deposit amount
@@ -774,11 +857,14 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Collected customer deposits
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
           </div>
 
           {/* Card 7: Total Pending Amount */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs relative overflow-hidden group hover:border-amber-400 transition-all">
+          <div
+            key={`stat-card-6-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(6, cardDuration, cardStagger)}
+            className={getCardThemeClasses(6, 'hover:border-amber-400')}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Total Pending Amount
@@ -795,7 +881,54 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                 Pending unpaid dues
               </div>
             </div>
-            <div className="absolute bottom-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
+          </div>
+
+          {/* Card 8: Total Cost */}
+          <div
+            key={`stat-card-7-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(7, cardDuration, cardStagger)}
+            className={getCardThemeClasses(7, 'hover:border-rose-400')}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total Cost
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                <FileSpreadsheet size={20} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-rose-700 font-mono">
+                RM {financialSummary.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Total processing &amp; operational cost
+              </div>
+            </div>
+          </div>
+
+          {/* Card 9: Total Profit */}
+          <div
+            key={`stat-card-8-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+            style={getServiceCardAnimationStyle(8, cardDuration, cardStagger)}
+            className={getCardThemeClasses(8, 'hover:border-indigo-400')}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Total Profit
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#0b4da2] flex items-center justify-center">
+                <TrendingUp size={20} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-black text-[#0b4da2] font-mono">
+                RM {financialSummary.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Net retained profit margin
+              </div>
+            </div>
           </div>
         </div>
       </div>

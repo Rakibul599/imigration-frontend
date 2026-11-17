@@ -7,6 +7,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  Banknote,
   Briefcase,
   Building2,
   Calendar,
@@ -22,6 +23,8 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FileText,
+  Globe,
   Globe2,
   HelpCircle,
   Image as ImageIcon,
@@ -38,6 +41,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
   UploadCloud,
   User,
   UserCheck,
@@ -138,6 +142,26 @@ function createEmptyDirector(index = 1): ApplicationDirector {
   };
 }
 
+const MALAYSIAN_BANKS = [
+  'Maybank (Malayan Banking)',
+  'CIMB Bank',
+  'Public Bank',
+  'RHB Bank',
+  'Hong Leong Bank',
+  'AmBank',
+  'Bank Islam Malaysia',
+  'Affin Bank',
+  'Standard Chartered',
+  'HSBC Malaysia',
+  'Alliance Bank',
+  'OCBC Bank Malaysia',
+  'UOB Malaysia',
+  'Touch n Go eWallet / DuitNow QR',
+  'Other Bank / FPX',
+];
+
+type PaymentMode = 'pay_later' | 'cash' | 'card' | 'online';
+
 function FreeTrialForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -178,12 +202,64 @@ function FreeTrialForm() {
   const [logo, setLogo] = useState<string>('');
   const [description, setDescription] = useState('');
 
-  // Section 3: Post-Trial Payment Setup
-  const [enablePostTrialPayment, setEnablePostTrialPayment] = useState<'yes' | 'no'>('no');
+  // Section 3: Payment Setup (Pay Later, Cash Payment, Card Payment, Online Payment)
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('pay_later');
+
+  // Card Payment Fields
   const [cardholderName, setCardholderName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
+
+  // Cash Payment Fields & Slip Upload
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashReference, setCashReference] = useState('');
+  const [cashDepositorName, setCashDepositorName] = useState('');
+  const [cashSlipFile, setCashSlipFile] = useState<File | null>(null);
+  const [cashSlipPreview, setCashSlipPreview] = useState<string | null>(null);
+  const [cashSlipName, setCashSlipName] = useState('');
+
+  const handleCashSlipUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCashSlipFile(file);
+      setCashSlipName(file.name);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setCashSlipPreview(ev.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setCashSlipPreview(null);
+      }
+    }
+  };
+
+  // Online Payment Fields
+  const [onlineBank, setOnlineBank] = useState('Maybank (Malayan Banking)');
+  const [onlineReference, setOnlineReference] = useState('');
+  const [onlineAccountName, setOnlineAccountName] = useState('');
+  const [onlineSlipFile, setOnlineSlipFile] = useState<File | null>(null);
+  const [onlineSlipPreview, setOnlineSlipPreview] = useState<string | null>(null);
+  const [onlineSlipName, setOnlineSlipName] = useState('');
+
+  const handleOnlineSlipUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setOnlineSlipFile(file);
+      setOnlineSlipName(file.name);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setOnlineSlipPreview(ev.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setOnlineSlipPreview(null);
+      }
+    }
+  };
 
   // Section 4: Master Admin Account Setup
   const [applicantName, setApplicantName] = useState('');
@@ -302,7 +378,7 @@ function FreeTrialForm() {
       return;
     }
 
-    if (enablePostTrialPayment === 'yes') {
+    if (paymentMode === 'card') {
       if (!cardholderName.trim()) {
         setErrorMessage('Please enter the Cardholder Full Name.');
         return;
@@ -339,12 +415,34 @@ function FreeTrialForm() {
 
     setIsLoading(true);
     try {
-      const cardBrand = getCardBrand(cardNumber);
-      const maskedCardNo = cardNumber.replace(/\s+/g, '').slice(-4);
-      const postTrialPaymentNote =
-        enablePostTrialPayment === 'yes'
-          ? `[Post-Trial Auto-Payment Authorized: ${cardBrand} ending in ${maskedCardNo}, Cardholder: ${cardholderName.trim()}, Expiry: ${cardExpiry.trim()}]`
-          : '[Post-Trial Payment: Pay Later manually after trial]';
+      let postTrialPaymentNote = '[Payment Option: Pay Later manually after free trial]';
+      let bankNameResolved: string | undefined = undefined;
+      let bankAccountNameResolved: string | undefined = undefined;
+      let bankAccountNoResolved: string | undefined = undefined;
+
+      if (paymentMode === 'cash') {
+        const slipInfo = cashSlipName ? `, Deposit Slip Attached: ${cashSlipName}` : '';
+        const refInfo = cashReference.trim() ? `, Ref: ${cashReference.trim()}` : '';
+        const amtInfo = cashAmount.trim() ? `, Amount: RM ${cashAmount.trim()}` : `, Plan Price: ${currentPlanPrice}`;
+        postTrialPaymentNote = `[Payment Option: Cash Payment / CDM Deposit${amtInfo}${refInfo}${slipInfo}]`;
+        bankNameResolved = 'Cash CDM Deposit';
+        bankAccountNameResolved = cashDepositorName.trim() || companyName.trim();
+        bankAccountNoResolved = cashReference.trim() || 'CASH-COUNTER';
+      } else if (paymentMode === 'card') {
+        const cardBrand = getCardBrand(cardNumber);
+        const maskedCardNo = cardNumber.replace(/\s+/g, '').slice(-4);
+        postTrialPaymentNote = `[Payment Option: Card Payment Authorized: ${cardBrand} ending in ${maskedCardNo}, Cardholder: ${cardholderName.trim()}, Expiry: ${cardExpiry.trim()}]`;
+        bankNameResolved = cardBrand;
+        bankAccountNameResolved = cardholderName.trim();
+        bankAccountNoResolved = `•••• •••• •••• ${maskedCardNo}`;
+      } else if (paymentMode === 'online') {
+        const refInfo = onlineReference.trim() ? `, Ref: ${onlineReference.trim()}` : '';
+        const slipInfo = onlineSlipName ? `, Slip: ${onlineSlipName}` : '';
+        postTrialPaymentNote = `[Payment Option: Online Payment via ${onlineBank}${refInfo}${slipInfo}]`;
+        bankNameResolved = onlineBank;
+        bankAccountNameResolved = onlineAccountName.trim() || companyName.trim();
+        bankAccountNoResolved = onlineReference.trim() || 'FPX-TRANSFER';
+      }
 
       const combinedNotes = [notes.trim(), postTrialPaymentNote]
         .filter(Boolean)
@@ -361,9 +459,9 @@ function FreeTrialForm() {
         logo: logo || undefined,
         currency: 'MYR',
         language: 'English',
-        bank_name: enablePostTrialPayment === 'yes' ? cardBrand : undefined,
-        bank_account_name: enablePostTrialPayment === 'yes' ? cardholderName.trim() : undefined,
-        bank_account_no: enablePostTrialPayment === 'yes' ? `•••• •••• •••• ${maskedCardNo}` : undefined,
+        bank_name: bankNameResolved,
+        bank_account_name: bankAccountNameResolved,
+        bank_account_no: bankAccountNoResolved,
         tag: 'Verified JIM',
         total_workers: 0,
         description: description.trim() || undefined,
@@ -605,20 +703,25 @@ function FreeTrialForm() {
                         {/* Top Row: Badges & Radio Check */}
                         <div className="flex items-center justify-between gap-2 mb-2.5">
                           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            {pkg.is_popular && (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs tracking-wider">
+                                POPULAR
+                              </span>
+                            )}
                             {pkg.badge && (
                               <span
                                 className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-2xs tracking-wider ${
                                   pkg.is_popular
-                                    ? 'bg-amber-500 text-white'
+                                    ? 'bg-blue-600 text-white'
                                     : 'bg-emerald-600 text-white'
                                 }`}
                               >
                                 {pkg.badge}
                               </span>
                             )}
-                            {pkg.is_popular && !pkg.badge && (
-                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-white shadow-2xs tracking-wider">
-                                POPULAR
+                            {pkg.savings_text && (
+                              <span className="text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-rose-600 text-white shadow-2xs tracking-wider">
+                                {pkg.savings_text}
                               </span>
                             )}
                           </div>
@@ -682,11 +785,6 @@ function FreeTrialForm() {
                       {/* Footer Info */}
                       <div className="pt-2.5 mt-auto border-t border-slate-100 text-[11px] font-bold text-slate-600 flex items-center justify-between gap-2 flex-wrap">
                         <span className="text-slate-500 truncate">{pkg.duration_days} Days Access</span>
-                        {pkg.savings_text && (
-                          <span className="text-[#0b4da2] bg-blue-50 px-2 py-0.5 rounded font-extrabold text-[10px] truncate">
-                            {pkg.savings_text}
-                          </span>
-                        )}
                       </div>
                     </div>
                   );
@@ -885,65 +983,385 @@ function FreeTrialForm() {
             <span className="text-xs font-semibold text-slate-400">Section 3 of 4</span>
           </div>
 
-          {/* Radio Options: Yes / No - Compact & Clean */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-            {/* Option No */}
+          {/* Payment Method Selector: 1. Pay Later, 2. Cash Payment, 3. Card Payment, 4. Online Payment */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            {/* 1. Pay Later */}
             <label
-              className={`relative flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                enablePostTrialPayment === 'no'
-                  ? 'border-[#0b4da2] bg-blue-50/60 shadow-xs'
+              className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                paymentMode === 'pay_later'
+                  ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
                   : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
               }`}
             >
               <input
                 type="radio"
-                name="postTrialPayment"
-                value="no"
-                checked={enablePostTrialPayment === 'no'}
-                onChange={() => setEnablePostTrialPayment('no')}
+                name="paymentMode"
+                value="pay_later"
+                checked={paymentMode === 'pay_later'}
+                onChange={() => setPaymentMode('pay_later')}
                 className="h-4 w-4 text-[#0b4da2] focus:ring-blue-500 border-slate-300 shrink-0"
               />
               <Clock size={16} className="text-amber-600 shrink-0" />
               <div className="flex-1 min-w-0">
                 <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
-                  No, Pay Later
+                  Pay Later
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate">
-                  {trialDaysFormatted} free without card details
+                  {trialDaysFormatted} free without upfront details
                 </span>
               </div>
             </label>
 
-            {/* Option Yes */}
+            {/* 2. Cash Payment */}
             <label
-              className={`relative flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                enablePostTrialPayment === 'yes'
-                  ? 'border-[#0b4da2] bg-blue-50/60 shadow-xs'
+              className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                paymentMode === 'cash'
+                  ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
                   : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
               }`}
             >
               <input
                 type="radio"
-                name="postTrialPayment"
-                value="yes"
-                checked={enablePostTrialPayment === 'yes'}
-                onChange={() => setEnablePostTrialPayment('yes')}
+                name="paymentMode"
+                value="cash"
+                checked={paymentMode === 'cash'}
+                onChange={() => setPaymentMode('cash')}
+                className="h-4 w-4 text-[#0b4da2] focus:ring-blue-500 border-slate-300 shrink-0"
+              />
+              <Banknote size={16} className="text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+                  Cash Payment
+                </span>
+                <span className="text-[11px] text-slate-500 block truncate">
+                  CDM / Counter Deposit Slip
+                </span>
+              </div>
+            </label>
+
+            {/* 3. Card Payment */}
+            <label
+              className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                paymentMode === 'card'
+                  ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+              }`}
+            >
+              <input
+                type="radio"
+                name="paymentMode"
+                value="card"
+                checked={paymentMode === 'card'}
+                onChange={() => setPaymentMode('card')}
                 className="h-4 w-4 text-[#0b4da2] focus:ring-blue-500 border-slate-300 shrink-0"
               />
               <CreditCard size={16} className="text-[#0b4da2] shrink-0" />
               <div className="flex-1 min-w-0">
                 <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
-                  Yes, Add Card Now
+                  Card Payment
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate">
-                  Auto-pay {currentPlanPrice} after trial
+                  Visa / MasterCard
+                </span>
+              </div>
+            </label>
+
+            {/* 4. Online Payment */}
+            <label
+              className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                paymentMode === 'online'
+                  ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+              }`}
+            >
+              <input
+                type="radio"
+                name="paymentMode"
+                value="online"
+                checked={paymentMode === 'online'}
+                onChange={() => setPaymentMode('online')}
+                className="h-4 w-4 text-[#0b4da2] focus:ring-blue-500 border-slate-300 shrink-0"
+              />
+              <Globe size={16} className="text-indigo-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+                  Online Payment
+                </span>
+                <span className="text-[11px] text-slate-500 block truncate">
+                  FPX / Bank Transfer
                 </span>
               </div>
             </label>
           </div>
 
-          {/* Conditional Card Payment Form */}
-          {enablePostTrialPayment === 'yes' && (
+          {/* Pay Later Information */}
+          {paymentMode === 'pay_later' && (
+            <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs flex items-center gap-3 animate-in fade-in duration-150">
+              <Clock size={20} className="text-amber-600 shrink-0" />
+              <div>
+                <span className="font-bold block">Free Trial Access Granted with Pay Later</span>
+                <span className="text-[11px] text-amber-800">
+                  You can explore your {trialDaysFormatted} free trial period with full system access. No advance payment or card is required today. You can settle your subscription anytime later.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Cash Payment Form with Slip Upload */}
+          {paymentMode === 'cash' && (
+            <div className="pt-6 border-t border-slate-200 space-y-4 animate-in fade-in duration-150">
+              <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <Banknote size={18} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">Cash / CDM Counter Deposit</span>
+                    <span className="text-[11px] text-emerald-800">Direct cash deposit or CDM machine slip upload</span>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Package Price</span>
+                  <span className="text-sm font-extrabold font-mono text-emerald-800">{currentPlanPrice}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Deposit Amount */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Deposit Amount (RM)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={cashAmount}
+                    onChange={(e) => setCashAmount(e.target.value)}
+                    placeholder="Enter deposit amount or leave empty for plan price"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                  />
+                </div>
+
+                {/* Receipt / Ref No */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Deposit Receipt / Slip / CDM Reference No.
+                  </label>
+                  <input
+                    type="text"
+                    value={cashReference}
+                    onChange={(e) => setCashReference(e.target.value)}
+                    placeholder="e.g. CDM-849201 or RCP-1029"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                  />
+                </div>
+
+                {/* Depositor Name */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Depositor / Payer Name
+                  </label>
+                  <input
+                    type="text"
+                    value={cashDepositorName}
+                    onChange={(e) => setCashDepositorName(e.target.value)}
+                    placeholder="e.g. Officer / Representative Name"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                  />
+                </div>
+
+                {/* Cash Deposit Slip Upload */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Upload Cash / CDM Deposit Slip <span className="text-slate-400 font-normal">(Receipt / Photo / PDF)</span>
+                  </label>
+                  <div className="relative border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-4 text-center transition-all bg-slate-50/50 hover:bg-emerald-50/20">
+                    {cashSlipPreview ? (
+                      <div className="flex flex-col items-center gap-2.5">
+                        <img
+                          src={cashSlipPreview}
+                          alt="Deposit Slip Preview"
+                          className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-slate-800 truncate max-w-xs">{cashSlipName}</span>
+                          <button
+                            type="button"
+                            onClick={() => { setCashSlipFile(null); setCashSlipPreview(null); setCashSlipName(''); }}
+                            className="text-xs text-rose-600 hover:text-rose-700 font-bold underline bg-transparent border-0 cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : cashSlipName ? (
+                      <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <FileText size={20} className="text-emerald-600" />
+                          <span className="text-xs font-mono font-bold text-slate-800">{cashSlipName}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setCashSlipFile(null); setCashSlipPreview(null); setCashSlipName(''); }}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-bold bg-transparent border-0 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                          <Upload size={18} />
+                        </div>
+                        <div className="text-xs font-bold text-slate-800">
+                          Click to upload or drag &amp; drop Cash / CDM Slip
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          JPG, PNG, WEBP or PDF (Max 10MB)
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                          onChange={handleCashSlipUpload}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Online Payment Form */}
+          {paymentMode === 'online' && (
+            <div className="pt-6 border-t border-slate-200 space-y-4 animate-in fade-in duration-150">
+              <div className="bg-indigo-50/60 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                    <Globe size={18} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">Online Banking, FPX &amp; Bank Transfer</span>
+                    <span className="text-[11px] text-indigo-800">Transfer directly via online bank or DuitNow QR</span>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right shrink-0">
+                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Package Price</span>
+                  <span className="text-sm font-extrabold font-mono text-indigo-900">{currentPlanPrice}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Bank Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Select Bank / Payment Channel <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={onlineBank}
+                    onChange={(e) => setOnlineBank(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                  >
+                    {MALAYSIAN_BANKS.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Online Transaction Ref */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Transaction Ref / DuitNow Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={onlineReference}
+                    onChange={(e) => setOnlineReference(e.target.value)}
+                    placeholder="e.g. FPX-9823410 or DUITNOW-7261"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
+                  />
+                </div>
+
+                {/* Account Holder Name */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Payer Account Holder Name
+                  </label>
+                  <input
+                    type="text"
+                    value={onlineAccountName}
+                    onChange={(e) => setOnlineAccountName(e.target.value)}
+                    placeholder="e.g. Company Bank Account Name"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
+                  />
+                </div>
+
+                {/* Online Slip Upload */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Upload Online Transfer Slip / Receipt <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <div className="relative border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-4 text-center transition-all bg-slate-50/50 hover:bg-indigo-50/20">
+                    {onlineSlipPreview ? (
+                      <div className="flex flex-col items-center gap-2.5">
+                        <img
+                          src={onlineSlipPreview}
+                          alt="Online Slip Preview"
+                          className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-slate-800 truncate max-w-xs">{onlineSlipName}</span>
+                          <button
+                            type="button"
+                            onClick={() => { setOnlineSlipFile(null); setOnlineSlipPreview(null); setOnlineSlipName(''); }}
+                            className="text-xs text-rose-600 hover:text-rose-700 font-bold underline bg-transparent border-0 cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : onlineSlipName ? (
+                      <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <FileText size={20} className="text-indigo-600" />
+                          <span className="text-xs font-mono font-bold text-slate-800">{onlineSlipName}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setOnlineSlipFile(null); setOnlineSlipPreview(null); setOnlineSlipName(''); }}
+                          className="text-xs text-rose-600 hover:text-rose-700 font-bold bg-transparent border-0 cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                          <Upload size={18} />
+                        </div>
+                        <div className="text-xs font-bold text-slate-800">
+                          Click to upload Online Transfer Receipt
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          JPG, PNG, WEBP or PDF (Max 10MB)
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                          onChange={handleOnlineSlipUpload}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Card Payment Form */}
+          {paymentMode === 'card' && (
             <div className="pt-6 border-t border-slate-200 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                 {/* Left Column: Virtual Credit Card Mockup */}

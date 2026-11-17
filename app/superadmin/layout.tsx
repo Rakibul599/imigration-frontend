@@ -473,6 +473,24 @@ export default function SuperAdminLayout({
             ],
           },
           {
+            name: 'Agent Management',
+            icon: Briefcase,
+            isGroup: true,
+            badge: agentCount > 0 ? `${agentCount}` : undefined,
+            children: [
+              {
+                name: 'Agent Dashboard',
+                href: '/superadmin/agents',
+                icon: LayoutDashboard,
+              },
+              {
+                name: 'Agent Wise Customer',
+                href: '/superadmin/agents/customers',
+                icon: Users,
+              },
+            ],
+          },
+          {
             name: 'Foreign Customer Management',
             icon: Users,
             badge: customerCount > 0 ? `${customerCount}` : undefined,
@@ -482,29 +500,6 @@ export default function SuperAdminLayout({
                 name: 'Foreign Customer Dashboard',
                 href: '/superadmin/customers/dashboard',
                 icon: LayoutDashboard,
-              },
-            ],
-          },
-          {
-            name: 'Agent Management',
-            icon: Briefcase,
-            isGroup: true,
-            badge: agentCount > 0 ? `${agentCount}` : undefined,
-            children: [
-              {
-                name: 'Create Agent',
-                href: '/superadmin/agents/create',
-                icon: UserPlus,
-              },
-              {
-                name: 'Agent List',
-                href: '/superadmin/agents',
-                icon: Briefcase,
-              },
-              {
-                name: 'Agent Wise Customer',
-                href: '/superadmin/agents/customers',
-                icon: Users,
               },
             ],
           },
@@ -526,12 +521,17 @@ export default function SuperAdminLayout({
                 icon: FileCheck,
               },
               {
-                name: 'Working Agreement',
+                name: 'Employee Agreement',
                 href: '/superadmin/employees/working-agreement',
                 icon: FileSignature,
               },
               {
-                name: 'Resignations & Clearances',
+                name: 'Employee Salary',
+                href: '/superadmin/employees/salary',
+                icon: Receipt,
+              },
+              {
+                name: 'Resignation Letter',
                 href: '/superadmin/employees/resignations',
                 icon: FileText,
                 badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,

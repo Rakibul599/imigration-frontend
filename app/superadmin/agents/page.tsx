@@ -43,6 +43,12 @@ import { getFileUrl, fetchWorkingSectors, WorkingSector } from '@/lib/customerSt
 import { Company } from '@/lib/companies';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { ProgramRecord, fetchPrograms, getStoredPrograms } from '@/lib/programStorage';
+import {
+  useDashboardCardDesign,
+  useCardAnimationSettings,
+  getServiceCardAnimationClass,
+  getServiceCardAnimationStyle,
+} from '@/lib/themeSettings';
 
 const DEFAULT_AGENT_CARDS: PageStatCardConfig[] = [
   { id: 'total_agents', title: 'Total Agents', subtitle: 'All registered recruitment agents', icon: 'Users', order_num: 1 },
@@ -53,6 +59,16 @@ const DEFAULT_AGENT_CARDS: PageStatCardConfig[] = [
 export default function SuperAdminAgentManagementPage() {
   const pathname = usePathname();
   const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
+
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
+  const {
+    animation: cardAnimation,
+    duration: cardDuration,
+    stagger: cardStagger,
+    animTriggerKey,
+  } = useCardAnimationSettings();
+
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -421,7 +437,7 @@ export default function SuperAdminAgentManagementPage() {
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.map((card) => {
+        {cards.map((card, index) => {
           let value: number | string = 0;
           let themeColor = 'text-slate-900';
           let iconBg = 'bg-blue-50 text-[#0b4da2]';
@@ -442,8 +458,13 @@ export default function SuperAdminAgentManagementPage() {
 
           return (
             <div
-              key={card.id}
-              className="admin-stat-card bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]"
+              key={`${card.id}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`}
+              className={`admin-stat-card ${getServiceCardAnimationClass(cardAnimation, index)} ${
+                isGlass
+                  ? 'dashboard-card-glass rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[120px]'
+                  : 'bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md rounded-xl p-5 shadow-xs transition-all flex flex-col justify-between group min-h-[120px]'
+              }`}
+              style={getServiceCardAnimationStyle(index, cardDuration, cardStagger)}
             >
               <div className="flex items-center justify-between">
                 <div>

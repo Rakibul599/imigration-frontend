@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import CompanyPaymentModal, { PaymentTabType } from '@/components/CompanyPaymentModal';
 import { Company } from '@/lib/companies';
 import {
   AuthUser,
@@ -475,21 +476,20 @@ export default function CompaniesPage() {
   };
 
   const openPaymentModal = (company: Company) => {
-    const dueInfo = getCompanyDueInfo(company);
     setPayingCompany(company);
-    setPayAmount(dueInfo.totalDue > 0 ? String(dueInfo.totalDue) : '');
-    setPayMethod('Bank Transfer');
-    setPayReference(`PAY-${Date.now().toString().slice(-6)}`);
-    setPayBankName(company.bankName || 'Maybank');
-    setPayDate(new Date().toISOString().slice(0, 10));
-    setPayNotes(`Due settlement payment for ${company.name}`);
   };
 
-  const handleConfirmPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePaymentSubmit = async (paymentInfo: {
+    amount: number;
+    method: string;
+    reference: string;
+    bankName: string;
+    notes: string;
+    tab: PaymentTabType;
+  }) => {
     if (!payingCompany) return;
 
-    const amount = parseFloat(payAmount);
+    const amount = Number(paymentInfo.amount);
     if (isNaN(amount) || amount <= 0) {
       alert('Please enter a valid positive payment amount in RM.');
       return;
@@ -498,6 +498,17 @@ export default function CompaniesPage() {
     setIsSubmittingPayment(true);
     try {
       const dueInfo = getCompanyDueInfo(payingCompany);
+      const payDate = new Date().toISOString().slice(0, 10);
+      const payMethod =
+        paymentInfo.method ||
+        (paymentInfo.tab === 'cash'
+          ? 'Cash Payment'
+          : paymentInfo.tab === 'online'
+          ? 'Online FPX Transfer'
+          : 'Debit/Credit Card');
+      const payReference = paymentInfo.reference;
+      const payBankName = paymentInfo.bankName || payingCompany.bankName || 'Maybank';
+      const payNotes = paymentInfo.notes || `Due settlement payment for ${payingCompany.name}`;
 
       // 1. If there are unpaid invoices, settle them first
       const unpaidInvoices = dueInfo.invoices.filter((i) => i.payment_status !== 'Paid');
@@ -575,7 +586,7 @@ export default function CompaniesPage() {
       });
       setTimeout(() => setActionFeedback(null), 4000);
     } catch (err: any) {
-      alert(err.message || 'Payment settlement failed. Please try again.');
+      alert(err?.message || 'Payment settlement failed. Please try again.');
     } finally {
       setIsSubmittingPayment(false);
     }
@@ -1110,28 +1121,21 @@ export default function CompaniesPage() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
+                          onClick={() => openPaymentModal(company)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-2xs hover:shadow transition-all inline-flex items-center gap-1 cursor-pointer border-0"
+                          title={`Record Payment for ${company.name}`}
+                        >
+                          <DollarSign size={12} />
+                          <span>Payment</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => openWalletModal(company)}
                           title={`Add Wallet Balance for ${company.name}`}
                           className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-emerald-50 flex items-center justify-center text-slate-500 hover:text-emerald-700 transition-colors cursor-pointer"
                         >
                           <Wallet size={13} />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => openPaymentModal(company)}
-                          title={
-                            dueInfo.totalDue > 0
-                              ? `Pay Due (RM ${dueInfo.totalDue.toLocaleString('en-MY', { minimumFractionDigits: 2 })})`
-                              : 'Record Due Payment'
-                          }
-                          className={`w-7 h-7 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                            dueInfo.totalDue > 0
-                              ? 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700'
-                              : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-                          }`}
-                        >
-                          <CreditCard size={13} />
                         </button>
 
                         <Link
@@ -1551,215 +1555,38 @@ export default function CompaniesPage() {
       })()}
 
       {/* Due Payment / Settlement Modal */}
-      {payingCompany && (() => {
-        const dueInfo = getCompanyDueInfo(payingCompany);
-        const parsedAmount = parseFloat(payAmount) || 0;
-        const currentTotalDue = dueInfo.totalDue;
-        const remainingDueAfter = Math.max(0, currentTotalDue - parsedAmount);
-
-        return (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              {/* Modal Header */}
-              <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-900 text-white p-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-xs shadow-inner">
-                    <CreditCard size={22} className="text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold m-0 leading-tight">
-                      Record Due Payment
-                    </h3>
-                    <p className="text-xs text-emerald-100/90 m-0 mt-0.5 font-medium">
-                      {payingCompany.name} • {payingCompany.roc || 'Entity'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPayingCompany(null)}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 cursor-pointer bg-transparent border-0 transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Form Content */}
-              <form onSubmit={handleConfirmPayment} className="p-6 space-y-4">
-                {/* Live Balance Overview Card */}
-                <div className="bg-gradient-to-br from-slate-50 to-emerald-50/50 border border-emerald-100 rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Current Outstanding Due
-                    </span>
-                    <span className="text-2xl font-black font-mono text-slate-900">
-                      RM {currentTotalDue.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Remaining After Payment
-                    </span>
-                    <span className={`text-sm font-bold font-mono ${remainingDueAfter === 0 ? 'text-emerald-700' : 'text-amber-800'}`}>
-                      RM {remainingDueAfter.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Amount to Pay */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-slate-700">
-                      Payment Amount (RM) <span className="text-rose-500">*</span>
-                    </label>
-                    {currentTotalDue > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setPayAmount(String(currentTotalDue))}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100/80 text-emerald-800 hover:bg-emerald-200 cursor-pointer border-0 transition-colors"
-                        >
-                          Full (RM {currentTotalDue.toFixed(2)})
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPayAmount((currentTotalDue / 2).toFixed(2))}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer border-0 transition-colors"
-                        >
-                          50%
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
-                      RM
-                    </span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      required
-                      value={payAmount}
-                      onChange={(e) => setPayAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full pl-11 pr-4 py-2.5 text-sm font-bold font-mono bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                    />
-                  </div>
-                </div>
-
-                {/* Payment Method & Date (2 columns) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Payment Method
-                    </label>
-                    <select
-                      value={payMethod}
-                      onChange={(e) => setPayMethod(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                    >
-                      <option value="Bank Transfer">Bank Transfer (FPX / Interbank)</option>
-                      <option value="Cash Deposit">Cash Deposit (CDM)</option>
-                      <option value="Online Payment Gateway">Online Gateway / Card</option>
-                      <option value="Company Cheque">Company Cheque</option>
-                      <option value="Direct Wallet Settlement">Direct Wallet Settlement</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Payment Date
-                    </label>
-                    <input
-                      type="date"
-                      value={payDate}
-                      onChange={(e) => setPayDate(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Reference No & Bank Name (2 columns) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Transaction Ref / Receipt No
-                    </label>
-                    <input
-                      type="text"
-                      value={payReference}
-                      onChange={(e) => setPayReference(e.target.value)}
-                      placeholder="e.g. TRX-20261103"
-                      className="w-full px-3 py-2 text-xs font-mono bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Bank Name
-                    </label>
-                    <input
-                      type="text"
-                      value={payBankName}
-                      onChange={(e) => setPayBankName(e.target.value)}
-                      placeholder="e.g. Maybank, CIMB"
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Notes / Remarks */}
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Settlement Notes (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={payNotes}
-                    onChange={(e) => setPayNotes(e.target.value)}
-                    placeholder="e.g. Monthly subscription due clearance"
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                {/* Modal Footer Actions */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setPayingCompany(null)}
-                    disabled={isSubmittingPayment}
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingPayment}
-                    className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <CheckCircle2 size={14} />
-                    <span>
-                      {isSubmittingPayment
-                        ? 'Processing Payment...'
-                        : `Confirm & Record Payment (RM ${parsedAmount > 0 ? parsedAmount.toFixed(2) : '0.00'})`}
-                    </span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        );
-      })()}
+      <CompanyPaymentModal
+        isOpen={!!payingCompany}
+        onClose={() => setPayingCompany(null)}
+        data={
+          payingCompany
+            ? {
+                id: payingCompany.id,
+                companyName: payingCompany.name,
+                roc: payingCompany.roc,
+                email: payingCompany.email,
+                phone: payingCompany.phone,
+                address: payingCompany.address,
+                planPackage: payingCompany.subscription_plan_key || 'Settlement & Agency Services',
+                amount:
+                  getCompanyDueInfo(payingCompany).totalDue > 0
+                    ? getCompanyDueInfo(payingCompany).totalDue
+                    : 199,
+              }
+            : null
+        }
+        isSubmitting={isSubmittingPayment}
+        onSubmit={handlePaymentSubmit}
+      />
 
       {/* Add Company Wallet Balance Modal */}
       {walletTargetCompany && (() => {
         const parsedAddAmount = parseFloat(walletAddAmount) || 0;
         const currentBalance = Number(walletTargetCompany.wallet_balance) || 0;
-        const newBalanceAfter = currentBalance + parsedAddAmount;
         const accountDisplay = walletTargetCompany.wallet_account_no
           || walletTargetCompany.bankAccountNo
           || `WAL-${String(walletTargetCompany.id).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}`;
+        const accountNameDisplay = walletTargetCompany.bankAccountName || walletTargetCompany.name;
 
         const quickPresets = [100, 500, 1000, 5000, 10000];
 
@@ -1793,31 +1620,31 @@ export default function CompaniesPage() {
               {/* Form Content */}
               <form onSubmit={handleConfirmAddWalletBalance} className="p-6 space-y-4">
                 {/* Account & Live Balance Overview Card */}
-                <div className="bg-gradient-to-br from-emerald-50/60 via-slate-50 to-teal-50/40 border border-emerald-200/80 rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Current Account Balance
+                <div className="bg-gradient-to-br from-emerald-50/60 via-slate-50 to-teal-50/40 border border-emerald-200/80 rounded-xl p-4 flex items-center justify-between gap-4">
+                  {/* Left Side: Balance */}
+                  <div className="shrink-0 text-left">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
+                      Balance
                     </span>
-                    <span className="text-2xl font-black font-mono text-emerald-800">
+                    <span className="text-2xl font-black font-mono text-emerald-800 block">
                       RM {currentBalance.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
-                    <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
-                      <Wallet size={11} className="text-slate-400" />
-                      <span>Account No: {accountDisplay}</span>
-                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                      Balance After Top-Up
+
+                  {/* Right Side: Company Name & Account No */}
+                  <div className="min-w-0 flex-1 text-right">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                      Company Name
                     </span>
-                    <span className="text-base font-extrabold font-mono text-emerald-700 block">
-                      RM {newBalanceAfter.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                    {parsedAddAmount > 0 && (
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100/70 px-1.5 py-0.5 rounded font-mono">
-                        +RM {parsedAddAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                    <div className="text-base font-extrabold text-slate-900 truncate leading-tight" title={walletTargetCompany.name}>
+                      {walletTargetCompany.name}
+                    </div>
+                    <div className="text-xs text-slate-600 font-medium mt-1 flex items-center justify-end gap-1.5 flex-wrap">
+                      <span className="text-slate-400">Account No:</span>
+                      <span className="font-mono font-bold text-slate-800 bg-white/90 px-2 py-0.5 rounded border border-slate-200">
+                        {accountDisplay}
                       </span>
-                    )}
+                    </div>
                   </div>
                 </div>
 

@@ -132,7 +132,7 @@ export type Company = {
   bankAccountNo?: string; // Company Bank Account No
   bankAccounts?: CompanyBankAccount[]; // Multiple company bank accounts
   directors?: CompanyDirector[]; // Multiple Directors / CEOs
-  status?: 'active' | 'inactive' | 'suspended';
+  status?: 'active' | 'inactive' | 'suspended' | 'pending' | 'rejected' | string;
   auto_deactivate_at?: string | null; // ISO datetime when company auto turns inactive
   deactivated_at?: string | null;
   deactivation_reason?: string | null;

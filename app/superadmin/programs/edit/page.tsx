@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useRef, useMemo } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,12 +8,15 @@ import {
   ArrowLeft,
   BookOpen,
   Briefcase,
+  Check,
   CheckCircle2,
+  ChevronDown,
   Edit2,
   FolderPlus,
   Plus,
   RefreshCw,
   Save,
+  Search,
   X,
 } from 'lucide-react';
 import { fetchProgramById, updateProgram } from '@/lib/programStorage';
@@ -23,17 +26,26 @@ function EditProgramForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
+  const rootPath = pathname.startsWith('/masteradmin')
+    ? '/masteradmin'
+    : pathname.startsWith('/superadmin')
+    ? '/superadmin'
+    : '';
   const programId = searchParams.get('id');
 
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
-  const [sector, setSector] = useState('');
+  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [status, setStatus] = useState<'active' | 'inactive' | 'upcoming' | 'closed'>('active');
 
   // Working Sectors state
   const [sectors, setSectors] = useState<WorkingSector[]>([]);
   const [loadingSectors, setLoadingSectors] = useState(true);
+
+  // Multi-Select Dropdown state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [sectorSearch, setSectorSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Inline Add New Sector state
   const [isAddingSector, setIsAddingSector] = useState(false);
@@ -42,6 +54,19 @@ function EditProgramForm() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Load existing working sectors
   useEffect(() => {
@@ -82,7 +107,15 @@ function EditProgramForm() {
       .then((prog) => {
         if (prog) {
           setName(prog.name || '');
-          setSector(prog.category || '');
+          if (prog.category) {
+            const list = prog.category
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean);
+            setSelectedSectors(list);
+          } else {
+            setSelectedSectors([]);
+          }
           setStatus(prog.status || 'active');
         } else {
           setFeedback({ type: 'error', message: 'Program not found.' });
@@ -95,6 +128,37 @@ function EditProgramForm() {
         setLoading(false);
       });
   }, [programId]);
+
+  // Filtered sectors list for search
+  const filteredSectorList = useMemo(() => {
+    const q = sectorSearch.trim().toLowerCase();
+    if (!q) return sectors;
+    return sectors.filter((s) => s.name.toLowerCase().includes(q));
+  }, [sectors, sectorSearch]);
+
+  // Multi-select helpers
+  const toggleSector = (sectorName: string) => {
+    setSelectedSectors((prev) => {
+      if (prev.includes(sectorName)) {
+        return prev.filter((s) => s !== sectorName);
+      } else {
+        return [...prev, sectorName];
+      }
+    });
+  };
+
+  const removeSector = (sectorName: string) => {
+    setSelectedSectors((prev) => prev.filter((s) => s !== sectorName));
+  };
+
+  const handleSelectAll = () => {
+    const allNames = sectors.map((s) => s.name);
+    setSelectedSectors(allNames);
+  };
+
+  const handleClearAll = () => {
+    setSelectedSectors([]);
+  };
 
   // Handle adding new sector inline
   const handleSaveSector = async (e?: React.FormEvent) => {
@@ -116,12 +180,19 @@ function EditProgramForm() {
         return [...prev, created];
       });
 
-      setSector(createdName);
+      // Automatically add to selected sectors
+      setSelectedSectors((prev) => {
+        if (!prev.includes(createdName)) {
+          return [...prev, createdName];
+        }
+        return prev;
+      });
+
       setNewSectorName('');
       setIsAddingSector(false);
       setFeedback({
         type: 'success',
-        message: `New sector "${createdName}" created and selected successfully!`,
+        message: `New sector "${createdName}" created and added to selection!`,
       });
     } catch (err: any) {
       setFeedback({
@@ -146,8 +217,8 @@ function EditProgramForm() {
       return;
     }
 
-    if (!sector.trim()) {
-      setFeedback({ type: 'error', message: 'Sector is required. Please select or add a sector.' });
+    if (selectedSectors.length === 0) {
+      setFeedback({ type: 'error', message: 'Please select at least one sector.' });
       return;
     }
 
@@ -157,7 +228,7 @@ function EditProgramForm() {
     try {
       const result = await updateProgram(programId, {
         name: name.trim(),
-        category: sector.trim(),
+        category: selectedSectors.join(', '),
         status,
       });
 
@@ -166,9 +237,9 @@ function EditProgramForm() {
         window.dispatchEvent(new CustomEvent('superadmin_programs_updated'));
         setTimeout(() => {
           router.push(`${rootPath}/programs`);
-        }, 800);
+        }, 700);
       } else {
-        setFeedback({ type: 'error', message: 'Failed to update program.' });
+        setFeedback({ type: 'error', message: 'Failed to update program. Please try again.' });
       }
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'An unexpected error occurred.' });
@@ -179,26 +250,26 @@ function EditProgramForm() {
 
   if (loading) {
     return (
-      <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center">
-        <RefreshCw size={24} className="animate-spin text-indigo-600 mx-auto mb-3" />
+      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 max-w-2xl mx-auto shadow-xs">
+        <RefreshCw size={26} className="animate-spin text-indigo-600 mx-auto mb-3" />
         <p className="text-xs font-semibold text-slate-700">Loading program details...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-20">
+    <div className="max-w-3xl mx-auto space-y-6 pb-20">
       {/* Top Breadcrumb & Action bar */}
       <div className="flex items-center justify-between gap-4">
         <Link
           href={`${rootPath}/programs`}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors no-underline"
         >
           <ArrowLeft size={14} />
           <span>Back to Programs List</span>
         </Link>
-        <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/60 px-2.5 py-1 rounded-full">
-          Editing Program #{programId}
+        <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-full">
+          Program Management
         </span>
       </div>
 
@@ -208,19 +279,19 @@ function EditProgramForm() {
         <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">
-              <BookOpen size={14} />
-              <span>Program Management</span>
+              <Edit2 size={14} />
+              <span>Program Setup</span>
             </div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight">
               Edit Program
             </h1>
             <p className="text-slate-500 text-xs mt-0.5">
-              Update the program name, sector, and availability status.
+              Update program name, associated sectors, and deployment status.
             </p>
           </div>
 
-          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-            <Edit2 size={20} />
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <BookOpen size={20} />
           </div>
         </div>
 
@@ -238,136 +309,354 @@ function EditProgramForm() {
             ) : (
               <AlertCircle size={16} className="text-rose-600 shrink-0" />
             )}
-            <span>{feedback.message}</span>
+            <span className="flex-1">{feedback.message}</span>
+            <button
+              type="button"
+              onClick={() => setFeedback(null)}
+              className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
+            >
+              <X size={14} />
+            </button>
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Program Name */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Program Name <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. General Construction Workforce Program"
-              className="w-full px-3.5 py-2.5 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-            />
-          </div>
-
-          {/* Sector with Inline Add Button */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-800">
-                Sector <span className="text-rose-500">*</span>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="space-y-5">
+            {/* Field 1: Program Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Program Name <span className="text-rose-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setIsAddingSector((prev) => !prev)}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-              >
-                <Plus size={13} />
-                <span>Add Sector</span>
-              </button>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. General Construction Workforce Program 2026"
+                className="w-full px-4 py-3 text-sm text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium placeholder:text-slate-400"
+              />
             </div>
 
-            {/* Inline Add New Sector Input Box */}
-            {isAddingSector && (
-              <div className="mb-3 p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-indigo-900 flex items-center gap-1">
-                    <FolderPlus size={13} className="text-indigo-600" />
-                    Create New Working Sector
-                  </span>
+            {/* Field 2: Multi-Sector Selection */}
+            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Sectors (Multiple Selection) <span className="text-rose-500">*</span>
+                  </label>
+                  {selectedSectors.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                      {selectedSectors.length} Selected
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedSectors.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 transition-colors cursor-pointer bg-transparent border-0"
+                    >
+                      Clear All
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
-                      setIsAddingSector(false);
+                      setIsAddingSector(!isAddingSector);
                       setNewSectorName('');
                     }}
-                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-all cursor-pointer"
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newSectorName}
-                    onChange={(e) => setNewSectorName(e.target.value)}
-                    placeholder="Enter sector name (e.g. Plantation & Agriculture)..."
-                    className="flex-1 px-3 py-1.5 text-xs bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/30 font-medium"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveSector();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    disabled={isSavingSector || !newSectorName.trim()}
-                    onClick={() => handleSaveSector()}
-                    className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer"
-                  >
-                    {isSavingSector ? (
-                      <RefreshCw size={12} className="animate-spin" />
+                    {isAddingSector ? (
+                      <>
+                        <X size={13} />
+                        <span>Cancel</span>
+                      </>
                     ) : (
-                      <Save size={12} />
+                      <>
+                        <Plus size={13} />
+                        <span>Add Sector</span>
+                      </>
                     )}
-                    <span>Save</span>
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* Sector Select Dropdown */}
-            <div className="relative">
+              {/* Inline Add Sector Box */}
+              {isAddingSector && (
+                <div className="p-3 bg-white border border-indigo-200 rounded-xl shadow-xs space-y-2 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 text-xs font-bold text-indigo-900">
+                    <FolderPlus size={14} className="text-indigo-600" />
+                    <span>Add New Working Sector</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newSectorName}
+                      onChange={(e) => setNewSectorName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveSector();
+                        }
+                      }}
+                      placeholder="Enter new sector name (e.g. Oil & Gas, Aviation)..."
+                      className="flex-1 px-3 py-2 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={isSavingSector || !newSectorName.trim()}
+                      onClick={() => handleSaveSector()}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all disabled:opacity-50 cursor-pointer shadow-xs border-0"
+                    >
+                      {isSavingSector ? (
+                        <>
+                          <RefreshCw size={13} className="animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save size={13} />
+                          <span>Save Sector</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Multi-Select Dropdown Container */}
+              <div className="relative" ref={dropdownRef}>
+                {/* Trigger Button */}
+                <div
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className={`w-full min-h-[46px] p-2 bg-white border rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                    isDropdownOpen
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+                    {selectedSectors.length === 0 ? (
+                      <span className="text-xs font-medium text-slate-400 px-2 py-1 select-none">
+                        -- Select Sectors (Multiple Selection) --
+                      </span>
+                    ) : (
+                      selectedSectors.map((sec) => (
+                        <span
+                          key={sec}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200/80 shadow-2xs group"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <Briefcase size={11} className="text-indigo-600 shrink-0" />
+                          <span className="truncate max-w-[200px]">{sec}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSector(sec);
+                            }}
+                            className="text-indigo-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition-colors ml-0.5 cursor-pointer border-0 bg-transparent"
+                            title={`Remove ${sec}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-slate-400 shrink-0 pr-1">
+                    {selectedSectors.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearAll();
+                        }}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
+                        title="Clear all selected"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform duration-200 ${
+                        isDropdownOpen ? 'rotate-180 text-indigo-600' : ''
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Dropdown Menu */}
+                {isDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    {/* Search & Actions Header */}
+                    <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 space-y-2">
+                      <div className="relative">
+                        <Search
+                          size={14}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                        />
+                        <input
+                          type="text"
+                          value={sectorSearch}
+                          onChange={(e) => setSectorSearch(e.target.value)}
+                          placeholder="Search sectors..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800"
+                          onClick={(e) => e.stopPropagation()}
+                          autoFocus
+                        />
+                        {sectorSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setSectorSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 border-0 bg-transparent cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 px-1">
+                        <span>
+                          {filteredSectorList.length} sector{filteredSectorList.length !== 1 ? 's' : ''} available
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSelectAll}
+                            className="text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-transparent border-0"
+                          >
+                            Select All
+                          </button>
+                          <span>•</span>
+                          <button
+                            type="button"
+                            onClick={handleClearAll}
+                            className="text-slate-500 hover:text-rose-600 transition-colors cursor-pointer bg-transparent border-0"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sector List with Checkboxes */}
+                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
+                      {loadingSectors ? (
+                        <div className="p-6 text-center text-xs text-slate-400">
+                          <RefreshCw size={16} className="animate-spin mx-auto mb-2 text-indigo-600" />
+                          <span>Loading sectors...</span>
+                        </div>
+                      ) : filteredSectorList.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-400">
+                          <p>No sectors found matching &quot;{sectorSearch}&quot;</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewSectorName(sectorSearch);
+                              setIsAddingSector(true);
+                              setIsDropdownOpen(false);
+                            }}
+                            className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 bg-transparent border-0 cursor-pointer"
+                          >
+                            <Plus size={12} />
+                            <span>Add &quot;{sectorSearch}&quot; as new sector</span>
+                          </button>
+                        </div>
+                      ) : (
+                        filteredSectorList.map((s) => {
+                          const isSelected = selectedSectors.includes(s.name);
+                          return (
+                            <div
+                              key={s.id || s.name}
+                              onClick={() => toggleSector(s.name)}
+                              className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-indigo-50/70 text-indigo-900 font-bold'
+                                  : 'hover:bg-slate-50 text-slate-700 font-medium'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                    isSelected
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isSelected && <Check size={11} strokeWidth={3} />}
+                                </div>
+                                <span className="truncate">{s.name}</span>
+                              </div>
+
+                              {isSelected && (
+                                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider shrink-0 ml-2">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Bottom Add Sector Trigger */}
+                    <div className="p-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Need a sector not listed?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingSector(true);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-transparent border-0 cursor-pointer"
+                      >
+                        <Plus size={12} />
+                        <span>Add New</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                You can select multiple sectors from the dropdown. Click a sector to check/uncheck it.
+              </p>
+            </div>
+
+            {/* Scheme Status */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Program Status
+              </label>
               <select
-                required
-                value={sector}
-                onChange={(e) => setSector(e.target.value)}
-                disabled={loadingSectors}
+                value={status}
+                onChange={(e) => setStatus(e.target.value as any)}
                 className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
               >
-                <option value="" disabled>
-                  {loadingSectors ? 'Loading sectors...' : '-- Select a Sector --'}
-                </option>
-                {sectors.map((s) => (
-                  <option key={s.id || s.name} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
+                <option value="active">Active</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="inactive">Inactive</option>
+                <option value="closed">Closed</option>
               </select>
             </div>
-          </div>
-
-          {/* Scheme Status */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Program Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as any)}
-              className="w-full px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            >
-              <option value="active">Active</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="inactive">Inactive</option>
-              <option value="closed">Closed</option>
-            </select>
           </div>
 
           {/* Form Actions */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             <Link
               href={`${rootPath}/programs`}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all no-underline"
             >
               Cancel
             </Link>
@@ -375,7 +664,7 @@ function EditProgramForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer border-0"
             >
               {isSubmitting ? (
                 <>
@@ -400,7 +689,7 @@ export default function EditProgramPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 max-w-2xl mx-auto">
+        <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 max-w-2xl mx-auto shadow-xs">
           <RefreshCw size={24} className="animate-spin text-indigo-600 mx-auto mb-3" />
           <p className="text-xs font-semibold text-slate-600">Loading edit interface...</p>
         </div>

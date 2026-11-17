@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx-js-style';
 import {
   AlertCircle,
   ArrowLeft,
@@ -11,6 +12,7 @@ import {
   Calendar,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Coins,
   Copy,
@@ -34,6 +36,7 @@ import {
   Plus,
   Power,
   PowerOff,
+  Printer,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -62,6 +65,7 @@ import {
   updateTrialDuration,
   updateTrialStatus,
 } from '@/lib/companyTrialAndFinanceStorage';
+import CompanyPaymentModal from '@/components/CompanyPaymentModal';
 
 export default function TrialApplicationsPage() {
   const router = useRouter();
@@ -72,6 +76,14 @@ export default function TrialApplicationsPage() {
     'all' | 'pending' | 'approved_trial' | 'paid_active' | 'active' | 'inactive' | 'expired' | 'rejected'
   >('all');
   const [planFilter, setPlanFilter] = useState<string>('all');
+
+  // Countdown Timer & Mounted State
+  const [mounted, setMounted] = useState(false);
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+
+  // Export Dropdown State & Ref
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   // Application Details Drawer/Modal
   const [viewingApp, setViewingApp] = useState<CompanyTrialApplication | null>(null);
@@ -150,7 +162,25 @@ export default function TrialApplicationsPage() {
   };
 
   useEffect(() => {
+    setMounted(true);
     loadData();
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsExportOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Filtered applications
@@ -234,9 +264,10 @@ export default function TrialApplicationsPage() {
 
     if (
       !confirm(
-        `Are you sure you want to ${actionText} "${app.company_name}"? ${isCurrentlyInactive
-          ? 'Their Master Admin portal access will be enabled.'
-          : 'Their Master Admin portal access will be temporarily disabled.'
+        `Are you sure you want to ${actionText} "${app.company_name}"? ${
+          isCurrentlyInactive
+            ? 'Their Master Admin portal access will be enabled.'
+            : 'Their Master Admin portal access will be temporarily disabled.'
         }`
       )
     ) {
@@ -313,7 +344,7 @@ export default function TrialApplicationsPage() {
         const d = new Date(customEndDateInput);
         d.setDate(d.getDate() + days);
         setCustomEndDateInput(d.toISOString().slice(0, 16));
-      } catch { }
+      } catch {}
     } else {
       const d = new Date();
       d.setDate(d.getDate() + days);
@@ -373,32 +404,31 @@ export default function TrialApplicationsPage() {
 
   const handleOpenPaymentModal = (app: CompanyTrialApplication) => {
     setActivatingApp(app);
-    const pkg = PLAN_PACKAGES.find((p) => p.key === app.plan_package);
-    setPaymentAmount(app.package_price || pkg?.price || 199);
-    setPaymentRef(`PAY-${Date.now().toString().slice(-6)}`);
-    setPaymentMethod('Bank Transfer');
-    setBankName('Maybank');
-    setPaymentNotes('');
   };
 
-  const handleActivatePackage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleActivatePackageSubmit = async (paymentInfo: {
+    amount: number;
+    method: string;
+    reference: string;
+    bankName: string;
+    notes: string;
+  }) => {
     if (!activatingApp) return;
 
     setIsActivating(true);
     try {
       const res = await activateTrialPackage(activatingApp.id, {
-        payment_amount: paymentAmount,
-        payment_method: paymentMethod,
-        payment_reference: paymentRef,
-        bank_name: bankName,
-        notes: paymentNotes,
+        payment_amount: paymentInfo.amount,
+        payment_method: paymentInfo.method,
+        payment_reference: paymentInfo.reference,
+        bank_name: paymentInfo.bankName,
+        notes: paymentInfo.notes,
       });
 
       if (res.success) {
         setNotification({
           type: 'success',
-          message: `Payment registered! ${activatingApp.company_name} subscription activated. Invoice #${res.invoice?.invoice_no} created.`,
+          message: `Payment registered via ${paymentInfo.method}! ${activatingApp.company_name} subscription activated. Invoice #${res.invoice?.invoice_no} created.`,
         });
         setActivatingApp(null);
         if (viewingApp && viewingApp.id === activatingApp.id) {
@@ -485,6 +515,376 @@ export default function TrialApplicationsPage() {
     } catch {
       return dateStr;
     }
+  };
+
+  const getCountdownInfo = (app: CompanyTrialApplication) => {
+    if (app.status === 'rejected') {
+      return { status: 'none' as const, label: '—', color: 'text-slate-400 bg-slate-50 border-slate-200' };
+    }
+    if (app.status === 'pending') {
+      return { status: 'pending' as const, label: 'Not Started', color: 'text-amber-700 bg-amber-50 border-amber-200' };
+    }
+    if (app.status === 'inactive') {
+      return { status: 'inactive' as const, label: 'Inactive', color: 'text-slate-500 bg-slate-100 border-slate-200' };
+    }
+
+    const expiryIso =
+      app.status === 'paid_active'
+        ? (app.package_ends_at || app.trial_ends_at)
+        : (app.trial_ends_at || app.package_ends_at);
+
+    if (!expiryIso) {
+      return { status: 'none' as const, label: 'No Expiry', color: 'text-slate-400 bg-slate-50 border-slate-200' };
+    }
+
+    const expTime = new Date(expiryIso).getTime();
+    if (isNaN(expTime)) {
+      return { status: 'invalid' as const, label: 'Invalid Date', color: 'text-slate-400 bg-slate-50 border-slate-200' };
+    }
+
+    const diffMs = expTime - currentTime;
+    if (diffMs <= 0 || app.status === 'expired') {
+      return {
+        status: 'expired' as const,
+        label: 'Expired',
+        color: 'text-rose-700 bg-rose-50 border-rose-200 font-bold',
+      };
+    }
+
+    const totalSecs = Math.floor(diffMs / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    let label = '';
+    if (days > 0) {
+      label = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    } else if (hours > 0) {
+      label = `${hours}h ${minutes}m ${seconds}s`;
+    } else {
+      label = `${minutes}m ${seconds}s`;
+    }
+
+    const isUrgent = days === 0 && hours < 24;
+
+    return {
+      status: 'active' as const,
+      label,
+      days,
+      color: isUrgent
+        ? 'text-amber-700 bg-amber-50 border-amber-300 animate-pulse'
+        : 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    };
+  };
+
+  const handleExportExcel = () => {
+    setIsExportOpen(false);
+    if (!filteredApps || filteredApps.length === 0) {
+      alert('No trial applications found to export.');
+      return;
+    }
+
+    const data = filteredApps.map((app, idx) => {
+      const countdown = getCountdownInfo(app);
+      const expiryIso =
+        app.status === 'paid_active'
+          ? (app.package_ends_at || app.trial_ends_at)
+          : (app.trial_ends_at || app.package_ends_at);
+      const expiryStr = expiryIso ? new Date(expiryIso).toLocaleDateString('en-GB') : '—';
+
+      return {
+        'SL': idx + 1,
+        'App ID': `#${app.id}`,
+        'Company Name': app.company_name || '',
+        'ROC Number': app.roc || '',
+        'Sector': app.sector || 'General',
+        'Applicant Name': app.applicant_name || '',
+        'Email': app.email || '',
+        'Phone': app.phone || '',
+        'Admin Username': app.master_admin_username || '',
+        'Requested Plan': formatPackageName(app.plan_package),
+        'Price (RM)': Number(app.package_price) || 0,
+        'Trial Period': `${app.trial_days || 3} Days`,
+        'Status': (app.status || '').toUpperCase(),
+        'Expiry Date': expiryStr,
+        'Remaining / Countdown': countdown.label,
+        'Applied Date': formatDate(app.created_at),
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // Apply Premium Corporate Header Styling (Row 1)
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    const headerStyle = {
+      fill: {
+        fgColor: { rgb: '0B4DA2' }, // Corporate Royal Blue
+      },
+      font: {
+        name: 'Calibri',
+        sz: 11,
+        bold: true,
+        color: { rgb: 'FFFFFF' }, // White
+      },
+      alignment: {
+        vertical: 'center',
+        horizontal: 'center',
+        wrapText: true,
+      },
+      border: {
+        top: { style: 'thin', color: { rgb: '083877' } },
+        bottom: { style: 'medium', color: { rgb: '083877' } },
+        left: { style: 'thin', color: { rgb: '083877' } },
+        right: { style: 'thin', color: { rgb: '083877' } },
+      },
+    };
+
+    // Apply header style to all cells in Row 0
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!worksheet[cellRef]) continue;
+      worksheet[cellRef].s = headerStyle;
+    }
+
+    // Apply data rows styling (clean borders, zebra striping, aligned numbers)
+    for (let row = range.s.r + 1; row <= range.e.r; row++) {
+      const isEven = row % 2 === 0;
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!worksheet[cellRef]) continue;
+
+        const isSL = col === 0;
+        const isNumeric = col === 10; // Price (RM)
+
+        worksheet[cellRef].s = {
+          fill: isEven ? { fgColor: { rgb: 'F8FAFC' } } : undefined,
+          font: {
+            name: 'Calibri',
+            sz: 10,
+            bold: isNumeric,
+          },
+          alignment: {
+            vertical: 'center',
+            horizontal: isSL ? 'center' : isNumeric ? 'right' : 'left',
+          },
+          border: {
+            top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            right: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          },
+        };
+      }
+    }
+
+    // Set row heights: Row 0 (Header) = 28pt, data rows = 20pt
+    const rowHeights: { hpt: number }[] = [{ hpt: 28 }];
+    for (let r = 1; r <= range.e.r; r++) {
+      rowHeights.push({ hpt: 20 });
+    }
+    worksheet['!rows'] = rowHeights;
+
+    worksheet['!cols'] = [
+      { wch: 6 },  // SL
+      { wch: 10 }, // App ID
+      { wch: 28 }, // Company Name
+      { wch: 16 }, // ROC Number
+      { wch: 18 }, // Sector
+      { wch: 20 }, // Applicant Name
+      { wch: 24 }, // Email
+      { wch: 16 }, // Phone
+      { wch: 18 }, // Admin Username
+      { wch: 18 }, // Requested Plan
+      { wch: 14 }, // Price (RM)
+      { wch: 14 }, // Trial Period
+      { wch: 16 }, // Status
+      { wch: 14 }, // Expiry Date
+      { wch: 20 }, // Remaining / Countdown
+      { wch: 14 }, // Applied Date
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Trial Applications');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `trial_applications_${today}.xlsx`);
+  };
+
+  const handleExportCSV = () => {
+    setIsExportOpen(false);
+    if (!filteredApps || filteredApps.length === 0) {
+      alert('No trial applications found to export.');
+      return;
+    }
+
+    const headers = [
+      'SL',
+      'App ID',
+      'Company Name',
+      'ROC Number',
+      'Sector',
+      'Applicant Name',
+      'Email',
+      'Phone',
+      'Admin Username',
+      'Requested Plan',
+      'Price (RM)',
+      'Trial Period',
+      'Status',
+      'Expiry Date',
+      'Countdown',
+      'Applied Date',
+    ];
+
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = filteredApps.map((app, idx) => {
+      const countdown = getCountdownInfo(app);
+      const expiryIso =
+        app.status === 'paid_active'
+          ? (app.package_ends_at || app.trial_ends_at)
+          : (app.trial_ends_at || app.package_ends_at);
+      const expiryStr = expiryIso ? new Date(expiryIso).toLocaleDateString('en-GB') : '—';
+
+      return [
+        idx + 1,
+        escapeCSV(`#${app.id}`),
+        escapeCSV(app.company_name),
+        escapeCSV(app.roc),
+        escapeCSV(app.sector || 'General'),
+        escapeCSV(app.applicant_name),
+        escapeCSV(app.email),
+        escapeCSV(app.phone),
+        escapeCSV(app.master_admin_username),
+        escapeCSV(formatPackageName(app.plan_package)),
+        escapeCSV(app.package_price ? Number(app.package_price).toFixed(2) : '0.00'),
+        escapeCSV(`${app.trial_days || 3} Days`),
+        escapeCSV((app.status || '').toUpperCase()),
+        escapeCSV(expiryStr),
+        escapeCSV(countdown.label),
+        escapeCSV(formatDate(app.created_at)),
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const today = new Date().toISOString().split('T')[0];
+    link.download = `trial_applications_${today}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => {
+    setIsExportOpen(false);
+    if (!filteredApps || filteredApps.length === 0) {
+      alert('No trial applications found to print.');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to print.');
+      return;
+    }
+
+    const rowsHtml = filteredApps
+      .map((app, idx) => {
+        const countdown = getCountdownInfo(app);
+        return `
+          <tr>
+            <td style="text-align: center; font-weight: bold; color: #64748b;">${idx + 1}</td>
+            <td style="font-weight: bold; color: #0b4da2;">${app.company_name || '—'}</td>
+            <td>${app.roc || '—'}</td>
+            <td>${app.sector || 'General'}</td>
+            <td>${app.applicant_name || '—'}</td>
+            <td>${app.email || '—'}</td>
+            <td style="font-family: monospace;">${app.phone || '—'}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #0b4da2;">${app.master_admin_username || '—'}</td>
+            <td>${formatPackageName(app.plan_package)}</td>
+            <td style="text-align: right; font-family: monospace; font-weight: bold;">RM ${Number(app.package_price || 0).toFixed(2)}</td>
+            <td style="text-align: center;">${(app.status || '').toUpperCase()}</td>
+            <td style="text-align: center; font-family: monospace;">${countdown.label}</td>
+            <td style="text-align: center;">${formatDate(app.created_at)}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const todayStr = new Date().toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Company Trial Applications Registry</title>
+          <style>
+            @page { size: landscape; margin: 12mm; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 15px; color: #1e293b; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0b4da2; padding-bottom: 12px; margin-bottom: 15px; }
+            .header h1 { margin: 0; font-size: 20px; color: #0b4da2; }
+            .header p { margin: 3px 0 0; font-size: 11px; color: #64748b; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { background: #0b4da2; color: #ffffff; padding: 8px 6px; text-align: left; font-weight: 700; border: 1px solid #0b4da2; font-size: 10px; text-transform: uppercase; }
+            td { padding: 6px; border: 1px solid #e2e8f0; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 15px; text-align: right; font-size: 10px; color: #94a3b8; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>Company Trial Applications Registry</h1>
+              <p>Generated on ${todayStr} • Total Records: ${filteredApps.length}</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align: center;">SL</th>
+                <th>Company Name</th>
+                <th>ROC</th>
+                <th>Sector</th>
+                <th>Applicant</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Username</th>
+                <th>Plan</th>
+                <th style="text-align: right;">Price</th>
+                <th style="text-align: center;">Status</th>
+                <th style="text-align: center;">Countdown</th>
+                <th style="text-align: center;">Applied</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div class="footer">
+            Printed via Agency Management Portal
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const renderStatusBadge = (status: CompanyTrialApplication['status']) => {
@@ -585,12 +985,13 @@ export default function TrialApplicationsPage() {
       {/* Notification Banner */}
       {notification && (
         <div
-          className={`p-4 rounded-xl text-xs font-medium flex items-center justify-between border ${notification.type === 'success'
+          className={`p-4 rounded-xl text-xs font-medium flex items-center justify-between border ${
+            notification.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
               : notification.type === 'error'
-                ? 'bg-rose-50 border-rose-200 text-rose-800'
-                : 'bg-blue-50 border-blue-200 text-blue-800'
-            }`}
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}
         >
           <div className="flex items-center gap-2.5">
             {notification.type === 'success' ? (
@@ -629,10 +1030,11 @@ export default function TrialApplicationsPage() {
         {/* Pending Review */}
         <div
           onClick={() => setStatusFilter('pending')}
-          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${statusFilter === 'pending'
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+            statusFilter === 'pending'
               ? 'border-amber-400 ring-2 ring-amber-400/20'
               : 'border-slate-200/90 hover:border-amber-300'
-            }`}
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">
@@ -651,10 +1053,11 @@ export default function TrialApplicationsPage() {
         {/* Active Companies / Trials */}
         <div
           onClick={() => setStatusFilter('active')}
-          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${statusFilter === 'active'
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+            statusFilter === 'active'
               ? 'border-emerald-400 ring-2 ring-emerald-400/20'
               : 'border-slate-200/90 hover:border-emerald-300'
-            }`}
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
@@ -673,10 +1076,11 @@ export default function TrialApplicationsPage() {
         {/* Inactive Companies */}
         <div
           onClick={() => setStatusFilter('inactive')}
-          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${statusFilter === 'inactive'
+          className={`admin-stat-card bg-white rounded-2xl border p-4 shadow-2xs cursor-pointer transition-all ${
+            statusFilter === 'inactive'
               ? 'border-rose-400 ring-2 ring-rose-400/20'
               : 'border-slate-200/90 hover:border-rose-300'
-            }`}
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">
@@ -715,21 +1119,72 @@ export default function TrialApplicationsPage() {
             )}
           </div>
 
-          {/* Package filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Plan:</span>
-            <select
-              value={planFilter}
-              onChange={(e) => setPlanFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-            >
-              <option value="all">All Packages</option>
-              <option value="1_month">1 Month Plan</option>
-              <option value="3_months">3 Months Plan</option>
-              <option value="6_months">6 Months Plan</option>
-              <option value="10_months">10 Months Plan</option>
-              <option value="1_year">1 Year Pro</option>
-            </select>
+          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+            {/* Package filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Plan:</span>
+              <select
+                value={planFilter}
+                onChange={(e) => setPlanFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
+              >
+                <option value="all">All Packages</option>
+                <option value="1_month">1 Month Plan</option>
+                <option value="3_months">3 Months Plan</option>
+                <option value="6_months">6 Months Plan</option>
+                <option value="10_months">10 Months Plan</option>
+                <option value="1_year">1 Year Pro</option>
+              </select>
+            </div>
+
+            {/* Export Dropdown Button (Excel, CSV, Print) */}
+            <div className="relative inline-block text-left shrink-0" ref={exportDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportOpen(!isExportOpen)}
+                className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer border border-emerald-700"
+                title="Export Trial Applications List"
+              >
+                <Download size={14} className="shrink-0" />
+                <span>Export</span>
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform duration-200 ${isExportOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {isExportOpen && (
+                <div className="absolute right-0 mt-1.5 w-52 rounded-xl bg-white shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-3.5 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                    Export ({filteredApps.length} records)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
+                    <span>Export Excel (.xlsx)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent"
+                  >
+                    <FileText size={15} className="text-blue-600 shrink-0" />
+                    <span>Export CSV (.csv)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:text-purple-700 flex items-center gap-2.5 transition-colors cursor-pointer border-0 bg-transparent border-t border-slate-100"
+                  >
+                    <Printer size={15} className="text-purple-600 shrink-0" />
+                    <span>Print / Save as PDF</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -752,10 +1207,11 @@ export default function TrialApplicationsPage() {
                 key={st.key}
                 type="button"
                 onClick={() => setStatusFilter(st.key as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${isSelected
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                  isSelected
                     ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                  }`}
+                }`}
               >
                 {st.label}
               </button>
@@ -767,7 +1223,7 @@ export default function TrialApplicationsPage() {
       {/* Main Table with Dedicated Columns - Horizontal Scroll Including Actions */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
-          <table className="w-full text-left border-collapse text-xs min-w-[2000px]">
+          <table className="w-full text-left border-collapse text-xs min-w-[2150px]">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-3 text-center w-[55px] min-w-[55px]">#</th>
@@ -782,6 +1238,7 @@ export default function TrialApplicationsPage() {
                 <th className="py-3.5 px-4 w-[120px] min-w-[120px]">Price</th>
                 <th className="py-3.5 px-4 w-[120px] min-w-[120px]">Trial Period</th>
                 <th className="py-3.5 px-4 w-[180px] min-w-[180px]">Status</th>
+                <th className="py-3.5 px-4 w-[160px] min-w-[160px] text-center">Countdown</th>
                 <th className="py-3.5 px-4 w-[150px] min-w-[150px]">Applied Date</th>
                 <th className="py-3.5 px-4 text-center w-[250px] min-w-[250px] bg-slate-50/90">
                   Actions
@@ -791,7 +1248,7 @@ export default function TrialApplicationsPage() {
             <tbody className="divide-y divide-slate-200/80">
               {isLoading ? (
                 <tr>
-                  <td colSpan={14} className="py-16 text-center text-slate-500">
+                  <td colSpan={15} className="py-16 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <div className="w-7 h-7 border-2 border-[#0b4da2] border-t-transparent rounded-full animate-spin" />
                       <span className="font-medium text-slate-600">Loading trial applications...</span>
@@ -800,7 +1257,7 @@ export default function TrialApplicationsPage() {
                 </tr>
               ) : filteredApps.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-16 text-center text-slate-500">
+                  <td colSpan={15} className="py-16 text-center text-slate-500">
                     <Building2 size={40} className="mx-auto text-slate-300 mb-2.5" />
                     <div className="font-bold text-slate-700 text-sm">No applications found</div>
                     <p className="text-xs text-slate-400 mt-1">
@@ -815,6 +1272,7 @@ export default function TrialApplicationsPage() {
                   const isPending = app.status === 'pending';
                   const isTrialActive = app.status === 'approved_trial';
                   const isPaidActive = app.status === 'paid_active';
+                  const countdown = getCountdownInfo(app);
 
                   return (
                     <tr
@@ -955,7 +1413,24 @@ export default function TrialApplicationsPage() {
                         </div>
                       </td>
 
-                      {/* 13. Applied Date */}
+                      {/* 13. Countdown */}
+                      <td className="py-3.5 px-4 align-middle text-center whitespace-nowrap" suppressHydrationWarning>
+                        {countdown.status === 'none' ? (
+                          <span className="text-slate-400 text-xs italic">—</span>
+                        ) : (
+                          <span
+                            suppressHydrationWarning
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border ${
+                              mounted ? countdown.color : 'text-slate-400 bg-slate-50 border-slate-200'
+                            }`}
+                          >
+                            <Clock size={12} className="shrink-0" />
+                            <span suppressHydrationWarning>{mounted ? countdown.label : '...'}</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 14. Applied Date */}
                       <td className="py-3.5 px-4 align-middle whitespace-nowrap" suppressHydrationWarning>
                         <div className="text-slate-800 font-medium text-xs">
                           {formatDate(app.created_at)}
@@ -968,7 +1443,7 @@ export default function TrialApplicationsPage() {
                         </div>
                       </td>
 
-                      {/* 14. Actions (Scrolls smoothly along with table) */}
+                      {/* 15. Actions (Scrolls smoothly along with table) */}
                       <td className="py-3.5 px-4 align-middle text-center bg-transparent">
                         <div className="flex items-center justify-center gap-1.5 flex-nowrap">
                           {/* Primary Accept Action for Pending */}
@@ -1011,10 +1486,11 @@ export default function TrialApplicationsPage() {
                           <button
                             type="button"
                             onClick={() => handleToggleActive(app)}
-                            className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${app.status === 'inactive'
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
+                              app.status === 'inactive'
                                 ? 'text-rose-600 bg-rose-50 hover:bg-rose-100 border-rose-200'
                                 : 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
-                              }`}
+                            }`}
                             title={
                               app.status === 'inactive'
                                 ? 'Status: Inactive (Click to Activate)'
@@ -1127,10 +1603,11 @@ export default function TrialApplicationsPage() {
                       key={days}
                       type="button"
                       onClick={() => handleSetPresetDays(days)}
-                      className={`py-1.5 px-2 rounded-lg font-bold text-xs border transition-all cursor-pointer ${durationDaysInput === days
+                      className={`py-1.5 px-2 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
+                        durationDaysInput === days
                           ? 'bg-amber-500 text-white border-amber-600 shadow-2xs'
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                        }`}
+                      }`}
                     >
                       {days} Days
                     </button>
@@ -1996,123 +2473,30 @@ export default function TrialApplicationsPage() {
       )}
 
       {/* Payment & Package Activation Modal */}
-      {activatingApp && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2 text-[#0b4da2] font-bold text-base">
-                <DollarSign size={20} />
-                <span>Receive Payment &amp; Activate Full Package</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActivatingApp(null)}
-                className="text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600">
-              Activating full subscription for <strong className="text-slate-900">{activatingApp.company_name}</strong>. This upgrades their trial to the complete <strong>{formatPackageName(activatingApp.plan_package)}</strong> ({activatingApp.package_duration_days} days) and generates a paid invoice.
-            </p>
-
-            <form onSubmit={handleActivatePackage} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Payment Amount (RM) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-bold text-slate-900 font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Payment Method</label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs bg-white"
-                  >
-                    <option value="Bank Transfer">Bank Transfer (IBG/DuitNow)</option>
-                    <option value="Credit / Debit Card">Credit / Debit Card</option>
-                    <option value="Cash / Cheque">Cash / Cheque</option>
-                    <option value="Online Payment Gateway">Online Payment Gateway</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Bank Name</label>
-                  <input
-                    type="text"
-                    value={bankName}
-                    onChange={(e) => setBankName(e.target.value)}
-                    placeholder="Maybank, CIMB, Public Bank..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  Payment Reference / Transaction ID
-                </label>
-                <input
-                  type="text"
-                  value={paymentRef}
-                  onChange={(e) => setPaymentRef(e.target.value)}
-                  placeholder="e.g. DUITNOW-98765432"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Treasury Notes (Optional)</label>
-                <textarea
-                  rows={2}
-                  value={paymentNotes}
-                  onChange={(e) => setPaymentNotes(e.target.value)}
-                  placeholder="Verified by finance team..."
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] text-xs"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setActivatingApp(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold text-xs transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isActivating}
-                  className="inline-flex items-center gap-1.5 px-6 py-2 rounded-xl bg-gradient-to-r from-[#0b4da2] to-[#083877] text-white text-xs font-bold shadow-sm hover:shadow transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isActivating ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Activating Package...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check size={14} />
-                      <span>Confirm Payment &amp; Activate Package</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <CompanyPaymentModal
+        isOpen={!!activatingApp}
+        onClose={() => setActivatingApp(null)}
+        data={
+          activatingApp
+            ? {
+                id: activatingApp.id,
+                companyName: activatingApp.company_name,
+                roc: activatingApp.roc,
+                email: activatingApp.email,
+                phone: activatingApp.phone,
+                address: activatingApp.address,
+                planPackage: formatPackageName(activatingApp.plan_package),
+                packageDurationDays: activatingApp.package_duration_days,
+                amount:
+                  activatingApp.package_price ||
+                  PLAN_PACKAGES.find((p) => p.key === activatingApp.plan_package)?.price ||
+                  199,
+              }
+            : null
+        }
+        isSubmitting={isActivating}
+        onSubmit={handleActivatePackageSubmit}
+      />
     </div>
   );
 }

@@ -161,7 +161,12 @@ function ProgramsPageContent() {
   const categories = useMemo(() => {
     const set = new Set<string>();
     programs.forEach((p) => {
-      if (p.category) set.add(p.category);
+      if (p.category) {
+        p.category.split(',').forEach((c) => {
+          const trimmed = c.trim();
+          if (trimmed) set.add(trimmed);
+        });
+      }
     });
     return Array.from(set);
   }, [programs]);
@@ -174,7 +179,13 @@ function ProgramsPageContent() {
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
+      const matchesCategory =
+        categoryFilter === 'all' ||
+        (p.category &&
+          p.category
+            .split(',')
+            .map((c) => c.trim())
+            .includes(categoryFilter));
 
       return matchesSearch && matchesCategory;
     });
@@ -183,7 +194,16 @@ function ProgramsPageContent() {
   // Metrics (Cleaned: only total, sectors, workers)
   const metrics = useMemo(() => {
     const total = programs.length;
-    const uniqueSectors = new Set(programs.map((p) => p.category?.trim()).filter(Boolean)).size;
+    const sectorSet = new Set<string>();
+    programs.forEach((p) => {
+      if (p.category) {
+        p.category.split(',').forEach((c) => {
+          const trimmed = c.trim();
+          if (trimmed) sectorSet.add(trimmed);
+        });
+      }
+    });
+    const uniqueSectors = sectorSet.size;
     const enrolledWorkers = programs.reduce((acc, p) => acc + (p.customers_count || 0), 0);
 
     return { total, uniqueSectors, enrolledWorkers };
@@ -533,9 +553,24 @@ function ProgramsPageContent() {
                     </td>
 
                     {/* Sector */}
-                    <td className="py-4 px-4 align-middle whitespace-nowrap">
-                      <div className="font-semibold text-slate-800">
-                        {program.category || 'General'}
+                    <td className="py-4 px-4 align-middle">
+                      <div className="flex flex-wrap items-center gap-1.5 max-w-[280px]">
+                        {program.category ? (
+                          program.category
+                            .split(',')
+                            .map((sec) => sec.trim())
+                            .filter(Boolean)
+                            .map((sec, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60"
+                              >
+                                {sec}
+                              </span>
+                            ))
+                        ) : (
+                          <span className="text-slate-400 font-normal">General</span>
+                        )}
                       </div>
                     </td>
 

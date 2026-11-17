@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import {
   AlertCircle,
   AlertTriangle,
@@ -489,7 +489,7 @@ export default function CustomerStatusListing({
     const data = filteredCustomers.map((cust, idx) => {
       const row = getCustomerExportRow(cust, idx);
       return {
-        '#': row.sl,
+        SL: row.sl,
         'Worker Name': row.name,
         'Country': row.country,
         'Passport No': row.passport,
@@ -507,8 +507,76 @@ export default function CustomerStatusListing({
     });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // Apply Premium Corporate Header Styling (Row 1)
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    const headerStyle = {
+      fill: {
+        fgColor: { rgb: '0B4DA2' }, // Corporate Royal Blue
+      },
+      font: {
+        name: 'Calibri',
+        sz: 11,
+        bold: true,
+        color: { rgb: 'FFFFFF' }, // White
+      },
+      alignment: {
+        vertical: 'center',
+        horizontal: 'center',
+        wrapText: true,
+      },
+      border: {
+        top: { style: 'thin', color: { rgb: '083877' } },
+        bottom: { style: 'medium', color: { rgb: '083877' } },
+        left: { style: 'thin', color: { rgb: '083877' } },
+        right: { style: 'thin', color: { rgb: '083877' } },
+      },
+    };
+
+    // Apply header style to all cells in Row 0
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!worksheet[cellRef]) continue;
+      worksheet[cellRef].s = headerStyle;
+    }
+
+    // Apply data rows styling
+    for (let row = range.s.r + 1; row <= range.e.r; row++) {
+      const isEven = row % 2 === 0;
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!worksheet[cellRef]) continue;
+
+        const isSL = col === 0;
+        worksheet[cellRef].s = {
+          fill: isEven ? { fgColor: { rgb: 'F8FAFC' } } : undefined,
+          font: {
+            name: 'Calibri',
+            sz: 10,
+          },
+          alignment: {
+            vertical: 'center',
+            horizontal: isSL ? 'center' : 'left',
+          },
+          border: {
+            top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            right: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          },
+        };
+      }
+    }
+
+    // Set row heights: Row 0 (Header) = 28pt, data rows = 20pt
+    const rowHeights: { hpt: number }[] = [{ hpt: 28 }];
+    for (let r = 1; r <= range.e.r; r++) {
+      rowHeights.push({ hpt: 20 });
+    }
+    worksheet['!rows'] = rowHeights;
+
     worksheet['!cols'] = [
-      { wch: 5 },  // #
+      { wch: 6 },  // SL
       { wch: 25 }, // Worker Name
       { wch: 18 }, // Country
       { wch: 16 }, // Passport No
@@ -538,7 +606,7 @@ export default function CustomerStatusListing({
     }
 
     const headers = [
-      '#',
+      'SL',
       'Worker Name',
       'Country',
       'Passport No',
@@ -767,7 +835,7 @@ export default function CustomerStatusListing({
         <table>
           <thead>
             <tr>
-              <th style="width: 25px; text-align: center;">#</th>
+              <th style="width: 28px; text-align: center;">SL</th>
               <th>Worker Name</th>
               <th>Passport</th>
               <th>NID No</th>

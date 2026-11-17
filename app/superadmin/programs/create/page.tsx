@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -8,11 +8,14 @@ import {
   ArrowLeft,
   BookOpen,
   Briefcase,
+  Check,
   CheckCircle2,
+  ChevronDown,
   FolderPlus,
   Plus,
   RefreshCw,
   Save,
+  Search,
   Sparkles,
   X,
 } from 'lucide-react';
@@ -22,15 +25,24 @@ import { WorkingSector, fetchAllWorkingSectors, createWorkingSector } from '@/li
 export default function CreateProgramPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const rootPath = pathname.startsWith('/masteradmin') ? '/masteradmin' : '/superadmin';
+  const rootPath = pathname.startsWith('/masteradmin')
+    ? '/masteradmin'
+    : pathname.startsWith('/superadmin')
+    ? '/superadmin'
+    : '';
 
-  // ONLY 2 fields required by user: name and sector
+  // Form Fields
   const [name, setName] = useState('');
-  const [sector, setSector] = useState('');
+  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
 
   // Working Sectors state
   const [sectors, setSectors] = useState<WorkingSector[]>([]);
   const [loadingSectors, setLoadingSectors] = useState(true);
+
+  // Multi-Select Dropdown state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [sectorSearch, setSectorSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Inline Add New Sector state
   const [isAddingSector, setIsAddingSector] = useState(false);
@@ -41,6 +53,19 @@ export default function CreateProgramPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   // Load existing working sectors
   useEffect(() => {
     let mounted = true;
@@ -50,9 +75,6 @@ export default function CreateProgramPage() {
         const data = await fetchAllWorkingSectors();
         if (mounted && Array.isArray(data)) {
           setSectors(data);
-          if (data.length > 0 && !sector) {
-            setSector(data[0].name);
-          }
         }
       } catch (err) {
         console.error('Failed to load working sectors:', err);
@@ -71,6 +93,37 @@ export default function CreateProgramPage() {
       window.removeEventListener('working_sectors_updated', handleSectorsUpdated);
     };
   }, []);
+
+  // Filtered sectors list for search
+  const filteredSectorList = useMemo(() => {
+    const q = sectorSearch.trim().toLowerCase();
+    if (!q) return sectors;
+    return sectors.filter((s) => s.name.toLowerCase().includes(q));
+  }, [sectors, sectorSearch]);
+
+  // Multi-select helpers
+  const toggleSector = (sectorName: string) => {
+    setSelectedSectors((prev) => {
+      if (prev.includes(sectorName)) {
+        return prev.filter((s) => s !== sectorName);
+      } else {
+        return [...prev, sectorName];
+      }
+    });
+  };
+
+  const removeSector = (sectorName: string) => {
+    setSelectedSectors((prev) => prev.filter((s) => s !== sectorName));
+  };
+
+  const handleSelectAll = () => {
+    const allNames = sectors.map((s) => s.name);
+    setSelectedSectors(allNames);
+  };
+
+  const handleClearAll = () => {
+    setSelectedSectors([]);
+  };
 
   // Handle adding new sector inline
   const handleSaveSector = async (e?: React.FormEvent) => {
@@ -92,7 +145,14 @@ export default function CreateProgramPage() {
         return [...prev, created];
       });
 
-      setSector(createdName);
+      // Automatically add to selected sectors
+      setSelectedSectors((prev) => {
+        if (!prev.includes(createdName)) {
+          return [...prev, createdName];
+        }
+        return prev;
+      });
+
       setNewSectorName('');
       setIsAddingSector(false);
       setFeedback({
@@ -117,8 +177,8 @@ export default function CreateProgramPage() {
       return;
     }
 
-    if (!sector.trim()) {
-      setFeedback({ type: 'error', message: 'Sector is required. Please select or add a sector.' });
+    if (selectedSectors.length === 0) {
+      setFeedback({ type: 'error', message: 'Please select at least one sector.' });
       return;
     }
 
@@ -128,7 +188,7 @@ export default function CreateProgramPage() {
     try {
       const result = await createProgram({
         name: name.trim(),
-        category: sector.trim(),
+        category: selectedSectors.join(', '),
         status: 'active',
       });
 
@@ -177,7 +237,7 @@ export default function CreateProgramPage() {
               Create New Program
             </h1>
             <p className="text-slate-500 text-xs mt-0.5">
-              Enter the program name and select or add its sector.
+              Enter the program name and select one or more sectors for this recruitment scheme.
             </p>
           </div>
 
@@ -204,14 +264,14 @@ export default function CreateProgramPage() {
             <button
               type="button"
               onClick={() => setFeedback(null)}
-              className="text-slate-400 hover:text-slate-700 p-1"
+              className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer bg-transparent border-0"
             >
               <X size={14} />
             </button>
           </div>
         )}
 
-        {/* Form - Only 2 Fields: Name & Sector */}
+        {/* Form - Name & Multi-Sector */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="space-y-5">
             {/* Field 1: Program Name */}
@@ -233,32 +293,50 @@ export default function CreateProgramPage() {
               </p>
             </div>
 
-            {/* Field 2: Sector (with + Add Sector capability) */}
+            {/* Field 2: Multi-Sector Selection (Dropdown + Tags + Search + Add Sector) */}
             <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <label className="block text-xs font-bold text-slate-800">
-                  Sector <span className="text-rose-500">*</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddingSector(!isAddingSector);
-                    setNewSectorName('');
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-all cursor-pointer"
-                >
-                  {isAddingSector ? (
-                    <>
-                      <X size={13} />
-                      <span>Cancel</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus size={13} />
-                      <span>Add Sector</span>
-                    </>
+                <div className="flex items-center gap-2">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Sectors (Multiple Selection) <span className="text-rose-500">*</span>
+                  </label>
+                  {selectedSectors.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                      {selectedSectors.length} Selected
+                    </span>
                   )}
-                </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedSectors.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className="text-[11px] font-semibold text-slate-500 hover:text-rose-600 transition-colors cursor-pointer bg-transparent border-0"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingSector(!isAddingSector);
+                      setNewSectorName('');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-all cursor-pointer"
+                  >
+                    {isAddingSector ? (
+                      <>
+                        <X size={13} />
+                        <span>Cancel</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={13} />
+                        <span>Add Sector</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Inline Add Sector Box */}
@@ -287,7 +365,7 @@ export default function CreateProgramPage() {
                       type="button"
                       disabled={isSavingSector || !newSectorName.trim()}
                       onClick={() => handleSaveSector()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all disabled:opacity-50 cursor-pointer shadow-xs border-0"
                     >
                       {isSavingSector ? (
                         <>
@@ -305,34 +383,209 @@ export default function CreateProgramPage() {
                 </div>
               )}
 
-              {/* Sector Dropdown */}
-              <div className="relative">
-                <select
-                  value={sector}
-                  onChange={(e) => {
-                    if (e.target.value === '__add_new__') {
-                      setIsAddingSector(true);
-                    } else {
-                      setSector(e.target.value);
-                    }
-                  }}
-                  disabled={loadingSectors}
-                  className="w-full px-4 py-3 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer disabled:opacity-60 transition-all"
+              {/* Multi-Select Dropdown Container */}
+              <div className="relative" ref={dropdownRef}>
+                {/* Trigger Button */}
+                <div
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className={`w-full min-h-[46px] p-2 bg-white border rounded-xl cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                    isDropdownOpen
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
                 >
-                  <option value="">-- Select a Sector --</option>
-                  {sectors.map((s) => (
-                    <option key={s.id || s.name} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-                  <option value="__add_new__" className="text-indigo-600 font-bold">
-                    + Add New Sector...
-                  </option>
-                </select>
+                  <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
+                    {selectedSectors.length === 0 ? (
+                      <span className="text-xs font-medium text-slate-400 px-2 py-1 select-none">
+                        -- Select Sectors (Multiple Selection) --
+                      </span>
+                    ) : (
+                      selectedSectors.map((sec) => (
+                        <span
+                          key={sec}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200/80 shadow-2xs group"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <Briefcase size={11} className="text-indigo-600 shrink-0" />
+                          <span className="truncate max-w-[200px]">{sec}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSector(sec);
+                            }}
+                            className="text-indigo-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition-colors ml-0.5 cursor-pointer border-0 bg-transparent"
+                            title={`Remove ${sec}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-slate-400 shrink-0 pr-1">
+                    {selectedSectors.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearAll();
+                        }}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
+                        title="Clear all selected"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                    <ChevronDown
+                      size={16}
+                      className={`transition-transform duration-200 ${
+                        isDropdownOpen ? 'rotate-180 text-indigo-600' : ''
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Dropdown Menu */}
+                {isDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                    {/* Search & Actions Header */}
+                    <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 space-y-2">
+                      <div className="relative">
+                        <Search
+                          size={14}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                        />
+                        <input
+                          type="text"
+                          value={sectorSearch}
+                          onChange={(e) => setSectorSearch(e.target.value)}
+                          placeholder="Search sectors..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium text-slate-800"
+                          onClick={(e) => e.stopPropagation()}
+                          autoFocus
+                        />
+                        {sectorSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setSectorSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 border-0 bg-transparent cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 px-1">
+                        <span>
+                          {filteredSectorList.length} sector{filteredSectorList.length !== 1 ? 's' : ''} available
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSelectAll}
+                            className="text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer bg-transparent border-0"
+                          >
+                            Select All
+                          </button>
+                          <span>•</span>
+                          <button
+                            type="button"
+                            onClick={handleClearAll}
+                            className="text-slate-500 hover:text-rose-600 transition-colors cursor-pointer bg-transparent border-0"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sector List with Checkboxes */}
+                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
+                      {loadingSectors ? (
+                        <div className="p-6 text-center text-xs text-slate-400">
+                          <RefreshCw size={16} className="animate-spin mx-auto mb-2 text-indigo-600" />
+                          <span>Loading sectors...</span>
+                        </div>
+                      ) : filteredSectorList.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-400">
+                          <p>No sectors found matching &quot;{sectorSearch}&quot;</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewSectorName(sectorSearch);
+                              setIsAddingSector(true);
+                              setIsDropdownOpen(false);
+                            }}
+                            className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 bg-transparent border-0 cursor-pointer"
+                          >
+                            <Plus size={12} />
+                            <span>Add &quot;{sectorSearch}&quot; as new sector</span>
+                          </button>
+                        </div>
+                      ) : (
+                        filteredSectorList.map((s) => {
+                          const isSelected = selectedSectors.includes(s.name);
+                          return (
+                            <div
+                              key={s.id || s.name}
+                              onClick={() => toggleSector(s.name)}
+                              className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-indigo-50/70 text-indigo-900 font-bold'
+                                  : 'hover:bg-slate-50 text-slate-700 font-medium'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                    isSelected
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isSelected && <Check size={11} strokeWidth={3} />}
+                                </div>
+                                <span className="truncate">{s.name}</span>
+                              </div>
+
+                              {isSelected && (
+                                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider shrink-0 ml-2">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Bottom Add Sector Trigger */}
+                    <div className="p-2 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        Need a sector not listed?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingSector(true);
+                          setIsDropdownOpen(false);
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-transparent border-0 cursor-pointer"
+                      >
+                        <Plus size={12} />
+                        <span>Add New</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <p className="text-[11px] text-slate-400">
-                Choose an existing working sector from the dropdown or click <span className="font-semibold text-indigo-600">+ Add Sector</span> to add a new one.
+                You can select multiple sectors from the dropdown. Click a sector to check/uncheck it.
               </p>
             </div>
           </div>
@@ -341,7 +594,7 @@ export default function CreateProgramPage() {
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
             <Link
               href={`${rootPath}/programs`}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+              className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all no-underline"
             >
               Cancel
             </Link>
@@ -349,7 +602,7 @@ export default function CreateProgramPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer"
+              className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer border-0"
             >
               {isSubmitting ? (
                 <>

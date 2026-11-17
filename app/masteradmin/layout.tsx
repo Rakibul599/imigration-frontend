@@ -427,6 +427,24 @@ export default function MasterAdminLayout({
             ],
           },
           {
+            name: 'Agent Management',
+            icon: Briefcase,
+            isGroup: true,
+            badge: agentCount > 0 ? `${agentCount}` : undefined,
+            children: [
+              {
+                name: 'Agent Dashboard',
+                href: '/masteradmin/agents',
+                icon: LayoutDashboard,
+              },
+              {
+                name: 'Agent Wise Customer',
+                href: '/masteradmin/agents/customers',
+                icon: Users,
+              },
+            ],
+          },
+          {
             name: 'Foreign Customer Management',
             icon: Users,
             badge: customerCount > 0 ? `${customerCount}` : undefined,
@@ -436,29 +454,6 @@ export default function MasterAdminLayout({
                 name: 'Foreign Customer Dashboard',
                 href: '/masteradmin/customers/dashboard',
                 icon: LayoutDashboard,
-              },
-            ],
-          },
-          {
-            name: 'Agent Management',
-            icon: Briefcase,
-            isGroup: true,
-            badge: agentCount > 0 ? `${agentCount}` : undefined,
-            children: [
-              {
-                name: 'Create Agent',
-                href: '/masteradmin/agents/create',
-                icon: UserPlus,
-              },
-              {
-                name: 'Agent List',
-                href: '/masteradmin/agents',
-                icon: Briefcase,
-              },
-              {
-                name: 'Agent Wise Customer',
-                href: '/masteradmin/agents/customers',
-                icon: Users,
               },
             ],
           },
@@ -480,12 +475,17 @@ export default function MasterAdminLayout({
                 icon: FileCheck,
               },
               {
-                name: 'Working Agreement',
+                name: 'Employee Agreement',
                 href: '/masteradmin/employees/working-agreement',
                 icon: FileSignature,
               },
               {
-                name: 'Resignations & Clearances',
+                name: 'Employee Salary',
+                href: '/masteradmin/employees/salary',
+                icon: Receipt,
+              },
+              {
+                name: 'Resignation Letter',
                 href: '/masteradmin/employees/resignations',
                 icon: FileText,
                 badge: pendingResignationCount > 0 ? `${pendingResignationCount} New` : undefined,

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
+import { usePathname } from 'next/navigation';
+import * as XLSX from 'xlsx-js-style';
 import Select2Search, { Select2Option } from '@/components/Select2Search';
 import {
   AlertCircle,
@@ -32,6 +33,9 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Gift,
+  Heart,
+  HeartHandshake,
   Layers,
   PieChart,
   Plus,
@@ -40,6 +44,7 @@ import {
   Printer,
   Receipt,
   RotateCcw,
+  Scale,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -52,6 +57,7 @@ import {
   UserX,
   Wallet,
   X,
+  XCircle,
 } from 'lucide-react';
 import CompanyStatusModal from '@/components/CompanyStatusModal';
 import {
@@ -99,7 +105,15 @@ import {
 import {
   SubscriptionPlan,
   fetchSubscriptionPlans,
+  createInvoice,
 } from '@/lib/companyTrialAndFinanceStorage';
+import CompanyPaymentModal, { PaymentTabType } from '@/components/CompanyPaymentModal';
+import {
+  SiteSettings,
+  getStoredSettings,
+  fetchSiteSettings,
+  subscribeToSettingsChanges,
+} from '@/lib/settingsStorage';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -132,22 +146,26 @@ const LOGO_PRESETS = [
 
 const STAT_ICON_PRESETS = [
   { label: 'Building', icon: 'Building2' },
-  { label: 'Active Worker', icon: 'UserCheck' },
-  { label: 'Inactive Worker', icon: 'UserX' },
-  { label: 'Target Wallet', icon: 'Wallet' },
-  { label: 'Deposit (In)', icon: 'ArrowUpRight' },
-  { label: 'Cost (Out)', icon: 'ArrowDownRight' },
-  { label: 'Profit (Net)', icon: 'TrendingUp' },
-  { label: 'Pending Dues', icon: 'Clock' },
-  { label: 'Receipt/Expense', icon: 'Receipt' },
-  { label: 'Credit Card', icon: 'CreditCard' },
-  { label: 'Coins', icon: 'Coins' },
+  { label: 'Active Company', icon: 'CheckCircle2' },
+  { label: 'Inactive Company', icon: 'PowerOff' },
+  { label: 'Reject Company', icon: 'XCircle' },
   { label: 'Dollar', icon: 'DollarSign' },
+  { label: 'Cost (Out)', icon: 'ArrowDownRight' },
+  { label: 'Credit Card', icon: 'CreditCard' },
+  { label: 'Profit (Net)', icon: 'TrendingUp' },
+  { label: 'Coins (5% Donate)', icon: 'Coins' },
+  { label: 'Gift (Donation)', icon: 'Gift' },
+  { label: 'Balance / Scale', icon: 'Scale' },
+  { label: 'Pending Dues', icon: 'Clock' },
+  { label: 'Target Wallet', icon: 'Wallet' },
+  { label: 'Receipt/Expense', icon: 'Receipt' },
   { label: 'Briefcase', icon: 'Briefcase' },
   { label: 'Shield Check', icon: 'ShieldCheck' },
 ];
 
 export default function SuperAdminCompaniesPage() {
+  const pathname = usePathname();
+  const baseRoute = pathname?.startsWith('/superadmin') ? '/superadmin/companies' : '/companies';
   const cardDesign = useDashboardCardDesign();
   const isGlass = cardDesign === 'glassmorphism';
   const {
@@ -161,8 +179,7 @@ export default function SuperAdminCompaniesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
-  const [selectedProgramCardId, setSelectedProgramCardId] = useState<string>('ALL');
-  const [selectedYearCardId, setSelectedYearCardId] = useState<string>('ALL');
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => getStoredSettings());
   const [programs, setPrograms] = useState<ProgramRecord[]>(() => {
     return typeof window !== 'undefined' ? getStoredPrograms() : [];
   });
@@ -213,6 +230,9 @@ export default function SuperAdminCompaniesPage() {
 
   // Status & Auto-Deactivation Modal State
   const [statusModalCompany, setStatusModalCompany] = useState<Company | null>(null);
+  const [payingCompany, setPayingCompany] = useState<Company | null>(null);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+  const [pendingTrialCount, setPendingTrialCount] = useState<number>(0);
 
   // Export Dropdown State & Ref
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -256,6 +276,14 @@ export default function SuperAdminCompaniesPage() {
       if (Array.isArray(plans)) setSubscriptionPlans(plans);
     }).catch(() => {});
 
+    const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+    fetch(`${apiBase}/company-trial-applications?status=pending`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setPendingTrialCount(data.length);
+      })
+      .catch(() => {});
+
     fetchPrograms().then((progs) => {
       if (Array.isArray(progs) && progs.length > 0) setPrograms(progs);
     }).catch(() => {});
@@ -263,6 +291,14 @@ export default function SuperAdminCompaniesPage() {
     fetchCustomers().then((custs) => {
       if (Array.isArray(custs) && custs.length > 0) setAllCustomers(custs);
     }).catch(() => {});
+
+    setSiteSettings(getStoredSettings());
+    fetchSiteSettings().then((s) => {
+      if (s) setSiteSettings(s);
+    }).catch(() => {});
+    const unsubSettings = subscribeToSettingsChanges((newSettings) => {
+      setSiteSettings(newSettings);
+    });
 
     const unsubComp = subscribeToCompanyChanges(() => {
       setCompanies(getStoredCompanies());
@@ -284,6 +320,7 @@ export default function SuperAdminCompaniesPage() {
     return () => {
       unsubComp();
       unsubCards();
+      unsubSettings();
       clearInterval(countdownInterval);
       clearInterval(timerInterval);
     };
@@ -308,6 +345,64 @@ export default function SuperAdminCompaniesPage() {
     );
   };
 
+  const handlePaymentSubmit = async (paymentInfo: {
+    amount: number;
+    method: string;
+    reference: string;
+    bankName: string;
+    notes: string;
+    tab: PaymentTabType;
+  }) => {
+    if (!payingCompany) return;
+    setIsSubmittingPayment(true);
+    try {
+      const assignedPlan = subscriptionPlans.find(
+        (p) =>
+          p.plan_key === payingCompany.subscription_plan_key ||
+          p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
+      );
+      const total = paymentInfo.amount;
+
+      await createInvoice({
+        company_id: payingCompany.id,
+        company_name: payingCompany.name,
+        customer_name: payingCompany.name,
+        customer_email: payingCompany.email,
+        customer_phone: payingCompany.phone,
+        customer_address: payingCompany.address,
+        package_name: assignedPlan?.name || payingCompany.subscription_plan_key || 'Subscription Package',
+        invoice_date: new Date().toISOString().slice(0, 10),
+        items: [
+          {
+            description: `Payment for ${assignedPlan?.name || 'Company Subscription & Service Access'}`,
+            qty: 1,
+            unit_price: total,
+            total: total,
+          },
+        ],
+        total_amount: total,
+        amount_paid: total,
+        balance_due: 0,
+        currency: 'MYR',
+        payment_status: 'Paid',
+        payment_method: paymentInfo.method,
+        payment_reference: paymentInfo.reference,
+        bank_name: paymentInfo.bankName,
+        notes: paymentInfo.notes || `Payment recorded by Super Admin for ${payingCompany.name}`,
+      });
+
+      setPayingCompany(null);
+      showToast(
+        'success',
+        `Payment of RM ${total.toFixed(2)} recorded successfully for ${payingCompany.name}!`
+      );
+    } catch (err: any) {
+      showToast('info', err?.message || 'Payment recording failed.');
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
+
   // KPI Calculations
   const selectedCardCompanies = useMemo(() => {
     if (selectedCompanyCardId === 'ALL') return companies;
@@ -319,25 +414,6 @@ export default function SuperAdminCompaniesPage() {
     return companies.find((c) => c.id === selectedCompanyCardId) || null;
   }, [companies, selectedCompanyCardId]);
 
-  const availableYears = useMemo(() => {
-    const years = new Set<string>();
-    const currentYear = new Date().getFullYear();
-    for (let y = currentYear + 1; y >= currentYear - 5; y--) {
-      years.add(String(y));
-    }
-    allCustomers.forEach((cust) => {
-      if (cust.created_at) {
-        const y = cust.created_at.slice(0, 4);
-        if (/^\d{4}$/.test(y)) years.add(y);
-      }
-      if (cust.passport_issue_date) {
-        const y = cust.passport_issue_date.slice(0, 4);
-        if (/^\d{4}$/.test(y)) years.add(y);
-      }
-    });
-    return Array.from(years).sort((a, b) => Number(b) - Number(a));
-  }, [allCustomers]);
-
   const scopedCustomers = useMemo(() => {
     return allCustomers.filter((c) => {
       if (selectedCompanyCardId !== 'ALL') {
@@ -347,31 +423,17 @@ export default function SuperAdminCompaniesPage() {
            (selectedSingleCompany && c.company_id.toLowerCase() === selectedSingleCompany.name.toLowerCase()));
         if (!matchesComp) return false;
       }
-      if (selectedProgramCardId !== 'ALL') {
-        if (String(c.program_id) !== String(selectedProgramCardId)) return false;
-      }
-      if (selectedYearCardId !== 'ALL') {
-        const y = (c.created_at || '').slice(0, 4);
-        const py = (c.passport_issue_date || '').slice(0, 4);
-        if (y !== selectedYearCardId && py !== selectedYearCardId) return false;
-      }
       return true;
     });
-  }, [allCustomers, selectedCompanyCardId, selectedSingleCompany, selectedProgramCardId, selectedYearCardId]);
+  }, [allCustomers, selectedCompanyCardId, selectedSingleCompany]);
 
   const totalActiveWorkers = useMemo(() => {
-    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
-      return scopedCustomers.filter((c) => c.status !== 'inactive').length;
-    }
     return selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
-  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
+  }, [selectedCardCompanies]);
 
   const totalInactiveWorkers = useMemo(() => {
-    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
-      return scopedCustomers.filter((c) => c.status === 'inactive').length;
-    }
     return selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
-  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
+  }, [selectedCardCompanies]);
   const totalWorkerWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
   const totalIncomeWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
   const totalCostWallet = selectedCardCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
@@ -383,12 +445,16 @@ export default function SuperAdminCompaniesPage() {
     return statCards && statCards.length > 0 ? statCards : DEFAULT_COMPANY_STAT_CARDS;
   }, [statCards]);
 
-  // Additional wallet and profit cards metrics
+  // Additional wallet, profit and donation cards metrics
   const othersCostCard = activeStatCards.find((c) => c.card_key === 'others_cost');
   const othersExpenseCard = activeStatCards.find((c) => c.card_key === 'others_expense');
   const othersProfitCard = activeStatCards.find((c) => c.card_key === 'others_profit');
   const othersPendingCard = activeStatCards.find((c) => c.card_key === 'others_pending');
-  const totalProfitCard = activeStatCards.find((c) => c.card_key === 'total_profit');
+  const totalProfitCard = activeStatCards.find((c) => c.card_key === 'total_profit' || c.card_key === 'total_profit_amount');
+
+  const incomingDonateCard = activeStatCards.find((c) => c.card_key === 'incoming_donate');
+  const donationCard = activeStatCards.find((c) => c.card_key === 'donation');
+  const balancedDonationCard = activeStatCards.find((c) => c.card_key === 'balanced_donation');
 
   const totalOthersCost = othersCostCard?.custom_value !== undefined && othersCostCard.custom_value !== null ? Number(othersCostCard.custom_value) : 45000;
   const totalOthersExpense = othersExpenseCard?.custom_value !== undefined && othersExpenseCard.custom_value !== null ? Number(othersExpenseCard.custom_value) : 0;
@@ -401,15 +467,51 @@ export default function SuperAdminCompaniesPage() {
     ? totalProfitCard.custom_value
     : computedGrandTotalProfit;
 
+  // Company count metrics
+  const totalRegisteredCompanies = selectedSingleCompany ? 1 : companies.length;
+  const totalActiveCompanies = selectedSingleCompany
+    ? (selectedSingleCompany.status === 'inactive' ? 0 : 1)
+    : companies.filter((c) => !c.status || c.status === 'active').length;
+  const totalInactiveCompanies = selectedSingleCompany
+    ? (selectedSingleCompany.status === 'inactive' ? 1 : 0)
+    : companies.filter((c) => c.status === 'inactive' || c.status === 'suspended').length;
+  const totalPendingCompanies = selectedSingleCompany
+    ? (selectedSingleCompany.status === 'pending' ? 1 : 0)
+    : companies.filter((c) => c.status === 'pending').length + (pendingTrialCount || 0);
+  const totalRejectCompanies = selectedSingleCompany
+    ? (selectedSingleCompany.status === 'rejected' ? 1 : 0)
+    : companies.filter((c) => c.status === 'rejected' || c.status === 'reject').length;
+
+  // Financial metrics
+  const totalIncomeVal = totalIncomeWallet;
+  const totalCostVal = totalCostWallet;
+  const totalPendingPaymentVal = totalPendingWallet;
+  const totalProfitVal = totalProfitWallet;
+
+  // Donation metrics (5% of Income, Donation disbursed, Balanced Donation)
+  const computedIncomingDonate = Math.round(totalIncomeVal * 0.05);
+  const totalIncomingDonate = (incomingDonateCard?.custom_value !== undefined && incomingDonateCard.custom_value !== null && Number(incomingDonateCard.custom_value) > 0)
+    ? Number(incomingDonateCard.custom_value)
+    : computedIncomingDonate;
+
+  const totalDonation = (donationCard?.custom_value !== undefined && donationCard.custom_value !== null && Number(donationCard.custom_value) > 0)
+    ? Number(donationCard.custom_value)
+    : (donationCard?.custom_value === 0 ? 0 : Math.round(totalIncomingDonate * 0.6));
+
+  const totalBalancedDonation = (balancedDonationCard?.custom_value !== undefined && balancedDonationCard.custom_value !== null && Number(balancedDonationCard.custom_value) > 0)
+    ? Number(balancedDonationCard.custom_value)
+    : Math.max(0, totalIncomingDonate - totalDonation);
+
   // Compute card metrics
   const getCardMetrics = (card: CompanyStatCard) => {
     switch (card.card_key) {
       case 'registered_companies':
+      case 'total_registered_company':
         if (selectedSingleCompany) {
           return {
             value: selectedSingleCompany.name,
             sub: `${selectedSingleCompany.roc || 'Verified Entity'} • View Profile →`,
-            link: `/companies/${encodeURIComponent(selectedSingleCompany.id)}`,
+            link: `${baseRoute}/${encodeURIComponent(selectedSingleCompany.id)}`,
             isLink: true,
             isCompanyEntity: true,
             theme: {
@@ -421,9 +523,9 @@ export default function SuperAdminCompaniesPage() {
           };
         }
         return {
-          value: `${companies.length}`,
-          sub: card.subtitle || 'View Company List →',
-          link: '/companies/registered',
+          value: `${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalRegisteredCompanies).toLocaleString()}`,
+          sub: card.subtitle || 'View Registered Companies →',
+          link: `${baseRoute}/registered`,
           isLink: true,
           isCompanyEntity: false,
           theme: {
@@ -433,11 +535,13 @@ export default function SuperAdminCompaniesPage() {
             valColor: 'text-slate-900',
           },
         };
-      case 'active_workers':
+
+      case 'total_active_company':
         return {
-          value: totalActiveWorkers.toLocaleString(),
-          sub: selectedSingleCompany ? 'Active for this Company' : (card.subtitle || 'Approved & Active Permits'),
-          isLink: false,
+          value: (card.custom_value && card.custom_value > 0 ? card.custom_value : totalActiveCompanies).toLocaleString(),
+          sub: card.subtitle || 'View Active Companies →',
+          link: `${baseRoute}/active`,
+          isLink: true,
           theme: {
             bg: 'bg-emerald-50',
             text: 'text-emerald-600',
@@ -445,107 +549,27 @@ export default function SuperAdminCompaniesPage() {
             valColor: 'text-emerald-600',
           },
         };
-      case 'inactive_workers':
+
+      case 'total_inactive_company':
         return {
-          value: totalInactiveWorkers.toLocaleString(),
-          sub: selectedSingleCompany ? 'Inactive for this Company' : (card.subtitle || 'Expired / Renewal Pending'),
-          isLink: false,
+          value: (card.custom_value && card.custom_value > 0 ? card.custom_value : totalInactiveCompanies).toLocaleString(),
+          sub: card.subtitle || 'View Inactive Companies →',
+          link: `${baseRoute}/inactive`,
+          isLink: true,
           theme: {
-            bg: 'bg-amber-50',
-            text: 'text-amber-600',
-            border: 'border-amber-100',
+            bg: 'bg-slate-100',
+            text: 'text-slate-600',
+            border: 'border-slate-200',
             valColor: 'text-slate-700',
           },
         };
-      case 'target_wallet':
+
+      case 'total_pending_company':
         return {
-          value: `RM ${totalWorkerWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Worker Target for this Company' : (card.subtitle || 'Total Worker Target Pool'),
-          isLink: false,
-          theme: {
-            bg: 'bg-purple-50',
-            text: 'text-purple-700',
-            border: 'border-purple-100',
-            valColor: 'text-purple-700',
-          },
-        };
-      case 'deposit_wallet':
-        return {
-          value: `RM ${totalIncomeWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Deposit Inflow for this Company' : (card.subtitle || 'Total Received Inflow'),
-          isLink: false,
-          theme: {
-            bg: 'bg-blue-50',
-            text: 'text-blue-700',
-            border: 'border-blue-100',
-            valColor: 'text-blue-700',
-          },
-        };
-      case 'cost_wallet':
-        return {
-          value: `RM ${totalCostWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Cost & Levy for this Company' : (card.subtitle || 'Operational & Levy Outflow'),
-          isLink: false,
-          theme: {
-            bg: 'bg-rose-50',
-            text: 'text-rose-600',
-            border: 'border-rose-100',
-            valColor: 'text-rose-700',
-          },
-        };
-      case 'others_cost':
-        return {
-          value: `RM ${(card.custom_value ?? totalOthersCost).toLocaleString()}`,
-          sub: card.subtitle || 'Miscellaneous / Other Expenses',
-          isLink: false,
-          theme: {
-            bg: 'bg-rose-50',
-            text: 'text-rose-600',
-            border: 'border-rose-100',
-            valColor: 'text-rose-700',
-          },
-        };
-      case 'others_expense':
-        return {
-          value: `RM ${(card.custom_value ?? totalOthersExpense).toLocaleString()}`,
-          sub: card.subtitle || 'Miscellaneous / Other Expenses',
-          isLink: false,
-          theme: {
-            bg: 'bg-rose-50',
-            text: 'text-rose-600',
-            border: 'border-rose-100',
-            valColor: 'text-rose-700',
-          },
-        };
-      case 'profit_wallet':
-        return {
-          value: `RM ${totalProfitWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Retained Margin for this Company' : (card.subtitle || 'Net Retained Margin'),
-          isLink: false,
-          theme: {
-            bg: 'bg-emerald-50',
-            text: 'text-emerald-600',
-            border: 'border-emerald-100',
-            valColor: 'text-emerald-700',
-          },
-        };
-      case 'others_profit':
-        return {
-          value: `RM ${(card.custom_value ?? totalOthersProfit).toLocaleString()}`,
-          sub: card.subtitle || 'Auxiliary & Service Profits',
-          isLink: false,
-          theme: {
-            bg: 'bg-teal-50',
-            text: 'text-teal-700',
-            border: 'border-teal-100',
-            valColor: 'text-teal-700',
-          },
-        };
-      case 'pending_wallet':
-        return {
-          value: `RM ${totalPendingWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Pending Amount for this Company' : (card.subtitle || 'Pending Approvals & Dues'),
-          isLink: false,
+          value: (card.custom_value && card.custom_value > 0 ? card.custom_value : totalPendingCompanies).toLocaleString(),
+          sub: card.subtitle || 'View Pending Companies →',
+          link: `${baseRoute}/pending`,
+          isLink: true,
           theme: {
             bg: 'bg-amber-50',
             text: 'text-amber-600',
@@ -553,11 +577,55 @@ export default function SuperAdminCompaniesPage() {
             valColor: 'text-amber-700',
           },
         };
-      case 'others_pending':
+
+      case 'total_reject_company':
         return {
-          value: `RM ${(card.custom_value ?? totalOthersPending).toLocaleString()}`,
-          sub: card.subtitle || 'Other Pending Invoices & Dues',
-          isLink: false,
+          value: (card.custom_value && card.custom_value > 0 ? card.custom_value : totalRejectCompanies).toLocaleString(),
+          sub: card.subtitle || 'View Rejected Companies →',
+          link: `${baseRoute}/reject`,
+          isLink: true,
+          theme: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-100',
+            valColor: 'text-rose-600',
+          },
+        };
+
+      case 'total_income_amount':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalIncomeVal).toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Deposit Inflow for this Company →' : (card.subtitle || 'View Income Breakdown →'),
+          link: `${baseRoute}/income`,
+          isLink: true,
+          theme: {
+            bg: 'bg-blue-50',
+            text: 'text-blue-700',
+            border: 'border-blue-100',
+            valColor: 'text-blue-700',
+          },
+        };
+
+      case 'total_cost_amount':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalCostVal).toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Cost & Levy for this Company →' : (card.subtitle || 'View Cost Breakdown →'),
+          link: `${baseRoute}/cost`,
+          isLink: true,
+          theme: {
+            bg: 'bg-rose-50',
+            text: 'text-rose-600',
+            border: 'border-rose-100',
+            valColor: 'text-rose-700',
+          },
+        };
+
+      case 'total_pending_payment_amount':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalPendingPaymentVal).toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Pending Amount for this Company →' : (card.subtitle || 'View Outstanding Dues →'),
+          link: `${baseRoute}/pending-payment`,
+          isLink: true,
           theme: {
             bg: 'bg-orange-50',
             text: 'text-orange-600',
@@ -565,17 +633,117 @@ export default function SuperAdminCompaniesPage() {
             valColor: 'text-orange-700',
           },
         };
-      case 'total_profit':
+
+      case 'total_profit_amount':
         return {
-          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : grandTotalProfit).toLocaleString()}`,
-          sub: card.subtitle || 'Foreigner Profit + Others Profit',
-          isLink: false,
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalProfitVal).toLocaleString()}`,
+          sub: selectedSingleCompany ? 'Retained Margin for this Company →' : (card.subtitle || 'View Profit Breakdown →'),
+          link: `${baseRoute}/profit`,
+          isLink: true,
           theme: {
             bg: 'bg-emerald-100/80',
             text: 'text-emerald-800',
             border: 'border-emerald-300',
             valColor: 'text-emerald-800',
           },
+        };
+
+      case 'incoming_donate':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalIncomingDonate).toLocaleString()}`,
+          sub: card.subtitle || 'View 5% Donation Allocation →',
+          link: `${baseRoute}/incoming-donate`,
+          isLink: true,
+          theme: {
+            bg: 'bg-purple-50',
+            text: 'text-purple-700',
+            border: 'border-purple-100',
+            valColor: 'text-purple-700',
+          },
+        };
+
+      case 'donation':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalDonation).toLocaleString()}`,
+          sub: card.subtitle || 'View Disbursed Donations →',
+          link: `${baseRoute}/donation`,
+          isLink: true,
+          theme: {
+            bg: 'bg-teal-50',
+            text: 'text-teal-700',
+            border: 'border-teal-100',
+            valColor: 'text-teal-700',
+          },
+        };
+
+      case 'balanced_donation':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalBalancedDonation).toLocaleString()}`,
+          sub: card.subtitle || 'View Balanced Donations →',
+          link: `${baseRoute}/balanced-donation`,
+          isLink: true,
+          theme: {
+            bg: 'bg-amber-50',
+            text: 'text-amber-700',
+            border: 'border-amber-200',
+            valColor: 'text-amber-800',
+          },
+        };
+
+      // Backward compatible fallbacks
+      case 'active_workers':
+        return {
+          value: totalActiveWorkers.toLocaleString(),
+          sub: card.subtitle || 'Approved & Active Permits',
+          isLink: false,
+          theme: { bg: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-100', valColor: 'text-emerald-600' },
+        };
+      case 'inactive_workers':
+        return {
+          value: totalInactiveWorkers.toLocaleString(),
+          sub: card.subtitle || 'Expired / Renewal Pending',
+          isLink: false,
+          theme: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-100', valColor: 'text-slate-700' },
+        };
+      case 'target_wallet':
+        return {
+          value: `RM ${totalWorkerWallet.toLocaleString()}`,
+          sub: card.subtitle || 'Total Worker Target Pool',
+          isLink: false,
+          theme: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-100', valColor: 'text-purple-700' },
+        };
+      case 'deposit_wallet':
+        return {
+          value: `RM ${totalIncomeWallet.toLocaleString()}`,
+          sub: card.subtitle || 'Total Received Inflow',
+          isLink: false,
+          theme: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-100', valColor: 'text-blue-700' },
+        };
+      case 'cost_wallet':
+      case 'others_cost':
+      case 'others_expense':
+        return {
+          value: `RM ${(card.custom_value ?? totalCostWallet).toLocaleString()}`,
+          sub: card.subtitle || 'Operational & Expense Outflow',
+          isLink: false,
+          theme: { bg: 'bg-rose-50', text: 'text-rose-600', border: 'border-rose-100', valColor: 'text-rose-700' },
+        };
+      case 'profit_wallet':
+      case 'others_profit':
+      case 'total_profit':
+        return {
+          value: `RM ${(card.custom_value && card.custom_value > 0 ? card.custom_value : totalProfitWallet).toLocaleString()}`,
+          sub: card.subtitle || 'Net Retained Margin',
+          isLink: false,
+          theme: { bg: 'bg-emerald-100/80', text: 'text-emerald-800', border: 'border-emerald-300', valColor: 'text-emerald-800' },
+        };
+      case 'pending_wallet':
+      case 'others_pending':
+        return {
+          value: `RM ${(card.custom_value ?? totalPendingWallet).toLocaleString()}`,
+          sub: card.subtitle || 'Pending Approvals & Dues',
+          isLink: false,
+          theme: { bg: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-100', valColor: 'text-amber-700' },
         };
       default:
         return {
@@ -626,6 +794,13 @@ export default function SuperAdminCompaniesPage() {
       case 'Sparkles': return <Sparkles {...iconProps} />;
       case 'Crown': return <Crown {...iconProps} />;
       case 'PieChart': return <PieChart {...iconProps} />;
+      case 'CheckCircle2': return <CheckCircle2 {...iconProps} />;
+      case 'PowerOff': return <PowerOff {...iconProps} />;
+      case 'XCircle': return <XCircle {...iconProps} />;
+      case 'Gift': return <Gift {...iconProps} />;
+      case 'Scale': return <Scale {...iconProps} />;
+      case 'Heart': return <Heart {...iconProps} />;
+      case 'HeartHandshake': return <HeartHandshake {...iconProps} />;
       default: return <Coins {...iconProps} />;
     }
   };
@@ -1030,33 +1205,13 @@ export default function SuperAdminCompaniesPage() {
     const matchesSector = selectedSector === 'ALL' || c.sector === selectedSector;
     const matchesCardCompany = !syncTableWithCardFilter || selectedCompanyCardId === 'ALL' || c.id === selectedCompanyCardId;
 
-    const matchesProgram =
-      !syncTableWithCardFilter ||
-      selectedProgramCardId === 'ALL' ||
-      scopedCustomers.some(
-        (cust) =>
-          cust.company_id &&
-          (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
-           cust.company_id.toLowerCase() === c.name.toLowerCase())
-      );
-
-    const matchesYear =
-      !syncTableWithCardFilter ||
-      selectedYearCardId === 'ALL' ||
-      scopedCustomers.some(
-        (cust) =>
-          cust.company_id &&
-          (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
-           cust.company_id.toLowerCase() === c.name.toLowerCase())
-      );
-
     const matchesStatus =
       statusFilter === 'all' ||
       (statusFilter === 'active' && isCompanyActive(c)) ||
       (statusFilter === 'inactive' && isCompanyInactive(c)) ||
       (statusFilter === 'rejected' && isCompanyRejected(c));
 
-    return matchesSearch && matchesSector && matchesCardCompany && matchesProgram && matchesYear && matchesStatus;
+    return matchesSearch && matchesSector && matchesCardCompany && matchesStatus;
   });
 
   const getCompanyExportRow = (company: Company, idx: number) => {
@@ -1108,7 +1263,7 @@ export default function SuperAdminCompaniesPage() {
     const data = filteredCompanies.map((c, idx) => {
       const row = getCompanyExportRow(c, idx);
       return {
-        '#': row.sl,
+        SL: row.sl,
         'Company Name': row.name,
         'ROC': row.roc,
         'Sector': row.sector,
@@ -1128,8 +1283,79 @@ export default function SuperAdminCompaniesPage() {
     });
 
     const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // Apply Premium Corporate Header Styling (Row 1)
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+    const headerStyle = {
+      fill: {
+        fgColor: { rgb: '0B4DA2' }, // Corporate Royal Blue
+      },
+      font: {
+        name: 'Calibri',
+        sz: 11,
+        bold: true,
+        color: { rgb: 'FFFFFF' }, // White
+      },
+      alignment: {
+        vertical: 'center',
+        horizontal: 'center',
+        wrapText: true,
+      },
+      border: {
+        top: { style: 'thin', color: { rgb: '083877' } },
+        bottom: { style: 'medium', color: { rgb: '083877' } },
+        left: { style: 'thin', color: { rgb: '083877' } },
+        right: { style: 'thin', color: { rgb: '083877' } },
+      },
+    };
+
+    // Apply header style to all cells in Row 0
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!worksheet[cellRef]) continue;
+      worksheet[cellRef].s = headerStyle;
+    }
+
+    // Apply data rows styling (clean borders, zebra striping, aligned numbers)
+    for (let row = range.s.r + 1; row <= range.e.r; row++) {
+      const isEven = row % 2 === 0;
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!worksheet[cellRef]) continue;
+
+        const isSL = col === 0;
+        const isNumeric = col >= 5 && col <= 9;
+
+        worksheet[cellRef].s = {
+          fill: isEven ? { fgColor: { rgb: 'F8FAFC' } } : undefined,
+          font: {
+            name: 'Calibri',
+            sz: 10,
+            bold: isNumeric && (col === 7 || col === 9), // Bold for Income & Profit
+          },
+          alignment: {
+            vertical: 'center',
+            horizontal: isSL ? 'center' : isNumeric ? 'right' : 'left',
+          },
+          border: {
+            top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+            right: { style: 'thin', color: { rgb: 'E2E8F0' } },
+          },
+        };
+      }
+    }
+
+    // Set row heights: Row 0 (Header) = 28pt, data rows = 20pt
+    const rowHeights: { hpt: number }[] = [{ hpt: 28 }];
+    for (let r = 1; r <= range.e.r; r++) {
+      rowHeights.push({ hpt: 20 });
+    }
+    worksheet['!rows'] = rowHeights;
+
     worksheet['!cols'] = [
-      { wch: 5 },  // #
+      { wch: 6 },  // SL
       { wch: 30 }, // Company Name
       { wch: 18 }, // ROC
       { wch: 18 }, // Sector
@@ -1161,7 +1387,7 @@ export default function SuperAdminCompaniesPage() {
     }
 
     const headers = [
-      '#',
+      'SL',
       'Company Name',
       'ROC',
       'Sector',
@@ -1426,7 +1652,7 @@ export default function SuperAdminCompaniesPage() {
         <table>
           <thead>
             <tr>
-              <th style="width: 25px; text-align: center;">#</th>
+              <th style="width: 28px; text-align: center;">SL</th>
               <th>Company Name</th>
               <th>ROC</th>
               <th>Sector</th>
@@ -1486,35 +1712,6 @@ export default function SuperAdminCompaniesPage() {
     })),
   ], [companies]);
 
-  const programCardFilterOptions: Select2Option[] = useMemo(() => [
-    {
-      value: 'ALL',
-      label: `All Programs (${programs.length})`,
-      subLabel: 'All government employment clearance schemes',
-      badge: `${programs.length} Progs`,
-    },
-    ...programs.map((p) => ({
-      value: String(p.id),
-      label: p.name,
-      subLabel: p.description || p.code,
-      badge: p.code || undefined,
-    })),
-  ], [programs]);
-
-  const yearCardFilterOptions: Select2Option[] = useMemo(() => [
-    {
-      value: 'ALL',
-      label: `All Years (${availableYears.length})`,
-      subLabel: 'All historical & current clearance years',
-      badge: `${availableYears.length} Yrs`,
-    },
-    ...availableYears.map((yr) => ({
-      value: yr,
-      label: `Year ${yr}`,
-      subLabel: `Clearances & quotas for ${yr}`,
-    })),
-  ], [availableYears]);
-
   const sectorFilterOptions: Select2Option[] = useMemo(() => [
     { value: 'ALL', label: `All Sectors (${companies.length})`, badge: 'ALL' },
     ...allSectorList.map((sec) => ({
@@ -1555,22 +1752,28 @@ export default function SuperAdminCompaniesPage() {
       )}
 
       {/* Header with Title and Underline */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight m-0">
-                Super Admin — Employer Companies Registry
-              </h1>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full transition-colors ${
-                selectedSingleCompany ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-[#0b4da2]'
-              }`}>
-                {selectedSingleCompany ? '1 Company Selected' : `${companies.length} Active`}
+          <div className="flex items-center gap-3.5 flex-wrap">
+            {siteSettings?.site_logo ? (
+              <img
+                src={resolveFileUrl(siteSettings.site_logo)}
+                alt={siteSettings?.site_name || 'Logo'}
+                className="h-16 sm:h-20 md:h-24 w-auto max-w-[280px] sm:max-w-[380px] md:max-w-[440px] object-contain drop-shadow-xs"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <span className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                {siteSettings?.site_name || 'Employer Companies Registry'}
               </span>
-            </div>
-            <p className="text-xs text-slate-500 m-0">
-              Create, edit, and manage registered employer organizations. Stored in Laravel MySQL database.
-            </p>
+            )}
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition-colors ${
+              selectedSingleCompany ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-[#0b4da2]'
+            }`}>
+              {selectedSingleCompany ? '1 Company Selected' : `${companies.length} Active`}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1593,7 +1796,7 @@ export default function SuperAdminCompaniesPage() {
           </div>
         </div>
 
-        {/* Company, Program & Year Select2 Filter for Cards Information */}
+        {/* Company Select2 Filter for Cards Information */}
         <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
@@ -1601,7 +1804,7 @@ export default function SuperAdminCompaniesPage() {
               <span>Filter Cards by Company:</span>
             </div>
 
-            {/* 1. Company Filter */}
+            {/* Company Filter */}
             <div className="w-52 sm:w-60 md:w-64 shrink-0">
               <Select2Search
                 options={companyCardFilterOptions}
@@ -1614,44 +1817,15 @@ export default function SuperAdminCompaniesPage() {
               />
             </div>
 
-            {/* 2. Program Filter */}
-            <div className="w-44 sm:w-48 md:w-52 shrink-0">
-              <Select2Search
-                options={programCardFilterOptions}
-                value={selectedProgramCardId}
-                onChange={(val) => setSelectedProgramCardId(val)}
-                placeholder="All Programs"
-                searchPlaceholder="Search program name or code..."
-                icon={<Layers size={14} className="text-indigo-600" />}
-                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[300px] max-w-[320px]"
-              />
-            </div>
-
-            {/* 3. Year Filter */}
-            <div className="w-32 sm:w-36 md:w-40 shrink-0">
-              <Select2Search
-                options={yearCardFilterOptions}
-                value={selectedYearCardId}
-                onChange={(val) => setSelectedYearCardId(val)}
-                placeholder="All Years"
-                searchPlaceholder="Search year (e.g. 2026)..."
-                icon={<Calendar size={14} className="text-amber-600" />}
-                dropdownAlign="right"
-                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[220px] max-w-[240px]"
-              />
-            </div>
-
-            {/* Reset All Filters button */}
-            {(selectedCompanyCardId !== 'ALL' || selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') && (
+            {/* Reset Filter button */}
+            {selectedCompanyCardId !== 'ALL' && (
               <button
                 type="button"
                 onClick={() => {
                   setSelectedCompanyCardId('ALL');
-                  setSelectedProgramCardId('ALL');
-                  setSelectedYearCardId('ALL');
                 }}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-                title="Reset all card metrics to defaults"
+                title="Reset card metrics to all companies"
               >
                 <X size={13} />
                 <span>Reset to All</span>
@@ -2197,6 +2371,17 @@ export default function SuperAdminCompaniesPage() {
                   {/* 11. Action Buttons */}
                   <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
                     <div className="flex items-center justify-end gap-1.5">
+                      {/* Record Payment Button */}
+                      <button
+                        type="button"
+                        onClick={() => setPayingCompany(company)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-2xs hover:shadow transition-all inline-flex items-center gap-1 cursor-pointer border-0"
+                        title={`Record Payment for ${company.name}`}
+                      >
+                        <DollarSign size={12} />
+                        <span>Payment</span>
+                      </button>
+
                       {/* Manage Status & Auto-Deactivation Timer */}
                       <button
                         type="button"
@@ -2475,12 +2660,18 @@ export default function SuperAdminCompaniesPage() {
                         {/* Custom amount field for financial/custom cards */}
                         <div>
                           <label className="text-xs font-bold text-slate-700 block mb-1">
-                            {['others_cost', 'others_expense'].includes(card.card_key)
+                            {['others_cost', 'others_expense', 'total_cost_amount'].includes(card.card_key)
                               ? 'Expense / Cost Amount (RM)'
-                              : ['others_profit', 'total_profit'].includes(card.card_key)
+                              : ['others_profit', 'total_profit', 'total_profit_amount'].includes(card.card_key)
                               ? 'Profit Amount / Override (RM)'
+                              : card.card_key.includes('income')
+                              ? 'Income Amount / Override (RM)'
                               : card.card_key.includes('pending')
                               ? 'Pending Amount / Override (RM)'
+                              : card.card_key.includes('donate') || card.card_key === 'donation'
+                              ? 'Donation Amount / Override (RM)'
+                              : card.card_key.includes('company')
+                              ? 'Company Count / Override'
                               : 'Card Amount / Value (RM)'}
                           </label>
                           <input
@@ -3009,6 +3200,34 @@ export default function SuperAdminCompaniesPage() {
           onUpdated={handleCompanyStatusUpdated}
         />
       )}
+
+      {/* Payment & Subscription Settlement Modal */}
+      <CompanyPaymentModal
+        isOpen={!!payingCompany}
+        onClose={() => setPayingCompany(null)}
+        data={
+          payingCompany
+            ? {
+                id: payingCompany.id,
+                companyName: payingCompany.name,
+                roc: payingCompany.roc,
+                email: payingCompany.email,
+                phone: payingCompany.phone,
+                address: payingCompany.address,
+                planPackage: payingCompany.subscription_plan_key || 'Standard Subscription',
+                amount: Number(
+                  subscriptionPlans.find(
+                    (p) =>
+                      p.plan_key === payingCompany.subscription_plan_key ||
+                      p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
+                  )?.price || 199
+                ),
+              }
+            : null
+        }
+        isSubmitting={isSubmittingPayment}
+        onSubmit={handlePaymentSubmit}
+      />
     </div>
   );
 }

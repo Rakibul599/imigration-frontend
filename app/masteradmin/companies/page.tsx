@@ -17,6 +17,7 @@ import {
   Clock,
   Coins,
   CreditCard,
+  DollarSign,
   Download,
   Edit2,
   ExternalLink,
@@ -74,6 +75,13 @@ import {
   getServiceCardAnimationClass,
   getServiceCardAnimationStyle,
 } from '@/lib/themeSettings';
+import CompanyPaymentModal from '@/components/CompanyPaymentModal';
+import {
+  createInvoice,
+  updateCompanySubscription,
+  fetchSubscriptionPlans,
+  SubscriptionPlan,
+} from '@/lib/companyTrialAndFinanceStorage';
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -110,6 +118,9 @@ export default function MasterAdminCompaniesPage() {
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
+  const [payingCompany, setPayingCompany] = useState<Company | null>(null);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
 
   // Edit form states
   const [formName, setFormName] = useState('');
@@ -182,6 +193,10 @@ export default function MasterAdminCompaniesPage() {
       if (Array.isArray(custs) && custs.length > 0) {
         setAllCustomers(custs);
       }
+    }).catch(() => {});
+
+    fetchSubscriptionPlans(true).then((plans) => {
+      if (Array.isArray(plans)) setSubscriptionPlans(plans);
     }).catch(() => {});
 
     const unsubCompanies = subscribeToCompanyChanges(() => {
@@ -1051,6 +1066,89 @@ export default function MasterAdminCompaniesPage() {
     }
   };
 
+  const handleOpenPaymentModal = (comp: Company) => {
+    setPayingCompany(comp);
+  };
+
+  const handlePaymentSubmit = async (paymentInfo: {
+    amount: number;
+    method: string;
+    reference: string;
+    bankName: string;
+    notes: string;
+  }) => {
+    if (!payingCompany) return;
+
+    setIsSubmittingPayment(true);
+    try {
+      const assignedPlan = subscriptionPlans.find(
+        (p) =>
+          p.plan_key === payingCompany.subscription_plan_key ||
+          p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
+      );
+
+      const total = paymentInfo.amount;
+
+      // 1. Create official Paid Invoice
+      await createInvoice({
+        company_id: payingCompany.id,
+        company_name: payingCompany.name,
+        customer_name: payingCompany.name,
+        customer_email: payingCompany.email,
+        customer_phone: payingCompany.phone,
+        customer_address: payingCompany.address,
+        package_name: assignedPlan?.name || payingCompany.subscription_plan_key || 'Subscription Package',
+        invoice_date: new Date().toISOString().slice(0, 10),
+        items: [
+          {
+            description: `Subscription Access: ${assignedPlan?.name || 'Company Portal Access'}`,
+            qty: 1,
+            unit_price: total,
+            total: total,
+          },
+        ],
+        total_amount: total,
+        amount_paid: total,
+        balance_due: 0,
+        currency: 'MYR',
+        payment_status: 'Paid',
+        payment_method: paymentInfo.method,
+        payment_reference: paymentInfo.reference,
+        bank_name: paymentInfo.bankName,
+        notes: paymentInfo.notes || `Payment recorded directly by Master Admin for ${payingCompany.name}`,
+      });
+
+      // 2. Activate / Extend company subscription
+      await updateCompanySubscription(payingCompany.id, {
+        subscription_status: 'active',
+        subscription_notes: `Subscription payment of RM ${total.toFixed(2)} recorded via ${paymentInfo.method}.`,
+      });
+
+      // 3. Update local state
+      setAllCompanies((prev) =>
+        prev.map((c) =>
+          c.id === payingCompany.id
+            ? {
+                ...c,
+                subscription_status: 'active',
+                status: 'active',
+              }
+            : c
+        )
+      );
+
+      showToast('success', `Payment of RM ${total.toFixed(2)} recorded via ${paymentInfo.method} for ${payingCompany.name}! Subscription activated.`);
+
+      window.dispatchEvent(new Event('portal-companies-updated'));
+      window.dispatchEvent(new Event('company_trials_updated'));
+      setPayingCompany(null);
+    } catch (err: any) {
+      alert(err.message || 'Failed to record payment');
+    } finally {
+      setIsSubmittingPayment(false);
+    }
+  };
+
   // Safe SSR Skeleton to prevent Next.js React hydration mismatch
   if (!mounted) {
     return (
@@ -1560,6 +1658,17 @@ export default function MasterAdminCompaniesPage() {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
+                          {/* Payment Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPaymentModal(comp)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-2xs hover:shadow transition-all inline-flex items-center gap-1 cursor-pointer border-0"
+                            title="Receive payment & activate subscription"
+                          >
+                            <DollarSign size={12} />
+                            <span>Payment</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => setSelectedCompanyCardId(selectedCompanyCardId === String(comp.id) ? 'ALL' : String(comp.id))}
@@ -1798,6 +1907,33 @@ export default function MasterAdminCompaniesPage() {
           </div>
         </div>
       )}
+      {/* Payment & Subscription Activation Modal */}
+      <CompanyPaymentModal
+        isOpen={!!payingCompany}
+        onClose={() => setPayingCompany(null)}
+        data={
+          payingCompany
+            ? {
+                id: payingCompany.id,
+                companyName: payingCompany.name,
+                roc: payingCompany.roc,
+                email: payingCompany.email,
+                phone: payingCompany.phone,
+                address: payingCompany.address,
+                planPackage: payingCompany.subscription_plan_key || 'Standard Subscription',
+                amount: Number(
+                  subscriptionPlans.find(
+                    (p) =>
+                      p.plan_key === payingCompany.subscription_plan_key ||
+                      p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
+                  )?.price || 199
+                ),
+              }
+            : null
+        }
+        isSubmitting={isSubmittingPayment}
+        onSubmit={handlePaymentSubmit}
+      />
     </div>
   );
 }
