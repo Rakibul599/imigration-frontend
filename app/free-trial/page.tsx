@@ -378,24 +378,9 @@ function FreeTrialForm() {
       return;
     }
 
-    if (paymentMode === 'card') {
-      if (!cardholderName.trim()) {
-        setErrorMessage('Please enter the Cardholder Full Name.');
-        return;
-      }
-      const rawCard = cardNumber.replace(/\s+/g, '');
-      if (rawCard.length < 15) {
-        setErrorMessage('Please enter a valid 16-digit card number.');
-        return;
-      }
-      if (!cardExpiry.trim() || cardExpiry.trim().length < 4) {
-        setErrorMessage('Please enter the card expiration date (MM/YY).');
-        return;
-      }
-      if (!cardCvv.trim() || cardCvv.trim().length < 3) {
-        setErrorMessage('Please enter the 3 or 4-digit CVV security code.');
-        return;
-      }
+    if (paymentMode === 'online' || paymentMode === 'card') {
+      setErrorMessage('Online Payment and Card Payment are Coming Soon. Please select Pay Later or Cash Payment to submit.');
+      return;
     }
 
     const finalApplicantName = applicantName.trim();
@@ -428,20 +413,6 @@ function FreeTrialForm() {
         bankNameResolved = 'Cash CDM Deposit';
         bankAccountNameResolved = cashDepositorName.trim() || companyName.trim();
         bankAccountNoResolved = cashReference.trim() || 'CASH-COUNTER';
-      } else if (paymentMode === 'card') {
-        const cardBrand = getCardBrand(cardNumber);
-        const maskedCardNo = cardNumber.replace(/\s+/g, '').slice(-4);
-        postTrialPaymentNote = `[Payment Option: Card Payment Authorized: ${cardBrand} ending in ${maskedCardNo}, Cardholder: ${cardholderName.trim()}, Expiry: ${cardExpiry.trim()}]`;
-        bankNameResolved = cardBrand;
-        bankAccountNameResolved = cardholderName.trim();
-        bankAccountNoResolved = `•••• •••• •••• ${maskedCardNo}`;
-      } else if (paymentMode === 'online') {
-        const refInfo = onlineReference.trim() ? `, Ref: ${onlineReference.trim()}` : '';
-        const slipInfo = onlineSlipName ? `, Slip: ${onlineSlipName}` : '';
-        postTrialPaymentNote = `[Payment Option: Online Payment via ${onlineBank}${refInfo}${slipInfo}]`;
-        bankNameResolved = onlineBank;
-        bankAccountNameResolved = onlineAccountName.trim() || companyName.trim();
-        bankAccountNoResolved = onlineReference.trim() || 'FPX-TRANSFER';
       }
 
       const combinedNotes = [notes.trim(), postTrialPaymentNote]
@@ -983,7 +954,7 @@ function FreeTrialForm() {
             <span className="text-xs font-semibold text-slate-400">Section 3 of 4</span>
           </div>
 
-          {/* Payment Method Selector: 1. Pay Later, 2. Cash Payment, 3. Card Payment, 4. Online Payment */}
+          {/* Payment Method Selector: 1. Pay Later, 2. Cash Payment, 3. Online Payment (Coming Soon), 4. Card Payment (Coming Soon) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             {/* 1. Pay Later */}
             <label
@@ -1039,39 +1010,12 @@ function FreeTrialForm() {
               </div>
             </label>
 
-            {/* 3. Card Payment */}
-            <label
-              className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
-                paymentMode === 'card'
-                  ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
-                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
-              }`}
-            >
-              <input
-                type="radio"
-                name="paymentMode"
-                value="card"
-                checked={paymentMode === 'card'}
-                onChange={() => setPaymentMode('card')}
-                className="h-4 w-4 text-[#0b4da2] focus:ring-blue-500 border-slate-300 shrink-0"
-              />
-              <CreditCard size={16} className="text-[#0b4da2] shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
-                  Card Payment
-                </span>
-                <span className="text-[11px] text-slate-500 block truncate">
-                  Visa / MasterCard
-                </span>
-              </div>
-            </label>
-
-            {/* 4. Online Payment */}
+            {/* 3. Online Payment (After Cash Payment — Coming Soon / Disabled) */}
             <label
               className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
                 paymentMode === 'online'
-                  ? 'border-[#0b4da2] bg-blue-50/70 shadow-xs'
-                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+                  ? 'border-amber-400 bg-amber-50/70 shadow-xs'
+                  : 'border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50 opacity-85'
               }`}
             >
               <input
@@ -1080,15 +1024,44 @@ function FreeTrialForm() {
                 value="online"
                 checked={paymentMode === 'online'}
                 onChange={() => setPaymentMode('online')}
-                className="h-4 w-4 text-[#0b4da2] focus:ring-blue-500 border-slate-300 shrink-0"
+                className="h-4 w-4 text-amber-500 focus:ring-amber-500 border-slate-300 shrink-0"
               />
-              <Globe size={16} className="text-indigo-600 shrink-0" />
+              <Globe size={16} className="text-slate-400 shrink-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+                <span className="text-xs sm:text-sm font-bold text-slate-700 block truncate">
                   Online Payment
                 </span>
-                <span className="text-[11px] text-slate-500 block truncate">
-                  FPX / Bank Transfer
+                <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                  <Clock size={9} />
+                  Coming Soon
+                </span>
+              </div>
+            </label>
+
+            {/* 4. Card Payment (Coming Soon / Disabled) */}
+            <label
+              className={`relative flex items-center gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                paymentMode === 'card'
+                  ? 'border-amber-400 bg-amber-50/70 shadow-xs'
+                  : 'border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50 opacity-85'
+              }`}
+            >
+              <input
+                type="radio"
+                name="paymentMode"
+                value="card"
+                checked={paymentMode === 'card'}
+                onChange={() => setPaymentMode('card')}
+                className="h-4 w-4 text-amber-500 focus:ring-amber-500 border-slate-300 shrink-0"
+              />
+              <CreditCard size={16} className="text-slate-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs sm:text-sm font-bold text-slate-700 block truncate">
+                  Debit / Credit Card
+                </span>
+                <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                  <Clock size={9} />
+                  Coming Soon
                 </span>
               </div>
             </label>
@@ -1233,289 +1206,317 @@ function FreeTrialForm() {
             </div>
           )}
 
-          {/* Online Payment Form */}
+          {/* Online Payment Form (Full Design Preserved — Disabled / Coming Soon State) */}
           {paymentMode === 'online' && (
             <div className="pt-6 border-t border-slate-200 space-y-4 animate-in fade-in duration-150">
-              <div className="bg-indigo-50/60 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
-                    <Globe size={18} />
+              {/* Coming Soon Banner */}
+              <div className="px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 text-xs text-amber-900">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                    <Clock size={16} />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-slate-900 block">Online Banking, FPX &amp; Bank Transfer</span>
-                    <span className="text-[11px] text-indigo-800">Transfer directly via online bank or DuitNow QR</span>
+                    <span className="font-extrabold block">Online Payment — Coming Soon (Currently Disabled)</span>
+                    <span className="text-[11px] text-amber-800">
+                      Preview of FPX &amp; Online Bank Transfer layout. Please select <strong>Pay Later</strong> or <strong>Cash Payment</strong> to submit.
+                    </span>
                   </div>
                 </div>
-                <div className="text-left sm:text-right shrink-0">
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase block">Package Price</span>
-                  <span className="text-sm font-extrabold font-mono text-indigo-900">{currentPlanPrice}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('pay_later')}
+                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold cursor-pointer transition-colors"
+                  >
+                    Use Pay Later
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('cash')}
+                    className="px-3 py-1.5 rounded-lg bg-[#0b4da2] hover:bg-[#083877] text-white text-[11px] font-bold cursor-pointer border-0 transition-colors"
+                  >
+                    Use Cash Payment
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Bank Selector */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Select Bank / Payment Channel <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={onlineBank}
-                    onChange={(e) => setOnlineBank(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
-                  >
-                    {MALAYSIAN_BANKS.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
+              {/* Disabled Form Design */}
+              <div className="relative space-y-4 opacity-55 pointer-events-none select-none grayscale-[20%]" aria-disabled="true">
+                <div className="bg-indigo-50/60 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                      <Globe size={18} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block">Online Banking, FPX &amp; Bank Transfer</span>
+                      <span className="text-[11px] text-indigo-800">Transfer directly via online bank or DuitNow QR</span>
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right shrink-0">
+                    <span className="text-[10px] text-slate-500 font-semibold uppercase block">Package Price</span>
+                    <span className="text-sm font-extrabold font-mono text-indigo-900">{currentPlanPrice}</span>
+                  </div>
                 </div>
 
-                {/* Online Transaction Ref */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Transaction Ref / DuitNow Reference
-                  </label>
-                  <input
-                    type="text"
-                    value={onlineReference}
-                    onChange={(e) => setOnlineReference(e.target.value)}
-                    placeholder="e.g. FPX-9823410 or DUITNOW-7261"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white font-mono"
-                  />
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Bank Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Select Bank / Payment Channel <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      disabled
+                      value={onlineBank}
+                      onChange={(e) => setOnlineBank(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 cursor-not-allowed"
+                    >
+                      {MALAYSIAN_BANKS.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Account Holder Name */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Payer Account Holder Name
-                  </label>
-                  <input
-                    type="text"
-                    value={onlineAccountName}
-                    onChange={(e) => setOnlineAccountName(e.target.value)}
-                    placeholder="e.g. Company Bank Account Name"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] bg-white"
-                  />
-                </div>
+                  {/* Online Transaction Ref */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Transaction Ref / DuitNow Reference
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={onlineReference}
+                      onChange={(e) => setOnlineReference(e.target.value)}
+                      placeholder="e.g. FPX-9823410 or DUITNOW-7261"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 font-mono cursor-not-allowed"
+                    />
+                  </div>
 
-                {/* Online Slip Upload */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Upload Online Transfer Slip / Receipt <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <div className="relative border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-4 text-center transition-all bg-slate-50/50 hover:bg-indigo-50/20">
-                    {onlineSlipPreview ? (
-                      <div className="flex flex-col items-center gap-2.5">
-                        <img
-                          src={onlineSlipPreview}
-                          alt="Online Slip Preview"
-                          className="max-h-48 rounded-xl shadow-sm border border-slate-200 object-contain"
-                        />
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-slate-800 truncate max-w-xs">{onlineSlipName}</span>
-                          <button
-                            type="button"
-                            onClick={() => { setOnlineSlipFile(null); setOnlineSlipPreview(null); setOnlineSlipName(''); }}
-                            className="text-xs text-rose-600 hover:text-rose-700 font-bold underline bg-transparent border-0 cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ) : onlineSlipName ? (
-                      <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200">
-                        <div className="flex items-center gap-2">
-                          <FileText size={20} className="text-indigo-600" />
-                          <span className="text-xs font-mono font-bold text-slate-800">{onlineSlipName}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => { setOnlineSlipFile(null); setOnlineSlipPreview(null); setOnlineSlipName(''); }}
-                          className="text-xs text-rose-600 hover:text-rose-700 font-bold bg-transparent border-0 cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-3">
+                  {/* Account Holder Name */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Payer Account Holder Name
+                    </label>
+                    <input
+                      type="text"
+                      disabled
+                      value={onlineAccountName}
+                      onChange={(e) => setOnlineAccountName(e.target.value)}
+                      placeholder="e.g. Company Bank Account Name"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* Online Slip Upload */}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Upload Online Transfer Slip / Receipt <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <div className="relative border-2 border-dashed border-slate-300 rounded-2xl p-4 text-center bg-slate-100/70">
+                      <div className="flex flex-col items-center justify-center gap-1.5 py-3">
                         <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
                           <Upload size={18} />
                         </div>
-                        <div className="text-xs font-bold text-slate-800">
+                        <div className="text-xs font-bold text-slate-700">
                           Click to upload Online Transfer Receipt
                         </div>
                         <div className="text-[11px] text-slate-400">
                           JPG, PNG, WEBP or PDF (Max 10MB)
                         </div>
-                        <input
-                          type="file"
-                          accept="image/*,application/pdf"
-                          className="hidden"
-                          onChange={handleOnlineSlipUpload}
-                        />
-                      </label>
-                    )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Card Payment Form */}
+          {/* Card Payment Form (Full Design Preserved — Disabled / Coming Soon State) */}
           {paymentMode === 'card' && (
-            <div className="pt-6 border-t border-slate-200 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                {/* Left Column: Virtual Credit Card Mockup */}
-                <div className="lg:col-span-5 flex justify-center">
-                  <div className="w-full max-w-[340px] aspect-[1.586] rounded-2xl p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white shadow-xl border border-slate-700/80 relative overflow-hidden flex flex-col justify-between">
-                    <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-blue-500/10 blur-2xl pointer-events-none" />
-                    <div className="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+            <div className="pt-6 border-t border-slate-200 space-y-5 animate-in fade-in duration-150">
+              {/* Coming Soon Banner */}
+              <div className="px-4 py-3 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 text-xs text-amber-900">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <span className="font-extrabold block">Debit / Credit Card — Coming Soon (Currently Disabled)</span>
+                    <span className="text-[11px] text-amber-800">
+                      Preview of Visa &amp; MasterCard payment terminal. Please select <strong>Pay Later</strong> or <strong>Cash Payment</strong> to submit.
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('pay_later')}
+                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold cursor-pointer transition-colors"
+                  >
+                    Use Pay Later
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('cash')}
+                    className="px-3 py-1.5 rounded-lg bg-[#0b4da2] hover:bg-[#083877] text-white text-[11px] font-bold cursor-pointer border-0 transition-colors"
+                  >
+                    Use Cash Payment
+                  </button>
+                </div>
+              </div>
 
-                    {/* Top Row: Chip & Brand */}
-                    <div className="flex items-center justify-between relative z-10">
-                      <div className="flex items-center gap-2">
-                        <div className="w-10 h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-yellow-600 p-0.5 shadow-sm border border-yellow-300/60 flex items-center justify-center">
-                          <div className="w-full h-full border border-amber-600/40 rounded-[2px] grid grid-cols-2 gap-0.5 p-0.5 opacity-80">
-                            <div className="border border-amber-700/30" />
-                            <div className="border border-amber-700/30" />
-                            <div className="border border-amber-700/30" />
-                            <div className="border border-amber-700/30" />
+              {/* Disabled Full Card Design */}
+              <div className="space-y-6 opacity-55 pointer-events-none select-none grayscale-[20%]" aria-disabled="true">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Left Column: Virtual Credit Card Mockup */}
+                  <div className="lg:col-span-5 flex justify-center">
+                    <div className="w-full max-w-[340px] aspect-[1.586] rounded-2xl p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 text-white shadow-xl border border-slate-700/80 relative overflow-hidden flex flex-col justify-between">
+                      <div className="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-blue-500/10 blur-2xl pointer-events-none" />
+                      <div className="absolute -left-10 -bottom-10 w-36 h-36 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+
+                      {/* Top Row: Chip & Brand */}
+                      <div className="flex items-center justify-between relative z-10">
+                        <div className="flex items-center gap-2">
+                          <div className="w-10 h-7 rounded bg-gradient-to-br from-amber-200 via-amber-400 to-yellow-600 p-0.5 shadow-sm border border-yellow-300/60 flex items-center justify-center">
+                            <div className="w-full h-full border border-amber-600/40 rounded-[2px] grid grid-cols-2 gap-0.5 p-0.5 opacity-80">
+                              <div className="border border-amber-700/30" />
+                              <div className="border border-amber-700/30" />
+                              <div className="border border-amber-700/30" />
+                              <div className="border border-amber-700/30" />
+                            </div>
                           </div>
+                          <svg className="w-4 h-4 text-white/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M8.5 16.5a5 5 0 0 1 0-9" />
+                            <path d="M12 19a8.5 8.5 0 0 0 0-14" />
+                          </svg>
                         </div>
-                        <svg className="w-4 h-4 text-white/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M8.5 16.5a5 5 0 0 1 0-9" />
-                          <path d="M12 19a8.5 8.5 0 0 0 0-14" />
-                        </svg>
-                      </div>
 
-                      <div className="text-right">
-                        {getCardBrand(cardNumber) === 'Visa' ? (
-                          <span className="text-xl font-black italic tracking-widest text-white drop-shadow">VISA</span>
-                        ) : getCardBrand(cardNumber) === 'Mastercard' ? (
-                          <div className="flex items-center -space-x-2">
-                            <div className="w-6 h-6 rounded-full bg-red-500 opacity-90 shadow-sm" />
-                            <div className="w-6 h-6 rounded-full bg-amber-400 opacity-90 shadow-sm" />
-                          </div>
-                        ) : getCardBrand(cardNumber) === 'American Express' ? (
-                          <span className="text-xs font-black tracking-widest text-sky-300 uppercase px-1.5 py-0.5 border border-sky-400/40 rounded">AMEX</span>
-                        ) : (
+                        <div className="text-right">
                           <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-300 font-bold bg-white/10 px-2 py-0.5 rounded">
                             <CreditCard size={12} />
                             <span>Card</span>
                           </div>
-                        )}
+                        </div>
+                      </div>
+
+                      {/* Card Number display */}
+                      <div className="relative z-10 py-1">
+                        <div className="font-mono text-base sm:text-lg tracking-[0.2em] text-white drop-shadow-sm font-semibold select-none">
+                          {formatCardDisplay(cardNumber)}
+                        </div>
+                      </div>
+
+                      {/* Bottom Row: Cardholder & Expiry */}
+                      <div className="flex items-end justify-between relative z-10 text-[10px] tracking-wider uppercase text-slate-300">
+                        <div className="max-w-[65%]">
+                          <span className="text-[8px] text-slate-400 block mb-0.5">Cardholder</span>
+                          <span className="font-bold text-white tracking-wide truncate block text-xs font-mono">
+                            {cardholderName.trim() || 'CARDHOLDER NAME'}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[8px] text-slate-400 block mb-0.5">Expires</span>
+                          <span className="font-mono font-bold text-white text-xs">
+                            {cardExpiry.trim() || 'MM/YY'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Disabled Input Fields */}
+                  <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Cardholder Full Name */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Cardholder Full Name <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <User size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          disabled
+                          value={cardholderName}
+                          onChange={(e) => setCardholderName(e.target.value)}
+                          placeholder="NAME ON CARD"
+                          className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 cursor-not-allowed"
+                        />
                       </div>
                     </div>
 
-                    {/* Card Number display */}
-                    <div className="relative z-10 py-1">
-                      <div className="font-mono text-base sm:text-lg tracking-[0.2em] text-white drop-shadow-sm font-semibold select-none">
-                        {formatCardDisplay(cardNumber)}
+                    {/* Card Number */}
+                    <div className="sm:col-span-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          Card Number (Visa / MasterCard) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-blue-700 italic">VISA</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[10px] font-bold text-amber-600">MasterCard</span>
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <CreditCard size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          disabled
+                          value={cardNumber}
+                          onChange={(e) => handleCardNumberChange(e.target.value)}
+                          placeholder="•••• •••• •••• ••••"
+                          className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 font-mono tracking-wider cursor-not-allowed"
+                        />
                       </div>
                     </div>
 
-                    {/* Bottom Row: Cardholder & Expiry */}
-                    <div className="flex items-end justify-between relative z-10 text-[10px] tracking-wider uppercase text-slate-300">
-                      <div className="max-w-[65%]">
-                        <span className="text-[8px] text-slate-400 block mb-0.5">Cardholder</span>
-                        <span className="font-bold text-white tracking-wide truncate block text-xs font-mono">
-                          {cardholderName.trim() || 'CARDHOLDER NAME'}
-                        </span>
+                    {/* Expiration Date */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Expiration Date (MM / YY) <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Calendar size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          disabled
+                          value={cardExpiry}
+                          onChange={(e) => handleExpiryChange(e.target.value)}
+                          placeholder="MM/YY"
+                          className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 font-mono cursor-not-allowed"
+                        />
                       </div>
-                      <div className="text-right">
-                        <span className="text-[8px] text-slate-400 block mb-0.5">Expires</span>
-                        <span className="font-mono font-bold text-white text-xs">
-                          {cardExpiry.trim() || 'MM/YY'}
-                        </span>
+                    </div>
+
+                    {/* Security Code / CVV */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-bold text-slate-700">
+                          CVV / CVC <span className="text-rose-500">*</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400">3 or 4 digits</span>
+                      </div>
+                      <div className="relative">
+                        <Lock size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                        <input
+                          type="password"
+                          disabled
+                          maxLength={4}
+                          value={cardCvv}
+                          onChange={(e) => handleCvvChange(e.target.value)}
+                          placeholder="•••"
+                          className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-500 bg-slate-100 font-mono cursor-not-allowed"
+                        />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Right Column: Input Fields */}
-                <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Cardholder Full Name */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Cardholder Full Name <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <User size={16} className="absolute left-3.5 top-3 text-slate-400" />
-                      <input
-                        type="text"
-                        value={cardholderName}
-                        onChange={(e) => setCardholderName(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Card Number */}
-                  <div className="sm:col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-slate-700">
-                        Card Number (Visa / MasterCard) <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-blue-700 italic">VISA</span>
-                        <span className="text-slate-300">•</span>
-                        <span className="text-[10px] font-bold text-amber-600">MasterCard</span>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <CreditCard size={16} className="absolute left-3.5 top-3 text-slate-400" />
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={(e) => handleCardNumberChange(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white font-mono tracking-wider"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Expiration Date */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Expiration Date (MM / YY) <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Calendar size={16} className="absolute left-3.5 top-3 text-slate-400" />
-                      <input
-                        type="text"
-                        value={cardExpiry}
-                        onChange={(e) => handleExpiryChange(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Security Code / CVV */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-slate-700">
-                        CVV / CVC <span className="text-rose-500">*</span>
-                      </label>
-                      <span className="text-[10px] text-slate-400">3 or 4 digits</span>
-                    </div>
-                    <div className="relative">
-                      <Lock size={16} className="absolute left-3.5 top-3 text-slate-400" />
-                      <input
-                        type="password"
-                        maxLength={4}
-                        value={cardCvv}
-                        onChange={(e) => handleCvvChange(e.target.value)}
-                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2] transition-all bg-white font-mono"
-                      />
-                    </div>
-                  </div>
+                {/* Zero-Charge Guarantee Callout */}
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 flex items-center gap-2.5 text-xs text-slate-600">
+                  <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                  <span>
+                    <strong className="text-slate-800">Zero Charge Today (RM 0.00):</strong> Billing begins automatically only after {trialDaysFormatted} trial. Cancel anytime before trial ends.
+                  </span>
                 </div>
-              </div>
-
-              {/* Zero-Charge Guarantee Callout */}
-              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100 flex items-center gap-2.5 text-xs text-slate-600">
-                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-                <span>
-                  <strong className="text-slate-800">Zero Charge Today (RM 0.00):</strong> Billing begins automatically only after {trialDaysFormatted} trial. Cancel anytime before trial ends.
-                </span>
               </div>
             </div>
           )}
@@ -1656,10 +1657,15 @@ function FreeTrialForm() {
         <div className="text-center pt-2">
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-10 py-4 rounded-2xl bg-gradient-to-r from-[#0b4da2] via-[#09428c] to-[#062d60] hover:from-[#09428c] hover:to-[#05234d] text-white font-extrabold text-sm shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed border border-blue-400/20"
+            disabled={isLoading || paymentMode === 'online' || paymentMode === 'card'}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-10 py-4 rounded-2xl bg-gradient-to-r from-[#0b4da2] via-[#09428c] to-[#062d60] hover:from-[#09428c] hover:to-[#05234d] text-white font-extrabold text-sm shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0 border border-blue-400/20"
           >
-            {isLoading ? (
+            {paymentMode === 'online' || paymentMode === 'card' ? (
+              <>
+                <Clock size={18} className="text-amber-300" />
+                <span>Coming Soon — Select Pay Later or Cash Payment</span>
+              </>
+            ) : isLoading ? (
               <>
                 <RefreshCw size={18} className="animate-spin" />
                 <span>Submitting Complete Application...</span>
