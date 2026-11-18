@@ -451,40 +451,32 @@ export type AddWalletBalancePayload = {
   payment_method?: string;
   reference?: string;
   notes?: string;
+  mode?: 'request' | 'direct';
+  requested_by?: string;
+  payment_slip?: string | null;
+  payment_slip_name?: string | null;
 };
 
 /**
- * Add / Top up wallet balance for a company.
+ * Add / Top up wallet balance (or submit top-up request for Super Admin approval).
  */
 export async function addCompanyWalletBalance(
   companyId: string,
   payload: AddWalletBalancePayload
-): Promise<{ success: boolean; wallet_balance: number; company?: Company; error?: string }> {
+): Promise<{
+  success: boolean;
+  is_pending_request?: boolean;
+  message?: string;
+  wallet_balance: number;
+  company?: Company;
+  transaction?: any;
+  error?: string;
+}> {
   const current = getStoredCompanies();
   const target = current.find((c) => c.id === companyId);
   const currentBal = Number(target?.wallet_balance) || 0;
-  const newBal = currentBal + Number(payload.amount);
-
-  // Optimistic local update
-  const updated = current.map((c) => {
-    if (c.id === companyId) {
-      return {
-        ...c,
-        wallet_balance: newBal,
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return c;
-  });
-
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      window.dispatchEvent(new Event(STORAGE_EVENT));
-    } catch (e) {
-      console.error(e);
-    }
-  }
+  const isDirect = payload.mode === 'direct';
+  const newBal = isDirect ? currentBal + Number(payload.amount) : currentBal;
 
   try {
     const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(companyId)}/wallet/add-balance`, {
@@ -493,26 +485,36 @@ export async function addCompanyWalletBalance(
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        mode: payload.mode || 'request',
+      }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json();
+    if (res.ok && data.success) {
       if (data.company) {
-        const finalUpdated = updated.map((c) => (c.id === companyId ? { ...c, ...data.company } : c));
+        const finalUpdated = current.map((c) => (c.id === companyId ? { ...c, ...data.company } : c));
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(finalUpdated));
           window.dispatchEvent(new Event(STORAGE_EVENT));
+          window.dispatchEvent(new Event('acco_wallet_updated'));
         }
-        return { success: true, wallet_balance: data.wallet_balance, company: data.company };
       }
-      return { success: true, wallet_balance: newBal };
+      return {
+        success: true,
+        is_pending_request: Boolean(data.is_pending_request),
+        message: data.message,
+        wallet_balance: data.wallet_balance ?? newBal,
+        company: data.company,
+        transaction: data.transaction,
+      };
     }
-  } catch (err) {
-    console.warn('Backend add-balance failed, cached locally:', err);
+    throw new Error(data.message || 'Failed to submit wallet top-up.');
+  } catch (err: any) {
+    console.error('Backend add-balance failed:', err);
+    throw err;
   }
-
-  return { success: true, wallet_balance: newBal };
 }
 
 /**

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
+  Banknote,
   BookOpen,
   Building2,
   CalendarClock,
@@ -28,6 +29,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
   UserCheck,
   Wallet,
   X,
@@ -35,6 +37,7 @@ import {
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CompanyPaymentModal, { PaymentTabType } from '@/components/CompanyPaymentModal';
+import AddWalletModal, { AddWalletSubmitPayload } from '@/components/AddWalletModal';
 import { Company } from '@/lib/companies';
 import {
   AuthUser,
@@ -183,10 +186,6 @@ export default function CompaniesPage() {
 
   // Wallet Balance Top-up Modal State
   const [walletTargetCompany, setWalletTargetCompany] = useState<Company | null>(null);
-  const [walletAddAmount, setWalletAddAmount] = useState<string>('');
-  const [walletPaymentMethod, setWalletPaymentMethod] = useState<string>('Bank Transfer');
-  const [walletReference, setWalletReference] = useState<string>('');
-  const [walletNotes, setWalletNotes] = useState<string>('');
   const [isSubmittingWallet, setIsSubmittingWallet] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState<Company | null>(null);
   const [showSubscriptionAlert, setShowSubscriptionAlert] = useState(false);
@@ -486,6 +485,11 @@ export default function CompaniesPage() {
     bankName: string;
     notes: string;
     tab: PaymentTabType;
+    slipData?: string | null;
+    slipName?: string;
+    planKey?: string;
+    planName?: string;
+    packageDurationDays?: number;
   }) => {
     if (!payingCompany) return;
 
@@ -497,18 +501,50 @@ export default function CompaniesPage() {
 
     setIsSubmittingPayment(true);
     try {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
       const dueInfo = getCompanyDueInfo(payingCompany);
       const payDate = new Date().toISOString().slice(0, 10);
+      const selectedPlanName = paymentInfo.planName || payingCompany.subscription_plan_key || 'Subscription Package';
+      const selectedPlanKey = paymentInfo.planKey || payingCompany.subscription_plan_key || undefined;
+      const selectedDurationDays = Number(paymentInfo.packageDurationDays) || 30;
       const payMethod =
         paymentInfo.method ||
-        (paymentInfo.tab === 'cash'
+        (paymentInfo.tab === 'wallet'
+          ? 'Wallet Payment'
+          : paymentInfo.tab === 'cash'
           ? 'Cash Payment'
           : paymentInfo.tab === 'online'
           ? 'Online FPX Transfer'
           : 'Debit/Credit Card');
       const payReference = paymentInfo.reference;
       const payBankName = paymentInfo.bankName || payingCompany.bankName || 'Maybank';
-      const payNotes = paymentInfo.notes || `Due settlement payment for ${payingCompany.name}`;
+      const payNotes = paymentInfo.notes || `Package payment (${selectedPlanName}) for ${payingCompany.name}`;
+
+      // 0. If paying via Wallet Payment tab, deduct from company's live wallet balance FIRST
+      let updatedWalletBalance = payingCompany.wallet_balance;
+      if (paymentInfo.tab === 'wallet') {
+        const deductRes = await fetch(
+          `${apiBase}/companies/${encodeURIComponent(payingCompany.id)}/wallet/deduct-balance`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({
+              amount,
+              reference: payReference,
+              notes: payNotes,
+              requested_by: currentUser?.name || currentUser?.email || 'Master Admin',
+            }),
+          }
+        );
+        const deductData = await deductRes.json();
+        if (!deductRes.ok || !deductData.success) {
+          throw new Error(deductData.message || 'Insufficient wallet balance for this payment.');
+        }
+        updatedWalletBalance = deductData.wallet_balance;
+      }
 
       // 1. If there are unpaid invoices, settle them first
       const unpaidInvoices = dueInfo.invoices.filter((i) => i.payment_status !== 'Paid');
@@ -527,12 +563,12 @@ export default function CompaniesPage() {
             payment_method: payMethod,
             payment_reference: payReference,
             bank_name: payBankName,
-            notes: payNotes || `Payment of RM ${paymentForThisInvoice.toFixed(2)} recorded on ${payDate}.`,
+            notes: payNotes || `Payment of RM ${paymentForThisInvoice.toFixed(2)} for ${selectedPlanName} recorded on ${payDate}.`,
           });
           remainingPayment -= paymentForThisInvoice;
         }
       } else {
-        // 2. If no unpaid invoices exist, create a new settlement invoice in the database
+        // 2. If no unpaid invoices exist, create a new subscription package invoice in the database
         await createInvoice({
           company_id: payingCompany.id,
           company_name: payingCompany.name,
@@ -540,11 +576,11 @@ export default function CompaniesPage() {
           customer_email: payingCompany.email || undefined,
           customer_phone: payingCompany.phone || undefined,
           customer_address: payingCompany.address || undefined,
-          package_name: 'Due Settlement & Agency Services',
+          package_name: selectedPlanName,
           invoice_date: payDate,
           items: [
             {
-              description: `Due Balance Settlement Payment for ${payingCompany.name}`,
+              description: `Subscription Package: ${selectedPlanName} (${selectedDurationDays} Days) — ${payingCompany.name}`,
               qty: 1,
               unit_price: amount,
               total: amount,
@@ -558,13 +594,36 @@ export default function CompaniesPage() {
           payment_method: payMethod,
           payment_reference: payReference,
           bank_name: payBankName,
-          notes: payNotes || `Due payment recorded directly from Companies Directory on ${payDate}.`,
+          notes: payNotes || `Package payment (${selectedPlanName}) recorded on ${payDate}.`,
         });
+      }
+
+      // 3. Activate / Update Company Subscription Package on Backend
+      if (selectedPlanKey || selectedDurationDays > 0) {
+        try {
+          await fetch(`${apiBase}/companies/${encodeURIComponent(payingCompany.id)}/subscription`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify({
+              subscription_plan_key: selectedPlanKey,
+              subscription_status: 'active',
+              extra_days: selectedDurationDays,
+              subscription_notes: `Paid RM ${amount.toFixed(2)} via ${payMethod} (${selectedPlanName}) • Ref: ${payReference}`,
+            }),
+          });
+        } catch (subErr) {
+          console.warn('Subscription update call warning:', subErr);
+        }
       }
 
       // Clear pendingWallet / dues on payingCompany in local storage as well
       const updatedCompanyData: Company = {
         ...payingCompany,
+        wallet_balance: updatedWalletBalance,
+        subscription_plan_key: selectedPlanKey || payingCompany.subscription_plan_key,
         pendingWallet: 0,
         invoice_due: 0,
         customer_due: 0,
@@ -582,9 +641,9 @@ export default function CompaniesPage() {
       setPayingCompany(null);
       setActionFeedback({
         type: 'success',
-        message: `Payment of RM ${amount.toFixed(2)} successfully recorded for ${payingCompany.name}!`,
+        message: `Payment of RM ${amount.toFixed(2)} for "${selectedPlanName}" (${selectedDurationDays} Days) successfully recorded for ${payingCompany.name}!`,
       });
-      setTimeout(() => setActionFeedback(null), 4000);
+      setTimeout(() => setActionFeedback(null), 4500);
     } catch (err: any) {
       alert(err?.message || 'Payment settlement failed. Please try again.');
     } finally {
@@ -594,45 +653,39 @@ export default function CompaniesPage() {
 
   const openWalletModal = (company: Company) => {
     setWalletTargetCompany(company);
-    setWalletAddAmount('');
-    setWalletPaymentMethod('Bank Transfer');
-    setWalletReference(`TOPUP-${Date.now().toString().slice(-6)}`);
-    setWalletNotes(`Wallet top-up for ${company.name}`);
   };
 
-  const handleConfirmAddWalletBalance = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmAddWalletBalance = async (payload: AddWalletSubmitPayload) => {
     if (!walletTargetCompany) return;
-
-    const amount = parseFloat(walletAddAmount);
-    if (isNaN(amount) || amount <= 0) {
-      alert('Please enter a valid positive top-up amount in RM.');
-      return;
-    }
 
     setIsSubmittingWallet(true);
     try {
       const result = await addCompanyWalletBalance(walletTargetCompany.id, {
-        amount,
-        payment_method: walletPaymentMethod,
-        reference: walletReference,
-        notes: walletNotes || `Balance top-up of RM ${amount.toFixed(2)} on ${new Date().toISOString().slice(0, 10)}.`,
+        amount: payload.amount,
+        payment_method: payload.payment_method,
+        reference: payload.reference,
+        notes: payload.notes,
+        mode: 'request',
+        requested_by: currentUser?.name || currentUser?.email || 'Master Admin',
+        payment_slip: payload.payment_slip,
+        payment_slip_name: payload.payment_slip_name,
       });
 
       // Refresh live companies from backend
       const updatedCompanies = await fetchCompaniesFromBackend();
       setCompanyList(updatedCompanies);
 
-      const newBalance = result.wallet_balance ?? (Number(walletTargetCompany.wallet_balance || 0) + amount);
       const companyName = walletTargetCompany.name;
       setWalletTargetCompany(null);
       setActionFeedback({
         type: 'success',
-        message: `RM ${amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} successfully added to ${companyName}'s wallet! New Balance: RM ${newBalance.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`,
+        message: result.is_pending_request
+          ? `Wallet top-up request of RM ${payload.amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} (${payload.payment_method}) submitted for ${companyName}! Waiting for Super Admin approval in Acco Wallet.`
+          : `RM ${payload.amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} successfully added to ${companyName}'s wallet!`,
       });
-      setTimeout(() => setActionFeedback(null), 4500);
+      setTimeout(() => setActionFeedback(null), 5500);
     } catch (err: any) {
-      alert(err.message || 'Failed to add wallet balance. Please try again.');
+      alert(err.message || 'Failed to submit wallet top-up request. Please try again.');
     } finally {
       setIsSubmittingWallet(false);
     }
@@ -1554,7 +1607,7 @@ export default function CompaniesPage() {
         );
       })()}
 
-      {/* Due Payment / Settlement Modal */}
+      {/* Due Payment / Subscription Package Settlement Modal */}
       <CompanyPaymentModal
         isOpen={!!payingCompany}
         onClose={() => setPayingCompany(null)}
@@ -1567,11 +1620,13 @@ export default function CompaniesPage() {
                 email: payingCompany.email,
                 phone: payingCompany.phone,
                 address: payingCompany.address,
-                planPackage: payingCompany.subscription_plan_key || 'Settlement & Agency Services',
+                planPackage: payingCompany.subscription_plan_key || '',
+                walletBalance: Number(payingCompany.wallet_balance) || 0,
+                walletAccountNo: payingCompany.wallet_account_no || payingCompany.bankAccountNo,
                 amount:
                   getCompanyDueInfo(payingCompany).totalDue > 0
                     ? getCompanyDueInfo(payingCompany).totalDue
-                    : 199,
+                    : undefined,
               }
             : null
         }
@@ -1579,203 +1634,15 @@ export default function CompaniesPage() {
         onSubmit={handlePaymentSubmit}
       />
 
-      {/* Add Company Wallet Balance Modal */}
-      {walletTargetCompany && (() => {
-        const parsedAddAmount = parseFloat(walletAddAmount) || 0;
-        const currentBalance = Number(walletTargetCompany.wallet_balance) || 0;
-        const accountDisplay = walletTargetCompany.wallet_account_no
-          || walletTargetCompany.bankAccountNo
-          || `WAL-${String(walletTargetCompany.id).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}`;
-        const accountNameDisplay = walletTargetCompany.bankAccountName || walletTargetCompany.name;
-
-        const quickPresets = [100, 500, 1000, 5000, 10000];
-
-        return (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              {/* Modal Header */}
-              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-green-700 text-white p-5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-xs shadow-inner">
-                    <Wallet size={22} className="text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold m-0 leading-tight">
-                      Add Wallet Balance / Top Up
-                    </h3>
-                    <p className="text-xs text-emerald-100/90 m-0 mt-0.5 font-medium">
-                      {walletTargetCompany.name} • {accountDisplay}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setWalletTargetCompany(null)}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 cursor-pointer bg-transparent border-0 transition-colors"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Form Content */}
-              <form onSubmit={handleConfirmAddWalletBalance} className="p-6 space-y-4">
-                {/* Account & Live Balance Overview Card */}
-                <div className="bg-gradient-to-br from-emerald-50/60 via-slate-50 to-teal-50/40 border border-emerald-200/80 rounded-xl p-4 flex items-center justify-between gap-4">
-                  {/* Left Side: Balance */}
-                  <div className="shrink-0 text-left">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
-                      Balance
-                    </span>
-                    <span className="text-2xl font-black font-mono text-emerald-800 block">
-                      RM {currentBalance.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  {/* Right Side: Company Name & Account No */}
-                  <div className="min-w-0 flex-1 text-right">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
-                      Company Name
-                    </span>
-                    <div className="text-base font-extrabold text-slate-900 truncate leading-tight" title={walletTargetCompany.name}>
-                      {walletTargetCompany.name}
-                    </div>
-                    <div className="text-xs text-slate-600 font-medium mt-1 flex items-center justify-end gap-1.5 flex-wrap">
-                      <span className="text-slate-400">Account No:</span>
-                      <span className="font-mono font-bold text-slate-800 bg-white/90 px-2 py-0.5 rounded border border-slate-200">
-                        {accountDisplay}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Amount to Add */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-slate-700">
-                      Top-Up Amount (RM) <span className="text-rose-500">*</span>
-                    </label>
-                    <span className="text-[10px] text-slate-400">Select preset or enter custom</span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
-                      RM
-                    </span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      required
-                      autoFocus
-                      value={walletAddAmount}
-                      onChange={(e) => setWalletAddAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full pl-11 pr-4 py-2.5 text-base font-bold font-mono bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                    />
-                  </div>
-
-                  {/* Quick Preset Buttons */}
-                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                    {quickPresets.map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => {
-                          const currentVal = parseFloat(walletAddAmount) || 0;
-                          setWalletAddAmount(String(currentVal + preset));
-                        }}
-                        className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 cursor-pointer transition-colors shadow-2xs"
-                      >
-                        +RM {preset.toLocaleString()}
-                      </button>
-                    ))}
-                    {parsedAddAmount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setWalletAddAmount('')}
-                        className="text-[10px] text-slate-400 hover:text-rose-600 px-1.5 py-1 underline cursor-pointer bg-transparent border-0"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Payment / Deposit Method & Reference */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Payment / Deposit Method
-                    </label>
-                    <select
-                      value={walletPaymentMethod}
-                      onChange={(e) => setWalletPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                    >
-                      <option value="Bank Transfer">Bank Transfer (FPX / Interbank)</option>
-                      <option value="Online Banking Gateway">Online Banking / DuitNow</option>
-                      <option value="Cash Deposit">Cash Deposit (CDM)</option>
-                      <option value="Company Cheque">Company Cheque</option>
-                      <option value="Credit / Debit Card">Credit / Debit Card</option>
-                      <option value="Direct Admin Adjustment">Direct Admin Adjustment</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Reference / Receipt No
-                    </label>
-                    <input
-                      type="text"
-                      value={walletReference}
-                      onChange={(e) => setWalletReference(e.target.value)}
-                      placeholder="e.g. TOPUP-849201"
-                      className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 font-mono focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Notes / Remarks */}
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Notes / Description (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={walletNotes}
-                    onChange={(e) => setWalletNotes(e.target.value)}
-                    placeholder="e.g. Agency operating account wallet top-up"
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                {/* Modal Footer Actions */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setWalletTargetCompany(null)}
-                    disabled={isSubmittingWallet}
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingWallet || parsedAddAmount <= 0}
-                    className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Coins size={14} />
-                    <span>
-                      {isSubmittingWallet
-                        ? 'Adding Balance...'
-                        : `Confirm & Add RM ${parsedAddAmount > 0 ? parsedAddAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 }) : '0.00'}`}
-                    </span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Add Company Wallet Balance Modal (Exact Payment Modal Design) */}
+      <AddWalletModal
+        isOpen={Boolean(walletTargetCompany)}
+        onClose={() => setWalletTargetCompany(null)}
+        company={walletTargetCompany}
+        defaultDepositorName={currentUser?.name || currentUser?.email || 'Master Admin'}
+        isSubmitting={isSubmittingWallet}
+        onSubmit={handleConfirmAddWalletBalance}
+      />
 
       {/* Shared Footer */}
       <Footer />

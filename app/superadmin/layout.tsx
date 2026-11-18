@@ -42,6 +42,7 @@ import {
   UserPlus,
   Users,
   UserX,
+  Wallet,
   X,
 } from 'lucide-react';
 import {
@@ -83,6 +84,7 @@ export default function SuperAdminLayout({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [companyCount, setCompanyCount] = useState<number>(0);
   const [pendingTrialCount, setPendingTrialCount] = useState<number>(0);
+  const [pendingWalletCount, setPendingWalletCount] = useState<number>(0);
   const [employeeCount, setEmployeeCount] = useState<number>(0);
   const [masterAdminCount, setMasterAdminCount] = useState<number>(0);
   const [customerCount, setCustomerCount] = useState<number>(0);
@@ -296,6 +298,22 @@ export default function SuperAdminLayout({
     };
     fetchTrialCount();
 
+    // Fetch pending Acco Wallet top-up requests count
+    const fetchWalletCount = () => {
+      fetch(`${apiBase}/wallet-requests?status=pending`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.summary && typeof data.summary.cash_deposit_count === 'number') {
+            setPendingWalletCount(data.summary.cash_deposit_count);
+          } else if (data && Array.isArray(data.transactions)) {
+            setPendingWalletCount(data.transactions.length);
+          }
+        })
+        .catch(() => { });
+    };
+    fetchWalletCount();
+    const walletPollInterval = setInterval(fetchWalletCount, 20000);
+
     const handleAgentsUpdate = (e: any) => {
       if (Array.isArray(e.detail)) {
         setAgentCount(e.detail.length);
@@ -313,12 +331,15 @@ export default function SuperAdminLayout({
     };
 
     window.addEventListener('company_trials_updated', fetchTrialCount);
+    window.addEventListener('acco_wallet_updated', fetchWalletCount);
     window.addEventListener('superadmin_agents_updated', handleAgentsUpdate);
     window.addEventListener('superadmin_programs_updated', handleProgramsUpdate);
     window.addEventListener('agency_office_locations_updated', handleOfficeUpdate);
     window.addEventListener('employee_requests_updated', fetchRequestsCounts);
     return () => {
+      clearInterval(walletPollInterval);
       window.removeEventListener('company_trials_updated', fetchTrialCount);
+      window.removeEventListener('acco_wallet_updated', fetchWalletCount);
       window.removeEventListener('superadmin_agents_updated', handleAgentsUpdate);
       window.removeEventListener('superadmin_programs_updated', handleProgramsUpdate);
       window.removeEventListener('agency_office_locations_updated', handleOfficeUpdate);
@@ -413,7 +434,12 @@ export default function SuperAdminLayout({
           {
             name: 'Companies Dashboard',
             icon: LayoutDashboard,
-            badge: pendingTrialCount > 0 ? `${pendingTrialCount} New` : companyCount > 0 ? `${companyCount}` : undefined,
+            badge:
+              pendingWalletCount + pendingTrialCount > 0
+                ? `${pendingWalletCount + pendingTrialCount} New`
+                : companyCount > 0
+                ? `${companyCount}`
+                : undefined,
             isGroup: true,
             children: [
               {
@@ -421,6 +447,12 @@ export default function SuperAdminLayout({
                 href: '/superadmin/companies',
                 icon: Building2,
                 badge: companyCount > 0 ? `${companyCount}` : undefined,
+              },
+              {
+                name: 'Acco Wallet',
+                href: '/superadmin/companies/wallet',
+                icon: Wallet,
+                badge: pendingWalletCount > 0 ? `${pendingWalletCount} New` : undefined,
               },
               {
                 name: 'Company Sector',

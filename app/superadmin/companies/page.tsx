@@ -352,16 +352,45 @@ export default function SuperAdminCompaniesPage() {
     bankName: string;
     notes: string;
     tab: PaymentTabType;
+    slipData?: string | null;
+    slipName?: string;
+    planKey?: string;
+    planName?: string;
+    packageDurationDays?: number;
   }) => {
     if (!payingCompany) return;
     setIsSubmittingPayment(true);
     try {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
       const assignedPlan = subscriptionPlans.find(
         (p) =>
-          p.plan_key === payingCompany.subscription_plan_key ||
-          p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
+          p.plan_key === (paymentInfo.planKey || payingCompany.subscription_plan_key) ||
+          p.name?.toLowerCase() === (paymentInfo.planName || payingCompany.subscription_plan_key)?.toLowerCase()
       );
+      const selectedPlanName = paymentInfo.planName || assignedPlan?.name || payingCompany.subscription_plan_key || 'Subscription Package';
+      const selectedPlanKey = paymentInfo.planKey || assignedPlan?.plan_key || payingCompany.subscription_plan_key;
+      const selectedDurationDays = Number(paymentInfo.packageDurationDays || assignedPlan?.duration_days) || 30;
       const total = paymentInfo.amount;
+
+      if (paymentInfo.tab === 'wallet') {
+        const deductRes = await fetch(
+          `${apiBase}/companies/${encodeURIComponent(payingCompany.id)}/wallet/deduct-balance`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+              amount: total,
+              reference: paymentInfo.reference,
+              notes: paymentInfo.notes || `Wallet payment for ${selectedPlanName}`,
+              requested_by: 'Super Admin',
+            }),
+          }
+        );
+        const deductData = await deductRes.json();
+        if (!deductRes.ok || !deductData.success) {
+          throw new Error(deductData.message || 'Insufficient wallet balance for this payment.');
+        }
+      }
 
       await createInvoice({
         company_id: payingCompany.id,
@@ -370,11 +399,11 @@ export default function SuperAdminCompaniesPage() {
         customer_email: payingCompany.email,
         customer_phone: payingCompany.phone,
         customer_address: payingCompany.address,
-        package_name: assignedPlan?.name || payingCompany.subscription_plan_key || 'Subscription Package',
+        package_name: selectedPlanName,
         invoice_date: new Date().toISOString().slice(0, 10),
         items: [
           {
-            description: `Payment for ${assignedPlan?.name || 'Company Subscription & Service Access'}`,
+            description: `Payment for ${selectedPlanName} (${selectedDurationDays} Days)`,
             qty: 1,
             unit_price: total,
             total: total,
@@ -391,10 +420,29 @@ export default function SuperAdminCompaniesPage() {
         notes: paymentInfo.notes || `Payment recorded by Super Admin for ${payingCompany.name}`,
       });
 
+      if (selectedPlanKey || selectedDurationDays > 0) {
+        try {
+          await fetch(`${apiBase}/companies/${encodeURIComponent(payingCompany.id)}/subscription`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+              subscription_plan_key: selectedPlanKey,
+              subscription_status: 'active',
+              extra_days: selectedDurationDays,
+              subscription_notes: `Paid RM ${total.toFixed(2)} via ${paymentInfo.method} (${selectedPlanName}) • Ref: ${paymentInfo.reference}`,
+            }),
+          });
+          const refreshed = await fetchCompaniesFromBackend();
+          setCompanies(refreshed);
+        } catch {
+          // ignore
+        }
+      }
+
       setPayingCompany(null);
       showToast(
         'success',
-        `Payment of RM ${total.toFixed(2)} recorded successfully for ${payingCompany.name}!`
+        `Payment of RM ${total.toFixed(2)} for "${selectedPlanName}" recorded successfully for ${payingCompany.name}!`
       );
     } catch (err: any) {
       showToast('info', err?.message || 'Payment recording failed.');
