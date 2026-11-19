@@ -109,7 +109,7 @@ export default function Select2Search({
   };
 
   return (
-    <div className={`relative ${className}`} ref={containerRef}>
+    <div className={`relative ${isOpen ? 'z-[99]' : 'z-auto'} ${className}`} ref={containerRef}>
       {label && (
         <label className="block text-xs font-bold text-slate-800 mb-1">
           {label}
@@ -121,7 +121,7 @@ export default function Select2Search({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full text-xs text-left flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs ${
+        className={`w-full text-xs text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-2xs ${
           triggerClassName
             ? triggerClassName
             : `bg-slate-50 hover:bg-white border rounded-xl pl-3.5 pr-3 py-2.5 ${
@@ -134,17 +134,17 @@ export default function Select2Search({
         <div className="flex items-center gap-2 truncate flex-1 min-w-0">
           {icon && <span className="shrink-0">{icon}</span>}
           {selectedOption ? (
-            <div className="flex items-center gap-1.5 truncate min-w-0">
-              <span className="font-bold text-slate-800 shrink-0">
+            <div className="flex items-center gap-2 truncate min-w-0 flex-nowrap">
+              <span className="font-bold text-slate-800 truncate">
                 {selectedOption.label}
               </span>
               {selectedOption.subLabel && selectedOption.value !== 'ALL' && (
-                <span className="text-[11px] text-slate-500 truncate hidden md:inline">
+                <span className="text-[10px] text-slate-500 font-mono shrink-0 hidden xl:inline">
                   ({selectedOption.subLabel})
                 </span>
               )}
               {selectedOption.badge && (
-                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold font-mono shrink-0">
+                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold font-mono shrink-0 border border-blue-200">
                   {selectedOption.badge}
                 </span>
               )}
@@ -167,14 +167,14 @@ export default function Select2Search({
         <div
           className={`absolute ${
             effectiveAlign === 'right' ? 'right-0 left-auto' : 'left-0 right-auto'
-          } top-full mt-1.5 z-50 ${
+          } top-full mt-2 z-[100] ${
             dropdownWidth
               ? dropdownWidth
-              : `${minDropdownWidth} sm:max-w-[360px]`
-          } max-w-[calc(100vw-2rem)] bg-white border border-blue-400/80 rounded-xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150`}
+              : `${minDropdownWidth} sm:min-w-[340px] sm:max-w-[420px]`
+          } max-w-[calc(100vw-2rem)] bg-white border border-blue-400/80 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150`}
         >
           {/* Search Box */}
-          <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+          <div className="p-2.5 border-b border-slate-100 bg-slate-50/80">
             <div className="relative">
               <Search
                 size={14}
@@ -186,7 +186,7 @@ export default function Select2Search({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#0b4da2] focus:ring-1 focus:ring-blue-400 transition-all"
+                className="w-full bg-white border border-slate-300 rounded-xl pl-8 pr-7 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#0b4da2] focus:ring-1 focus:ring-blue-400 transition-all shadow-2xs"
               />
               {searchTerm && (
                 <button
@@ -198,14 +198,14 @@ export default function Select2Search({
                 </button>
               )}
             </div>
-            <div className="flex items-center justify-between px-1 pt-1.5 text-[10px] text-slate-400 font-medium">
+            <div className="flex items-center justify-between px-1 pt-2 text-[10px] text-slate-400 font-medium">
               <span>{filteredOptions.length} available</span>
               {searchTerm && <span>Filtered by &quot;{searchTerm}&quot;</span>}
             </div>
           </div>
 
-          {/* Options List */}
-          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 py-1">
+          {/* Options List with comfortable spacing between items */}
+          <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => {
                 const isSelected = opt.value === value;
@@ -215,12 +215,12 @@ export default function Select2Search({
                     key={opt.value}
                     type="button"
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full px-3.5 py-2.5 text-xs text-left flex items-center justify-between gap-2.5 transition-colors cursor-pointer border-0 ${
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs text-left flex items-center justify-between gap-3 transition-colors cursor-pointer border ${
                       isSelected
-                        ? 'bg-blue-50 text-[#0b4da2] font-semibold'
+                        ? 'bg-blue-50 text-[#0b4da2] border-blue-200 font-semibold shadow-2xs'
                         : isAll
-                        ? 'hover:bg-blue-50/60 bg-slate-50/50 text-slate-800'
-                        : 'hover:bg-slate-50 text-slate-700'
+                        ? 'hover:bg-blue-50/70 bg-slate-50/80 border-slate-200 text-slate-800'
+                        : 'hover:bg-slate-100/90 bg-white border-slate-100 text-slate-700'
                     }`}
                   >
                     <div className="flex flex-col min-w-0 flex-1 text-left">
@@ -239,12 +239,12 @@ export default function Select2Search({
                     <div className="flex items-center gap-2 shrink-0 ml-2">
                       {opt.badge && (
                         <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
                             isSelected
-                              ? 'bg-[#0b4da2] text-white'
+                              ? 'bg-[#0b4da2] text-white border-[#0b4da2]'
                               : isAll
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-blue-100 text-blue-800 border-blue-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}
                         >
                           {opt.badge}

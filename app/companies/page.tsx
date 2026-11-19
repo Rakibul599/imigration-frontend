@@ -23,6 +23,7 @@ import {
   Hourglass,
   LogOut,
   Receipt,
+  RefreshCw,
   Search,
   Settings,
   ShieldAlert,
@@ -52,6 +53,7 @@ import {
   fetchCompaniesFromBackend,
   getStoredCompanies,
   subscribeToCompanyChanges,
+  toggleCompanyAutoRenewal,
   updateStoredCompany,
 } from '@/lib/companyStorage';
 import {
@@ -190,6 +192,7 @@ export default function CompaniesPage() {
   const [showSettingsModal, setShowSettingsModal] = useState<Company | null>(null);
   const [showSubscriptionAlert, setShowSubscriptionAlert] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
+  const [togglingAutoRenewal, setTogglingAutoRenewal] = useState<string | null>(null);
 
   // Edit / Settings Form State
   const [editName, setEditName] = useState('');
@@ -417,6 +420,51 @@ export default function CompaniesPage() {
       message: `Company "${companyName}" has been deleted.`,
     });
     setTimeout(() => setActionFeedback(null), 3500);
+  };
+
+  const handleToggleAutoRenewal = async (company: Company) => {
+    if (!userCanEdit) {
+      alert('Permission Denied: You do not have permission to modify company settings.');
+      return;
+    }
+
+    const compId = company.id;
+    setTogglingAutoRenewal(compId);
+
+    const nextState = !company.auto_renewal;
+
+    // Optimistic UI update in companyList
+    setCompanyList((prev) =>
+      prev.map((c) => (c.id === compId ? { ...c, auto_renewal: nextState } : c))
+    );
+
+    try {
+      const res = await toggleCompanyAutoRenewal(compId, nextState);
+      if (res.success && res.company) {
+        setCompanyList((prev) =>
+          prev.map((c) => (c.id === compId ? { ...c, ...res.company } : c))
+        );
+        setActionFeedback({
+          type: 'success',
+          message: res.message || (nextState ? `Auto-renewal enabled for ${company.name}` : `Auto-renewal disabled for ${company.name}`),
+        });
+      } else {
+        setActionFeedback({
+          type: 'info',
+          message: res.message || 'Auto-renewal updated.',
+        });
+      }
+      setTimeout(() => setActionFeedback(null), 4000);
+    } catch (err: any) {
+      console.error('Error toggling auto-renewal:', err);
+      // Revert optimistic update
+      setCompanyList((prev) =>
+        prev.map((c) => (c.id === compId ? { ...c, auto_renewal: !nextState } : c))
+      );
+      alert(err?.message || 'Failed to toggle auto renewal.');
+    } finally {
+      setTogglingAutoRenewal(null);
+    }
   };
 
   const getCompanyDueInfo = (comp: Company) => {
@@ -958,12 +1006,13 @@ export default function CompaniesPage() {
 
         {/* The Table Matching User Screenshot */}
         <div className="bg-white border border-slate-300 rounded-sm shadow-xs overflow-hidden">
-          <table className="w-full text-left border-collapse">
+          <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+            <table className="w-full min-w-[1630px] text-left border-collapse">
             <thead>
               <tr className="bg-[#1f9343] text-white text-xs font-semibold select-none">
                 <th
                   onClick={() => toggleSort('name')}
-                  className="py-2.5 px-3 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[190px]"
+                  className="py-3.5 px-4 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[280px]"
                   title="Click to sort by Company Name"
                 >
                   <div className="flex items-center justify-between">
@@ -973,12 +1022,12 @@ export default function CompaniesPage() {
                     </span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3 border-r border-green-600/60 font-semibold min-w-[110px]">
+                <th className="py-3.5 px-4 border-r border-green-600/60 font-semibold min-w-[170px]">
                   Remark
                 </th>
                 <th
                   onClick={() => toggleSort('balance')}
-                  className="py-2.5 px-3 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[150px]"
+                  className="py-3.5 px-4 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[210px]"
                   title="Click to sort by Account Balance"
                 >
                   <div className="flex items-center justify-between">
@@ -993,7 +1042,7 @@ export default function CompaniesPage() {
                 </th>
                 <th
                   onClick={() => toggleSort('due')}
-                  className="py-2.5 px-3 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[140px]"
+                  className="py-3.5 px-4 border-r border-green-600/60 cursor-pointer hover:bg-[#1a7f39] transition-colors min-w-[200px]"
                   title="Click to sort by Due Amount"
                 >
                   <div className="flex items-center justify-between">
@@ -1006,16 +1055,22 @@ export default function CompaniesPage() {
                     </span>
                   </div>
                 </th>
-                <th className="py-2.5 px-3 border-r border-green-600/60 font-semibold min-w-[125px]">
+                <th className="py-3.5 px-4 border-r border-green-600/60 font-semibold min-w-[170px]">
                   Expire Date
                 </th>
-                <th className="py-2.5 px-3 border-r border-green-600/60 font-semibold min-w-[155px] text-center">
-                  <span className="inline-flex items-center justify-center gap-1">
+                <th className="py-3.5 px-4 border-r border-green-600/60 font-semibold min-w-[200px] text-center">
+                  <span className="inline-flex items-center justify-center gap-1.5">
                     <Clock size={12} className="opacity-90" />
                     <span>Countdown</span>
                   </span>
                 </th>
-                <th className="py-2.5 px-3 text-right font-semibold min-w-[130px]">
+                <th className="py-3.5 px-4 border-r border-green-600/60 font-semibold min-w-[180px] text-center">
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    <RefreshCw size={12} className="opacity-90" />
+                    <span>Auto Renewal</span>
+                  </span>
+                </th>
+                <th className="py-3.5 px-4 text-right font-semibold min-w-[220px]">
                   Actions
                 </th>
               </tr>
@@ -1034,31 +1089,31 @@ export default function CompaniesPage() {
                     className="hover:bg-slate-50/70 transition-colors group"
                   >
                     {/* 1. Company Name & ROC */}
-                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
+                    <td className="py-3 px-4 border-r border-slate-200 align-middle">
                       <div className="flex flex-col">
                         <Link
                           href={`/services?company=${encodeURIComponent(company.id)}`}
-                          className="text-blue-600 hover:text-blue-800 hover:underline font-semibold text-xs leading-tight tracking-tight block truncate max-w-[220px]"
+                          className="text-blue-600 hover:text-blue-800 hover:underline font-bold text-xs leading-snug tracking-tight block"
                           title={company.name}
                         >
                           {company.name}
                         </Link>
-                        <span className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        <span className="text-[11px] text-slate-400 font-mono mt-0.5">
                           {company.roc ? `ROC: ${company.roc}` : 'No ROC'}
                         </span>
                       </div>
                     </td>
 
                     {/* 2. Remark (Sector) */}
-                    <td className="py-2 px-3 border-r border-slate-200 text-slate-600 align-middle">
-                      <span className="text-xs font-medium text-slate-700 block truncate max-w-[120px]" title={company.sector || '—'}>
+                    <td className="py-3 px-4 border-r border-slate-200 text-slate-600 align-middle">
+                      <span className="text-xs font-medium text-slate-700 px-2 py-0.5 rounded bg-slate-100 border border-slate-200/80 inline-block" title={company.sector || '—'}>
                         {company.sector || '—'}
                       </span>
                     </td>
 
                     {/* 3. Account Balance */}
-                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
-                      <div className="flex items-center justify-between gap-1.5">
+                    <td className="py-3 px-4 border-r border-slate-200 align-middle">
+                      <div className="flex items-center justify-between gap-2">
                         <div>
                           <div className="flex items-baseline gap-1">
                             <span className="text-[10px] text-slate-400 font-mono font-semibold">RM</span>
@@ -1070,7 +1125,7 @@ export default function CompaniesPage() {
                             </span>
                           </div>
                           <span
-                            className="text-[10px] text-slate-400 font-mono leading-none block mt-0.5 truncate max-w-[110px]"
+                            className="text-[10px] text-slate-400 font-mono leading-none block mt-0.5"
                             title={company.wallet_account_no || `ID: ${company.id}`}
                           >
                             {company.wallet_account_no
@@ -1083,7 +1138,7 @@ export default function CompaniesPage() {
                           type="button"
                           onClick={() => openWalletModal(company)}
                           title={`Add Balance for ${company.name}`}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer shrink-0"
+                          className="text-xs font-semibold px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors cursor-pointer shrink-0 shadow-2xs"
                         >
                           + Top Up
                         </button>
@@ -1091,8 +1146,8 @@ export default function CompaniesPage() {
                     </td>
 
                     {/* 4. Due Amount */}
-                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
-                      <div className="flex items-center justify-between gap-1.5">
+                    <td className="py-3 px-4 border-r border-slate-200 align-middle">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex items-baseline gap-1">
                           <span className="text-[10px] text-slate-400 font-mono font-semibold">RM</span>
                           <span
@@ -1114,12 +1169,12 @@ export default function CompaniesPage() {
                             type="button"
                             onClick={() => openPaymentModal(company)}
                             title={`Pay Due RM ${dueInfo.totalDue.toFixed(2)}`}
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer shrink-0"
+                            className="text-xs font-semibold px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors cursor-pointer shrink-0 shadow-2xs"
                           >
                             Pay Due
                           </button>
                         ) : (
-                          <span className="text-[10px] font-semibold text-emerald-600 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200/80 shrink-0">
+                          <span className="text-xs font-semibold text-emerald-700 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200/80 shrink-0">
                             Cleared
                           </span>
                         )}
@@ -1127,9 +1182,9 @@ export default function CompaniesPage() {
                     </td>
 
                     {/* 5. Expire Date */}
-                    <td className="py-2 px-3 border-r border-slate-200 align-middle">
+                    <td className="py-3 px-4 border-r border-slate-200 align-middle">
                       <div className="flex flex-col">
-                        <span className="font-mono text-xs font-semibold text-slate-700">
+                        <span className="font-mono text-xs font-semibold text-slate-800">
                           {compExpiry
                             ? new Date(compExpiry).toLocaleDateString('en-GB', {
                                 day: '2-digit',
@@ -1138,18 +1193,18 @@ export default function CompaniesPage() {
                               })
                             : 'Active'}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-medium">
+                        <span className="text-[11px] text-slate-400 font-medium">
                           {compPlan}
                         </span>
                       </div>
                     </td>
 
                     {/* 6. Countdown (Dedicated Column) */}
-                    <td className="py-2 px-3 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                    <td className="py-3 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
                       {compCountdown.hasExpiry ? (
                         <span
                           suppressHydrationWarning
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border ${
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold border ${
                             compCountdown.isExpired
                               ? 'bg-rose-50 text-rose-700 border-rose-200'
                               : compCountdown.isExpiringSoon
@@ -1158,9 +1213,9 @@ export default function CompaniesPage() {
                           }`}
                         >
                           {compCountdown.isExpired ? (
-                            <AlertCircle size={10} className="text-rose-500 shrink-0" />
+                            <AlertCircle size={11} className="text-rose-500 shrink-0" />
                           ) : (
-                            <Clock size={10} className="text-emerald-500 shrink-0" />
+                            <Clock size={11} className="text-emerald-500 shrink-0" />
                           )}
                           <span suppressHydrationWarning>{compCountdown.label}</span>
                         </span>
@@ -1169,16 +1224,66 @@ export default function CompaniesPage() {
                       )}
                     </td>
 
-                    {/* 7. Actions */}
-                    <td className="py-2 px-3 align-middle text-right">
-                      <div className="flex items-center justify-end gap-1">
+                    {/* 7. Auto Renewal (Dedicated Column) */}
+                    <td className="py-3 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap">
+                      <div className="inline-flex flex-col items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={Boolean(company.auto_renewal)}
+                          disabled={togglingAutoRenewal === company.id}
+                          onClick={() => handleToggleAutoRenewal(company)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden disabled:opacity-50 disabled:cursor-not-allowed ${
+                            company.auto_renewal
+                              ? 'bg-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                              : 'bg-slate-300 dark:bg-slate-600'
+                          }`}
+                          title={
+                            company.auto_renewal
+                              ? 'Auto-renewal is ON: Automatically debits plan fee from wallet when subscription expires'
+                              : 'Auto-renewal is OFF: Click to enable automatic monthly wallet debit'
+                          }
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                              company.auto_renewal ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+
+                        {company.auto_renewal ? (
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                              (company.wallet_balance ?? 0) >= 199
+                                ? 'text-emerald-700'
+                                : (company.wallet_balance ?? 0) > 0
+                                ? 'text-amber-700'
+                                : 'text-rose-600'
+                            }`}
+                            title={`Current Wallet: RM ${(company.wallet_balance ?? 0).toFixed(2)}`}
+                          >
+                            <span>Active</span>
+                            <span className="text-[10px] font-normal opacity-85">
+                              (RM {(company.wallet_balance ?? 0).toFixed(0)})
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-medium">Off</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 8. Actions */}
+                    <td className="py-3 px-4 align-middle text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
                           onClick={() => openPaymentModal(company)}
-                          className="px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-2xs hover:shadow transition-all inline-flex items-center gap-1 cursor-pointer border-0"
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-2xs hover:shadow transition-all inline-flex items-center gap-1.5 cursor-pointer border-0"
                           title={`Record Payment for ${company.name}`}
                         >
-                          <DollarSign size={12} />
+                          <DollarSign size={13} />
                           <span>Payment</span>
                         </button>
 
@@ -1186,17 +1291,17 @@ export default function CompaniesPage() {
                           type="button"
                           onClick={() => openWalletModal(company)}
                           title={`Add Wallet Balance for ${company.name}`}
-                          className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-emerald-50 flex items-center justify-center text-slate-500 hover:text-emerald-700 transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-emerald-50 flex items-center justify-center text-slate-500 hover:text-emerald-700 transition-colors cursor-pointer shadow-2xs"
                         >
-                          <Wallet size={13} />
+                          <Wallet size={14} />
                         </button>
 
                         <Link
                           href={`/services?company=${encodeURIComponent(company.id)}`}
                           title="View Digital Service Cards"
-                          className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-blue-50 flex items-center justify-center text-slate-500 hover:text-blue-700 transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-blue-50 flex items-center justify-center text-slate-500 hover:text-blue-700 transition-colors cursor-pointer shadow-2xs"
                         >
-                          <BookOpen size={13} />
+                          <BookOpen size={14} />
                         </Link>
 
                         {userCanEdit ? (
@@ -1204,18 +1309,18 @@ export default function CompaniesPage() {
                             type="button"
                             onClick={() => openSettingsModal(company)}
                             title="Company Details"
-                            className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                            className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <Settings size={13} />
+                            <Settings size={14} />
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => openSettingsModal(company)}
                             title="View Company Information (Read Only)"
-                            className="w-7 h-7 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                            className="w-8 h-8 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <Settings size={13} />
+                            <Settings size={14} />
                           </button>
                         )}
 
@@ -1224,9 +1329,9 @@ export default function CompaniesPage() {
                             type="button"
                             onClick={() => handleDeleteCompany(company.id, company.name)}
                             title="Delete Company"
-                            className="w-7 h-7 rounded border border-slate-200 bg-white hover:bg-rose-50 flex items-center justify-center text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 flex items-center justify-center text-slate-400 hover:text-rose-600 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>
@@ -1238,7 +1343,7 @@ export default function CompaniesPage() {
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="py-12 text-center text-slate-500 font-medium bg-slate-50/50"
                   >
                     {isRestrictedRole && accessibleCompanies.length === 0 ? (
@@ -1259,6 +1364,7 @@ export default function CompaniesPage() {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
 

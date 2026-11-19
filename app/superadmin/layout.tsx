@@ -558,11 +558,6 @@ export default function SuperAdminLayout({
                 icon: FileSignature,
               },
               {
-                name: 'Employee Salary',
-                href: '/superadmin/employees/salary',
-                icon: Receipt,
-              },
-              {
                 name: 'Resignation Letter',
                 href: '/superadmin/employees/resignations',
                 icon: FileText,
@@ -610,6 +605,12 @@ export default function SuperAdminLayout({
             isGroup: true,
             children: [
               {
+                name: 'Employees & Permissions',
+                href: '/superadmin/employees',
+                icon: UserCheck,
+                badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+              },
+              {
                 name: 'Face & Attendance',
                 href: '/superadmin/attendance',
                 icon: Camera,
@@ -620,6 +621,21 @@ export default function SuperAdminLayout({
                 href: '/superadmin/attendance/leaves',
                 icon: Calendar,
                 badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
+              },
+              {
+                name: 'EPF',
+                href: '/superadmin/attendance/epf',
+                icon: ShieldCheck,
+              },
+              {
+                name: 'SOCSO',
+                href: '/superadmin/attendance/socso',
+                icon: Shield,
+              },
+              {
+                name: 'Employee Salary',
+                href: '/superadmin/attendance/salary',
+                icon: Receipt,
               },
               {
                 name: 'Reports',

@@ -32,6 +32,7 @@ import {
   Settings,
   Shield,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Target,
   UserCheck,
@@ -480,11 +481,6 @@ export default function MasterAdminLayout({
                 icon: FileSignature,
               },
               {
-                name: 'Employee Salary',
-                href: '/masteradmin/employees/salary',
-                icon: Receipt,
-              },
-              {
                 name: 'Resignation Letter',
                 href: '/masteradmin/employees/resignations',
                 icon: FileText,
@@ -532,6 +528,12 @@ export default function MasterAdminLayout({
             isGroup: true,
             children: [
               {
+                name: 'Employees & Permissions',
+                href: '/masteradmin/employees',
+                icon: UserCheck,
+                badge: employeeCount > 0 ? `${employeeCount}` : undefined,
+              },
+              {
                 name: 'Face & Attendance',
                 href: '/masteradmin/attendance',
                 icon: Camera,
@@ -542,6 +544,21 @@ export default function MasterAdminLayout({
                 href: '/masteradmin/attendance/leaves',
                 icon: Calendar,
                 badge: pendingLeaveCount > 0 ? `${pendingLeaveCount} New` : undefined,
+              },
+              {
+                name: 'EPF',
+                href: '/masteradmin/attendance/epf',
+                icon: ShieldCheck,
+              },
+              {
+                name: 'SOCSO',
+                href: '/masteradmin/attendance/socso',
+                icon: Shield,
+              },
+              {
+                name: 'Employee Salary',
+                href: '/masteradmin/attendance/salary',
+                icon: Receipt,
               },
               {
                 name: 'Reports',

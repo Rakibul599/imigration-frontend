@@ -15,6 +15,7 @@ import {
   Check,
   X,
   User,
+  Users,
   Building2,
   FileText,
   Filter,
@@ -22,6 +23,7 @@ import {
   Eye,
   Pencil,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import {
   getEmployeeLeaves,
@@ -30,7 +32,20 @@ import {
   deleteEmployeeLeave,
   EmployeeLeaveItem,
 } from '@/lib/employeeRequestsApi';
+import Select2Search, { Select2Option } from '@/components/Select2Search';
+import { Company } from '@/lib/companies';
+import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
 import { getMasterAdminUser } from '@/lib/auth';
+
+interface EmployeeItem {
+  id: number;
+  employee_code: string;
+  name: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  assigned_companies?: string[];
+}
 
 interface AdminLeavesManagementProps {
   portalType: 'superadmin' | 'masteradmin';
@@ -44,11 +59,16 @@ export default function AdminLeavesManagement({
   assignedScope = [],
 }: AdminLeavesManagementProps) {
   const [leaves, setLeaves] = useState<EmployeeLeaveItem[]>([]);
-  const [employees, setEmployees] = useState<{ id: number; employee_code: string; name: string }[]>([]);
+  const [employees, setEmployees] = useState<EmployeeItem[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Filters
+  // Top Filters: Company & Employee
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('ALL');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('ALL');
+
+  // Secondary Filters: Date, Type, Status, Search
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -61,6 +81,15 @@ export default function AdminLeavesManagement({
   const [rejectItem, setRejectItem] = useState<EmployeeLeaveItem | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Base path for navigation links
+  const basePath = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.startsWith('/superadmin')) return '/superadmin';
+      if (window.location.pathname.startsWith('/masteradmin')) return '/masteradmin';
+    }
+    return portalType === 'masteradmin' ? '/masteradmin' : '';
+  }, [portalType]);
 
   const applyPreset = useCallback((preset: 'all' | 'today' | 'this_week' | 'this_month' | 'this_year') => {
     setDatePreset(preset);
@@ -107,9 +136,21 @@ export default function AdminLeavesManagement({
 
   const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
 
+  // Load data: Leaves, Employees, Companies
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
+      // 1. Load companies
+      const storedCos = getStoredCompanies();
+      if (storedCos.length > 0) {
+        setCompanies(storedCos);
+      } else {
+        fetchCompaniesFromBackend().then((list) => {
+          if (Array.isArray(list) && list.length > 0) setCompanies(list);
+        }).catch(() => {});
+      }
+
+      // 2. Load leaves and employees in parallel
       const [leavesRes, employeesRes] = await Promise.all([
         getEmployeeLeaves({}),
         fetch(`${apiBase}/employees`, { cache: 'no-store' })
@@ -139,7 +180,7 @@ export default function AdminLeavesManagement({
     };
   }, [loadData]);
 
-  // Scoped employee codes for masteradmin
+  // Master admin effective company scope
   const effectiveScope = useMemo(() => {
     if (portalType !== 'masteradmin') return [];
     if (assignedScope && assignedScope.length > 0) return assignedScope;
@@ -150,7 +191,7 @@ export default function AdminLeavesManagement({
   const permittedEmployeeCodes = useMemo(() => {
     if (portalType !== 'masteradmin' || effectiveScope.length === 0 || effectiveScope.includes('*')) return null;
     const set = new Set<string>();
-    employees.forEach((emp: any) => {
+    employees.forEach((emp) => {
       const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
       if (assigned.some((cId: string) => effectiveScope.some((sId) => sId.toLowerCase() === cId.toLowerCase()))) {
         set.add((emp.employee_code || '').toUpperCase());
@@ -159,28 +200,122 @@ export default function AdminLeavesManagement({
     return set;
   }, [employees, portalType, effectiveScope]);
 
+  // Select2 Options for Company
+  const companySelectOptions: Select2Option[] = useMemo(() => {
+    let permittedCos = companies;
+    if (portalType === 'masteradmin' && effectiveScope.length > 0 && !effectiveScope.includes('*')) {
+      permittedCos = companies.filter((c) =>
+        effectiveScope.some((s) => s.toLowerCase() === c.id.toLowerCase() || s.toLowerCase() === c.name.toLowerCase())
+      );
+    }
+    return [
+      { value: 'ALL', label: 'All Companies', badge: `${permittedCos.length}` },
+      ...permittedCos.map((c) => ({
+        value: c.id,
+        label: c.name,
+        subLabel: c.roc ? `ROC: ${c.roc}` : undefined,
+        badge: c.totalWorkers ? `${c.totalWorkers} Workers` : undefined,
+      })),
+    ];
+  }, [companies, portalType, effectiveScope]);
+
+  // Select2 Options for Employee (scoped by selected company)
+  const employeeFilterOptions: Select2Option[] = useMemo(() => {
+    let list = employees;
+    if (portalType === 'masteradmin' && effectiveScope.length > 0 && !effectiveScope.includes('*')) {
+      list = list.filter((emp) => {
+        const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+        return assigned.some((cId: string) => effectiveScope.some((sId) => sId.toLowerCase() === cId.toLowerCase()));
+      });
+    }
+    if (selectedCompanyId !== 'ALL') {
+      list = list.filter((emp) => {
+        const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+        if (assigned.includes('*')) return true;
+        return assigned.some((cId: string) => cId.toLowerCase() === selectedCompanyId.toLowerCase());
+      });
+    }
+    return [
+      { value: 'ALL', label: 'All Staff Members', badge: `${list.length}` },
+      ...list.map((emp) => ({
+        value: String(emp.id),
+        label: emp.name,
+        subLabel: emp.employee_code,
+        badge: emp.role || 'Staff',
+      })),
+    ];
+  }, [employees, selectedCompanyId, portalType, effectiveScope]);
+
+  // Map employee codes to employee objects & resolved company names
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, { employee: EmployeeItem; companyName?: string }>();
+    employees.forEach((emp) => {
+      let coName: string | undefined;
+      if (emp.assigned_companies && emp.assigned_companies.length > 0 && emp.assigned_companies[0] !== '*') {
+        const found = companies.find((c) => c.id.toLowerCase() === emp.assigned_companies![0].toLowerCase());
+        coName = found ? found.name : emp.assigned_companies[0];
+      }
+      if (emp.employee_code) {
+        map.set(emp.employee_code.toUpperCase(), { employee: emp, companyName: coName });
+      }
+      if (emp.name) {
+        map.set(emp.name.toLowerCase(), { employee: emp, companyName: coName });
+      }
+    });
+    return map;
+  }, [employees, companies]);
+
   // Filtered leaves
   const filteredLeaves = useMemo(() => {
     return leaves.filter((item) => {
-      // Company scoping for masteradmin
+      // 1. Master admin company scoping
       if (permittedEmployeeCodes && !permittedEmployeeCodes.has((item.employee_code || '').toUpperCase())) {
         return false;
       }
 
-      // Type filter
+      // 2. Company Filter
+      if (selectedCompanyId !== 'ALL') {
+        const empMeta =
+          employeeMap.get((item.employee_code || '').toUpperCase()) ||
+          employeeMap.get((item.employee_name || '').toLowerCase());
+        if (!empMeta) {
+          // Fallback if item itself has company_id
+          if ((item as any).company_id && (item as any).company_id !== selectedCompanyId) {
+            return false;
+          }
+        } else {
+          const assigned = Array.isArray(empMeta.employee.assigned_companies) ? empMeta.employee.assigned_companies : [];
+          const matches =
+            assigned.includes('*') ||
+            assigned.some((cId) => cId.toLowerCase() === selectedCompanyId.toLowerCase());
+          if (!matches) return false;
+        }
+      }
+
+      // 3. Employee Filter
+      if (selectedEmployeeId !== 'ALL') {
+        const targetEmp = employees.find((e) => String(e.id) === selectedEmployeeId);
+        if (targetEmp) {
+          const matchCode = (item.employee_code || '').toUpperCase() === (targetEmp.employee_code || '').toUpperCase();
+          const matchName = (item.employee_name || '').toLowerCase() === (targetEmp.name || '').toLowerCase();
+          if (!matchCode && !matchName) return false;
+        }
+      }
+
+      // 4. Leave Type filter
       if (typeFilter !== 'all' && item.leave_type !== typeFilter) return false;
 
-      // Status filter
+      // 5. Status filter
       if (statusFilter !== 'all' && item.status !== statusFilter) return false;
 
-      // Date range filter (only applied if not 'all')
+      // 6. Date range filter
       if (datePreset !== 'all') {
         const d = String(item.start_date).slice(0, 10);
         if (startDate && d < startDate) return false;
         if (endDate && d > endDate) return false;
       }
 
-      // Search query
+      // 7. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
@@ -193,17 +328,25 @@ export default function AdminLeavesManagement({
 
       return true;
     });
-  }, [leaves, typeFilter, statusFilter, startDate, endDate, searchQuery]);
+  }, [
+    leaves,
+    permittedEmployeeCodes,
+    selectedCompanyId,
+    selectedEmployeeId,
+    employeeMap,
+    employees,
+    typeFilter,
+    statusFilter,
+    datePreset,
+    startDate,
+    endDate,
+    searchQuery,
+  ]);
 
-  // Metrics scoped to permitted employees
-  const scopedLeaves = useMemo(() => {
-    if (!permittedEmployeeCodes) return leaves;
-    return leaves.filter((l) => permittedEmployeeCodes.has((l.employee_code || '').toUpperCase()));
-  }, [leaves, permittedEmployeeCodes]);
-
-  const pendingCount = scopedLeaves.filter((l) => l.status === 'pending').length;
-  const approvedHolidayCount = scopedLeaves.filter((l) => l.leave_type === 'holiday' && l.status === 'approved').length;
-  const approvedAnnualCount = scopedLeaves.filter((l) => l.leave_type === 'annual_leave' && l.status === 'approved').length;
+  // Dynamic KPI Metrics calculated from filtered view
+  const pendingCount = filteredLeaves.filter((l) => l.status === 'pending').length;
+  const approvedHolidayCount = filteredLeaves.filter((l) => l.leave_type === 'holiday' && l.status === 'approved').length;
+  const approvedAnnualCount = filteredLeaves.filter((l) => l.leave_type === 'annual_leave' && l.status === 'approved').length;
 
   const handleApprove = async (item: EmployeeLeaveItem) => {
     setIsProcessing(true);
@@ -292,28 +435,126 @@ export default function AdminLeavesManagement({
             Leaves &amp; Holiday Requests
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-xl leading-relaxed m-0">
-            Review staff holiday applications and annual leave requests. Approve, decline, or grant leaves directly.
+            Review staff holiday applications and annual leave requests. Filter by company and employee to manage approvals.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
           <Link
-            href={portalType === 'superadmin' ? '/superadmin/attendance/leaves/assign' : '/masteradmin/attendance/leaves/assign'}
+            href={`${basePath}/attendance/leaves/assign`}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-[#0b4da2] hover:bg-[#083a7c] text-white shadow-sm transition cursor-pointer no-underline active:scale-[0.98]"
           >
             <Plus size={15} />
-            <span>Assign Employee Holiday / Leave</span>
+            <span>Assign Holiday / Leave</span>
           </Link>
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
+      {/* TOP FILTERS: Company & Employee Select2 Filters */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3 relative z-30 !overflow-visible">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-30">
+          <div>
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 m-0">
+              <Filter size={15} className="text-[#0b4da2]" />
+              <span>Filter by Company &amp; Staff Member</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+              Select an employer company and employee to view and manage specific leave submissions.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 w-full sm:w-auto flex-nowrap relative z-30">
+            {/* 1. Company Select2 */}
+            <div className="w-56 sm:w-64 relative z-50">
+              <Select2Search
+                options={companySelectOptions}
+                value={selectedCompanyId}
+                onChange={(val) => {
+                  setSelectedCompanyId(val);
+                  setSelectedEmployeeId('ALL');
+                }}
+                placeholder="All Companies"
+                icon={<Building2 size={13} className="text-slate-400" />}
+                className="w-full"
+              />
+            </div>
+
+            {/* 2. Employee Select2 */}
+            <div className="w-56 sm:w-64 relative z-40">
+              <Select2Search
+                options={employeeFilterOptions}
+                value={selectedEmployeeId}
+                onChange={setSelectedEmployeeId}
+                placeholder="All Employees"
+                icon={<Users size={13} className="text-slate-400" />}
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Active Filter Badges & Reset */}
+        {(selectedCompanyId !== 'ALL' || selectedEmployeeId !== 'ALL') && (
+          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-slate-500 text-[11px] font-medium">Active Filters:</span>
+              {selectedCompanyId !== 'ALL' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                  <Building2 size={12} className="text-blue-600" />
+                  <span>Company: {companies.find((c) => c.id === selectedCompanyId)?.name || selectedCompanyId}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCompanyId('ALL');
+                      setSelectedEmployeeId('ALL');
+                    }}
+                    title="Clear Company Filter"
+                    className="hover:text-blue-950 p-0.5 cursor-pointer border-0 bg-transparent ml-1"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              {selectedEmployeeId !== 'ALL' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                  <User size={12} className="text-indigo-600" />
+                  <span>Staff: {employees.find((e) => String(e.id) === selectedEmployeeId)?.name || selectedEmployeeId}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedEmployeeId('ALL')}
+                    title="Clear Employee Filter"
+                    className="hover:text-indigo-950 p-0.5 cursor-pointer border-0 bg-transparent ml-1"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCompanyId('ALL');
+                setSelectedEmployeeId('ALL');
+              }}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer border-0 bg-transparent"
+            >
+              <RotateCcw size={12} />
+              <span>Reset Filters</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Summary KPI Cards (Dynamic based on selected Company & Employee) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Requests</p>
-            <p className="text-2xl font-black text-slate-900 mt-1">{leaves.length}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">All staff leave records</p>
+            <p className="text-2xl font-black text-slate-900 mt-1">{filteredLeaves.length}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {selectedCompanyId !== 'ALL' || selectedEmployeeId !== 'ALL' ? 'Filtered leave records' : 'All staff leave records'}
+            </p>
           </div>
           <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
             <FileText size={22} />
@@ -354,7 +595,7 @@ export default function AdminLeavesManagement({
         </div>
       </div>
 
-      {/* Filter and Control Bar */}
+      {/* Filter and Control Bar (Type, Status, Search, and Date Presets) */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5">
         {/* Top Row: Types, Status, Search & Refresh */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -498,14 +739,14 @@ export default function AdminLeavesManagement({
 
         {filteredLeaves.length === 0 ? (
           <div className="p-12 text-center text-xs text-slate-400 font-semibold">
-            No leave requests found matching selected filters.
+            No leave requests found matching selected company, staff, or period filters.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse min-w-[1250px]">
               <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
                 <tr>
-                  <th className="py-4 px-6 min-w-[200px]">Staff Member</th>
+                  <th className="py-4 px-6 min-w-[240px]">Staff Member &amp; Company</th>
                   <th className="py-4 px-5 min-w-[140px] whitespace-nowrap">Category</th>
                   <th className="py-4 px-5 min-w-[220px]">Occasion / Title</th>
                   <th className="py-4 px-5 min-w-[200px] whitespace-nowrap">Leave Dates</th>
@@ -517,141 +758,156 @@ export default function AdminLeavesManagement({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredLeaves.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-4 px-6">
-                      <p className="font-bold text-slate-900 text-xs sm:text-sm m-0 leading-snug">{item.employee_name || 'Staff'}</p>
-                      <p className="font-mono text-xs text-slate-400 font-medium m-0 mt-0.5">{item.employee_code}</p>
-                    </td>
-                    <td className="py-4 px-5 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
-                          item.leave_type === 'holiday'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                        }`}
-                      >
-                        {item.leave_type === 'holiday' ? 'Public Holiday' : 'Annual Leave'}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 font-bold text-slate-900 text-xs sm:text-sm">{item.title}</td>
-                    <td className="py-4 px-5 text-slate-700 font-mono font-semibold whitespace-nowrap text-xs">
-                      {String(item.start_date).slice(0, 10)}
-                      {item.end_date !== item.start_date && (
-                        <span> → {String(item.end_date).slice(0, 10)}</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-5 font-bold text-slate-900 whitespace-nowrap">
-                      <span className="bg-slate-100 text-slate-800 px-3 py-1 rounded-xl border border-slate-200 text-xs font-bold inline-block">
-                        {item.days_count} {item.days_count === 1 ? 'Day' : 'Days'}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-slate-600 text-xs leading-relaxed max-w-xs">
-                      <p className="m-0 line-clamp-2">{item.reason || 'Standard application'}</p>
-                      {item.emergency_contact && (
-                        <span className="block text-[11px] text-slate-400 font-mono mt-1">Tel: {item.emergency_contact}</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-5">
-                      {item.attachment_url ? (
-                        <a
-                          href={item.attachment_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 text-[#0b4da2] font-bold text-xs no-underline border border-slate-200 transition"
+                {filteredLeaves.map((item) => {
+                  const empMeta =
+                    employeeMap.get((item.employee_code || '').toUpperCase()) ||
+                    employeeMap.get((item.employee_name || '').toLowerCase());
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-4 px-6">
+                        <p className="font-bold text-slate-900 text-xs sm:text-sm m-0 leading-snug">
+                          {item.employee_name || 'Staff'}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="font-mono text-[10px] text-slate-600 font-semibold px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">
+                            {item.employee_code}
+                          </span>
+                          {empMeta?.companyName && (
+                            <span className="text-[10px] text-blue-700 font-medium px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 inline-flex items-center gap-1">
+                              <Building2 size={10} className="text-blue-500" />
+                              <span>{empMeta.companyName}</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                            item.leave_type === 'holiday'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}
                         >
-                          <Paperclip size={13} />
-                          <span className="max-w-[130px] truncate">{item.attachment_name || 'View File'}</span>
-                        </a>
-                      ) : (
-                        <span className="text-slate-300 text-xs font-semibold">—</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-5 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                          item.status === 'approved'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : item.status === 'rejected'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}
-                      >
-                        {item.status === 'approved' && <Check size={13} />}
-                        {item.status === 'rejected' && <X size={13} />}
-                        {item.status === 'pending' && <Clock size={13} />}
-                        <span className="capitalize">{item.status}</span>
-                      </span>
-                    </td>
-                    <td className="py-4 px-6 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center justify-end gap-1.5">
-                        {item.status === 'pending' && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={isProcessing}
-                              onClick={() => handleApprove(item)}
-                              title="Approve request"
-                              className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer border-0 inline-flex items-center gap-1 shadow-2xs transition"
-                            >
-                              <Check size={13} />
-                              <span className="hidden sm:inline">Approve</span>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isProcessing}
-                              onClick={() => {
-                                setRejectItem(item);
-                                setRejectReason('');
-                              }}
-                              title="Reject request"
-                              className="h-8 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer border-0 inline-flex items-center gap-1 shadow-2xs transition"
-                            >
-                              <X size={13} />
-                              <span className="hidden sm:inline">Reject</span>
-                            </button>
-                          </>
+                          {item.leave_type === 'holiday' ? 'Public Holiday' : 'Annual Leave'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-5 font-bold text-slate-900 text-xs sm:text-sm">{item.title}</td>
+                      <td className="py-4 px-5 text-slate-700 font-mono font-semibold whitespace-nowrap text-xs">
+                        {String(item.start_date).slice(0, 10)}
+                        {item.end_date !== item.start_date && (
+                          <span> → {String(item.end_date).slice(0, 10)}</span>
                         )}
-
-                        {/* View Application in Dedicated Subpage */}
-                        <Link
-                          href={`/${portalType}/attendance/leaves/${item.id}`}
-                          title="View complete application"
-                          className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-[#0b4da2] inline-flex items-center justify-center transition border border-slate-200 no-underline"
+                      </td>
+                      <td className="py-4 px-5 font-bold text-slate-900 whitespace-nowrap">
+                        <span className="bg-slate-100 text-slate-800 px-3 py-1 rounded-xl border border-slate-200 text-xs font-bold inline-block">
+                          {item.days_count} {item.days_count === 1 ? 'Day' : 'Days'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-5 text-slate-600 text-xs leading-relaxed max-w-xs">
+                        <p className="m-0 line-clamp-2">{item.reason || 'Standard application'}</p>
+                        {item.emergency_contact && (
+                          <span className="block text-[11px] text-slate-400 font-mono mt-1">Tel: {item.emergency_contact}</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-5">
+                        {item.attachment_url ? (
+                          <a
+                            href={item.attachment_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 text-[#0b4da2] font-bold text-xs no-underline border border-slate-200 transition"
+                          >
+                            <Paperclip size={13} />
+                            <span className="max-w-[130px] truncate">{item.attachment_name || 'View File'}</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-300 text-xs font-semibold">—</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-5 whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                            item.status === 'approved'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : item.status === 'rejected'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
                         >
-                          <Eye size={14} />
-                        </Link>
+                          {item.status === 'approved' && <Check size={13} />}
+                          {item.status === 'rejected' && <X size={13} />}
+                          {item.status === 'pending' && <Clock size={13} />}
+                          <span className="capitalize">{item.status}</span>
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          {item.status === 'pending' && (
+                            <>
+                              <button
+                                type="button"
+                                disabled={isProcessing}
+                                onClick={() => handleApprove(item)}
+                                title="Approve request"
+                                className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer border-0 inline-flex items-center gap-1 shadow-2xs transition"
+                              >
+                                <Check size={13} />
+                                <span className="hidden sm:inline">Approve</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isProcessing}
+                                onClick={() => {
+                                  setRejectItem(item);
+                                  setRejectReason('');
+                                }}
+                                title="Reject request"
+                                className="h-8 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer border-0 inline-flex items-center gap-1 shadow-2xs transition"
+                              >
+                                <X size={13} />
+                                <span className="hidden sm:inline">Reject</span>
+                              </button>
+                            </>
+                          )}
 
-                        {/* Edit Application in Dedicated Subpage */}
-                        <Link
-                          href={`/${portalType}/attendance/leaves/${item.id}/edit`}
-                          title="Edit application details"
-                          className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-700 inline-flex items-center justify-center transition border border-slate-200 no-underline"
-                        >
-                          <Pencil size={14} />
-                        </Link>
+                          {/* View Application in Dedicated Subpage */}
+                          <Link
+                            href={`${basePath}/attendance/leaves/${item.id}`}
+                            title="View complete application"
+                            className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-[#0b4da2] inline-flex items-center justify-center transition border border-slate-200 no-underline"
+                          >
+                            <Eye size={14} />
+                          </Link>
 
-                        {/* Delete Application */}
-                        <button
-                          type="button"
-                          disabled={isProcessing}
-                          onClick={() => handleDeleteLeave(item)}
-                          title="Delete application"
-                          className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 inline-flex items-center justify-center transition border border-slate-200 cursor-pointer"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {/* Edit Application in Dedicated Subpage */}
+                          <Link
+                            href={`${basePath}/attendance/leaves/${item.id}/edit`}
+                            title="Edit application details"
+                            className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-amber-50 text-slate-600 hover:text-amber-700 inline-flex items-center justify-center transition border border-slate-200 no-underline"
+                          >
+                            <Pencil size={14} />
+                          </Link>
+
+                          {/* Delete Application */}
+                          <button
+                            type="button"
+                            disabled={isProcessing}
+                            onClick={() => handleDeleteLeave(item)}
+                            title="Delete application"
+                            className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 inline-flex items-center justify-center transition border border-slate-200 cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
-
 
       {/* Reject Modal */}
       {rejectItem && (

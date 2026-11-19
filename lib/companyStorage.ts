@@ -395,6 +395,73 @@ export async function updateCompanyStatus(
 }
 
 /**
+ * Toggle auto renewal for a company.
+ * Calls backend API /companies/{id}/auto-renewal and synchronizes local storage.
+ */
+export async function toggleCompanyAutoRenewal(
+  companyId: string,
+  autoRenewal?: boolean
+): Promise<{ success: boolean; company?: Company; message?: string }> {
+  const current = getStoredCompanies();
+  const company = current.find((c) => c.id === companyId || (c.db_id && String(c.db_id) === String(companyId)));
+  const nextVal = autoRenewal !== undefined ? autoRenewal : !(company?.auto_renewal ?? false);
+
+  if (company) {
+    const updatedCompany: Company = {
+      ...company,
+      auto_renewal: nextVal,
+      updatedAt: new Date().toISOString(),
+    };
+    const updatedList = current.map((c) => (c.id === company.id ? updatedCompany : c));
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedList));
+        window.dispatchEvent(new Event(STORAGE_EVENT));
+      } catch (err) {
+        console.error('LocalStorage error updating auto renewal:', err);
+      }
+    }
+  }
+
+  try {
+    const targetId = company?.db_id ? String(company.db_id) : companyId;
+    const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(targetId)}/auto-renewal`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        auto_renewal: nextVal,
+      }),
+    });
+
+    if (res.ok) {
+      const result = await res.json();
+      if (result.company) {
+        const latest = getStoredCompanies();
+        const synced = latest.map((c) =>
+          c.id === companyId || (c.db_id && String(c.db_id) === String(companyId))
+            ? { ...c, ...result.company }
+            : c
+        );
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(synced));
+          window.dispatchEvent(new Event(STORAGE_EVENT));
+        }
+        return { success: true, company: result.company, message: result.message };
+      }
+    }
+  } catch (err) {
+    console.warn('Backend toggleAutoRenewal failed, using local optimistic state:', err);
+  }
+
+  const latest = getStoredCompanies();
+  const updated = latest.find((c) => c.id === companyId || (c.db_id && String(c.db_id) === String(companyId)));
+  return { success: true, company: updated, message: nextVal ? 'Auto-renewal enabled' : 'Auto-renewal disabled' };
+}
+
+/**
  * Delete a company by ID from backend API and local storage.
  */
 export async function deleteStoredCompany(companyId: string): Promise<Company[]> {

@@ -143,6 +143,8 @@ export type Company = {
   subscription_status?: string | null;
   subscription_trial_days?: number;
   subscription_notes?: string | null;
+  auto_renewal?: boolean;
+  last_auto_renewed_at?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
