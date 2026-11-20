@@ -845,28 +845,18 @@ export default function MasterAdminSubscriptionPlansPage() {
 
           {/* Active Subscription Plan Details Table */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 shadow-2xs">
                   <ShieldCheck size={20} />
                 </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                    Active Subscription Plan Details
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Comprehensive overview of active subscriptions, timelines, and instant license switching.
-                  </p>
-                </div>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                  Active Subscription Plans
+                </h2>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0b4da2] border border-blue-200">
-                  12 Columns • Real-Time Countdown • Scrollable
-                </span>
-                <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                  Total Companies: {companies.length}
-                </span>
-              </div>
+              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                Total Companies: {companies.length}
+              </span>
             </div>
 
             {/* Table with Horizontal Scroll */}
