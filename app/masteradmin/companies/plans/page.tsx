@@ -40,6 +40,7 @@ import {
   createInvoice,
 } from '@/lib/companyTrialAndFinanceStorage';
 import { getMasterAdminUser, AuthUser } from '@/lib/auth';
+import CompanyPaymentModal, { PaymentTabType } from '@/components/CompanyPaymentModal';
 
 const FALLBACK_PLANS: SubscriptionPlan[] = [
   {
@@ -144,11 +145,22 @@ export default function MasterAdminSubscriptionPlansPage() {
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
-  // Upgrade Modal State
-  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
-  const [selectedPlanToUpgrade, setSelectedPlanToUpgrade] = useState<SubscriptionPlan | null>(null);
-  const [submittingUpgrade, setSubmittingUpgrade] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'Bank Transfer' | 'Online Banking / FPX' | 'Corporate Cheque'>('Online Banking / FPX');
+  // Payment Modal State ("amar format" CompanyPaymentModal)
+  const [paymentModalCompany, setPaymentModalCompany] = useState<Company | null>(null);
+  const [paymentModalTargetPlan, setPaymentModalTargetPlan] = useState<SubscriptionPlan | null>(null);
+  const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
+
+  // Live 1-second countdown ticker
+  const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message });
@@ -268,95 +280,17 @@ export default function MasterAdminSubscriptionPlansPage() {
     };
   }, [activeCompany]);
 
-  const handleOpenUpgradeModal = (plan: SubscriptionPlan) => {
-    setSelectedPlanToUpgrade(plan);
-    setIsUpgradeModalOpen(true);
+  const handleOpenPaymentForPlan = (plan: SubscriptionPlan) => {
+    if (!activeCompany) return;
+    setPaymentModalCompany(activeCompany);
+    setPaymentModalTargetPlan(plan);
   };
 
-  const handleConfirmUpgrade = async () => {
-    if (!activeCompany || !selectedPlanToUpgrade) return;
-    setSubmittingUpgrade(true);
-
-    try {
-      const now = new Date();
-      const expires = new Date();
-      expires.setDate(expires.getDate() + selectedPlanToUpgrade.duration_days);
-
-      const payload = {
-        subscription_plan_key: selectedPlanToUpgrade.plan_key,
-        subscription_starts_at: now.toISOString(),
-        subscription_expires_at: expires.toISOString(),
-        subscription_status: 'active',
-        subscription_trial_days: selectedPlanToUpgrade.trial_days || 0,
-        subscription_notes: `Upgraded by Master Admin (${currentUser?.name || 'Authorized Admin'}) on ${now.toLocaleString()}`,
-      };
-
-      const res = await updateCompanySubscription(activeCompany.id, payload);
-
-      if (res.success) {
-        // Also generate corporate invoice record for accounting tracking
-        try {
-          await createInvoice({
-            company_id: activeCompany.id,
-            company_name: activeCompany.name,
-            customer_name: `${activeCompany.name} (Subscription Plan)`,
-            customer_email: activeCompany.email || '',
-            package_name: selectedPlanToUpgrade.name,
-            total_amount: Number(selectedPlanToUpgrade.price) || 199,
-            amount_paid: Number(selectedPlanToUpgrade.price) || 199,
-            balance_due: 0,
-            payment_status: 'Paid',
-            payment_method: paymentMethod,
-            payment_reference: `SUB-${Date.now().toString().slice(-6)}`,
-            items: [
-              {
-                id: '1',
-                description: `${selectedPlanToUpgrade.name} (${selectedPlanToUpgrade.duration_days} Days Full System License)`,
-                quantity: 1,
-                unit_price: Number(selectedPlanToUpgrade.price) || 199,
-                total_price: Number(selectedPlanToUpgrade.price) || 199,
-              },
-            ],
-          });
-        } catch (invErr) {
-          console.warn('Auto invoice notice:', invErr);
-        }
-
-        // Update local company storage immediately
-        updateStoredCompany({
-          ...activeCompany,
-          subscription_plan_key: selectedPlanToUpgrade.plan_key,
-          subscription_starts_at: payload.subscription_starts_at,
-          subscription_expires_at: payload.subscription_expires_at,
-          subscription_status: 'active',
-        });
-
-        // Update current view state
-        setCompanies((prev) =>
-          prev.map((c) =>
-            c.id === activeCompany.id
-              ? {
-                ...c,
-                subscription_plan_key: selectedPlanToUpgrade.plan_key,
-                subscription_starts_at: payload.subscription_starts_at,
-                subscription_expires_at: payload.subscription_expires_at,
-                subscription_status: 'active',
-              }
-              : c
-          )
-        );
-
-        setIsUpgradeModalOpen(false);
-        showToast('success', `Subscription successfully updated to ${selectedPlanToUpgrade.name}!`);
-      } else {
-        throw new Error(res.message || 'Failed to update subscription.');
-      }
-    } catch (err: any) {
-      console.error('Failed to upgrade subscription:', err);
-      showToast('error', err.message || 'Unable to update subscription. Please verify backend connection.');
-    } finally {
-      setSubmittingUpgrade(false);
-    }
+  const handleOpenPaymentForCompany = (comp: Company) => {
+    setSelectedCompanyId(comp.id);
+    setPaymentModalCompany(comp);
+    const activePlan = getCompanyActivePlan(comp);
+    setPaymentModalTargetPlan(activePlan || plans[0] || null);
   };
 
   const isPlanActive = (plan: SubscriptionPlan) => {
@@ -364,6 +298,273 @@ export default function MasterAdminSubscriptionPlansPage() {
     const cleanPlanKey = (plan.plan_key || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanPlanName = (plan.name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     return cleanPlanKey === normalizedActiveKey || cleanPlanName === normalizedActiveKey;
+  };
+
+  // Helper to determine active plan object for any company
+  const getCompanyActivePlan = (comp: Company): SubscriptionPlan | null => {
+    const rawKey = (comp.subscription_plan_key || (comp as any).subscription_package || '').trim().toLowerCase();
+    const cleanKey = rawKey.replace(/[^a-z0-9]/g, '');
+    if (!cleanKey) return null;
+    return (
+      plans.find((p) => {
+        const pk = (p.plan_key || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const pn = (p.name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        return pk === cleanKey || pn === cleanKey;
+      }) || null
+    );
+  };
+
+  // Helper to calculate timeline and expiry for any company
+  const getCompanyTimeline = (comp: Company) => {
+    const expiresAt = comp.subscription_expires_at;
+    const startsAt = comp.subscription_starts_at;
+    const status = comp.subscription_status || 'active';
+
+    if (!expiresAt) {
+      return {
+        hasExpiry: false,
+        isExpired: false,
+        daysLeft: null,
+        formattedExpires: 'Unlimited / Not Set',
+        formattedStarts: startsAt ? new Date(startsAt).toLocaleDateString('en-GB') : 'Initial Setup',
+        statusBadge: status === 'trial_active' ? 'Trial' : 'Active',
+      };
+    }
+
+    const expTime = new Date(expiresAt).getTime();
+    const nowTime = Date.now();
+    const diffDays = Math.ceil((expTime - nowTime) / (1000 * 60 * 60 * 24));
+    const isExpired = diffDays <= 0;
+
+    return {
+      hasExpiry: true,
+      isExpired,
+      daysLeft: diffDays,
+      formattedExpires: new Date(expiresAt).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      formattedStarts: startsAt
+        ? new Date(startsAt).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })
+        : 'Active Session',
+      statusBadge: isExpired ? 'Expired' : status === 'trial_active' ? 'Trial' : 'Active',
+    };
+  };
+
+  // Helper to compute live ticking countdown info
+  const getCountdownInfo = (expiresAtStr?: string | null) => {
+    if (!expiresAtStr) {
+      return {
+        hasExpiry: false,
+        isExpired: false,
+        isExpiringSoon: false,
+        isExpiringVerySoon: false,
+        label: 'No Expiry Set',
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
+
+    const expireTime = new Date(expiresAtStr).getTime();
+    if (isNaN(expireTime)) {
+      return {
+        hasExpiry: false,
+        isExpired: false,
+        isExpiringSoon: false,
+        isExpiringVerySoon: false,
+        label: 'Invalid Date',
+        color: 'text-slate-400 bg-slate-50 border-slate-200',
+      };
+    }
+
+    const diff = expireTime - currentTime;
+    const isExpired = diff <= 0;
+
+    if (isExpired) {
+      const pastSeconds = Math.abs(Math.floor(diff / 1000));
+      const pastDays = Math.floor(pastSeconds / 86400);
+      const pastHours = Math.floor((pastSeconds % 86400) / 3600);
+      return {
+        hasExpiry: true,
+        isExpired: true,
+        isExpiringSoon: false,
+        isExpiringVerySoon: false,
+        label: pastDays > 0 ? `Expired (${pastDays}d ${pastHours}h ago)` : `Expired (<1d ago)`,
+        color: 'bg-rose-50 text-rose-700 border-rose-200',
+      };
+    }
+
+    const totalSecs = Math.floor(diff / 1000);
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    const isExpiringSoon = days <= 7;
+    const isExpiringVerySoon = days <= 1;
+
+    let label = '';
+    if (days > 0) {
+      label = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    } else if (hours > 0) {
+      label = `${hours}h ${minutes}m ${seconds}s`;
+    } else {
+      label = `${minutes}m ${seconds}s`;
+    }
+
+    return {
+      hasExpiry: true,
+      isExpired: false,
+      isExpiringSoon,
+      isExpiringVerySoon,
+      label,
+      color: isExpiringSoon
+        ? 'bg-amber-50 text-amber-800 border-amber-300'
+        : 'bg-emerald-50 text-emerald-800 border-emerald-200',
+    };
+  };
+
+  const handlePaymentSubmit = async (paymentInfo: {
+    amount: number;
+    method: string;
+    reference: string;
+    bankName: string;
+    notes: string;
+    tab: PaymentTabType;
+    slipData?: string | null;
+    slipName?: string;
+    planKey?: string;
+    planName?: string;
+    packageDurationDays?: number;
+  }) => {
+    if (!paymentModalCompany) return;
+
+    setIsSubmittingPayment(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+      const assignedPlan = plans.find(
+        (p) =>
+          p.plan_key === (paymentInfo.planKey || paymentModalCompany.subscription_plan_key) ||
+          p.name?.toLowerCase() === (paymentInfo.planName || paymentModalCompany.subscription_plan_key)?.toLowerCase()
+      );
+      const selectedPlanName = paymentInfo.planName || assignedPlan?.name || paymentModalCompany.subscription_plan_key || 'Subscription Package';
+      const selectedPlanKey = paymentInfo.planKey || assignedPlan?.plan_key || paymentModalCompany.subscription_plan_key || '1_month';
+      const selectedDurationDays = Number(paymentInfo.packageDurationDays || assignedPlan?.duration_days) || 30;
+      const total = paymentInfo.amount;
+
+      let updatedWalletBalance = (paymentModalCompany as any).wallet_balance;
+      if (paymentInfo.tab === 'wallet') {
+        const deductRes = await fetch(
+          `${apiBase}/companies/${encodeURIComponent(paymentModalCompany.id)}/wallet/deduct-balance`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+              amount: total,
+              reference: paymentInfo.reference,
+              notes: paymentInfo.notes || `Wallet payment for ${selectedPlanName}`,
+              requested_by: currentUser?.name || 'Master Admin',
+            }),
+          }
+        );
+        const deductData = await deductRes.json();
+        if (!deductRes.ok || !deductData.success) {
+          throw new Error(deductData.message || 'Insufficient wallet balance for this payment.');
+        }
+        updatedWalletBalance = deductData.wallet_balance;
+      }
+
+      // 1. Create official Paid Corporate Invoice record
+      try {
+        await createInvoice({
+          company_id: paymentModalCompany.id,
+          company_name: paymentModalCompany.name,
+          customer_name: paymentModalCompany.name,
+          customer_email: paymentModalCompany.email || '',
+          customer_phone: paymentModalCompany.phone || '',
+          customer_address: paymentModalCompany.address || '',
+          package_name: selectedPlanName,
+          invoice_date: new Date().toISOString().slice(0, 10),
+          items: [
+            {
+              id: '1',
+              description: `Subscription Access: ${selectedPlanName} (${selectedDurationDays} Days)`,
+              qty: 1,
+              quantity: 1,
+              unit_price: total,
+              total: total,
+              total_price: total,
+            },
+          ],
+          total_amount: total,
+          amount_paid: total,
+          balance_due: 0,
+          currency: 'MYR',
+          payment_status: 'Paid',
+          payment_method: paymentInfo.method,
+          payment_reference: paymentInfo.reference,
+          bank_name: paymentInfo.bankName,
+          notes: paymentInfo.notes || `Payment recorded directly by Master Admin for ${paymentModalCompany.name}`,
+        });
+      } catch (invErr) {
+        console.warn('Auto invoice notice:', invErr);
+      }
+
+      // 2. Activate / Extend company subscription
+      const now = new Date();
+      const expires = new Date();
+      expires.setDate(expires.getDate() + selectedDurationDays);
+
+      const payload = {
+        subscription_plan_key: selectedPlanKey,
+        subscription_starts_at: now.toISOString(),
+        subscription_expires_at: expires.toISOString(),
+        subscription_status: 'active',
+        extra_days: selectedDurationDays,
+        subscription_notes: `Subscription payment of RM ${total.toFixed(2)} (${selectedPlanName}) recorded via ${paymentInfo.method}.`,
+      };
+
+      await updateCompanySubscription(paymentModalCompany.id, payload);
+
+      // 3. Update local company storage
+      updateStoredCompany({
+        ...paymentModalCompany,
+        wallet_balance: updatedWalletBalance,
+        subscription_plan_key: selectedPlanKey,
+        subscription_starts_at: payload.subscription_starts_at,
+        subscription_expires_at: payload.subscription_expires_at,
+        subscription_status: 'active',
+      });
+
+      // 4. Update current view state
+      setCompanies((prev) =>
+        prev.map((c) =>
+          c.id === paymentModalCompany.id
+            ? {
+                ...c,
+                wallet_balance: updatedWalletBalance,
+                subscription_plan_key: selectedPlanKey,
+                subscription_starts_at: payload.subscription_starts_at,
+                subscription_expires_at: payload.subscription_expires_at,
+                subscription_status: 'active',
+              }
+            : c
+        )
+      );
+
+      setPaymentModalCompany(null);
+      setPaymentModalTargetPlan(null);
+      showToast('success', `Payment confirmed! Subscription for "${paymentModalCompany.name}" updated to ${selectedPlanName}.`);
+    } catch (err: any) {
+      console.error('Failed to process payment:', err);
+      showToast('error', err.message || 'Unable to complete payment and update subscription.');
+    } finally {
+      setIsSubmittingPayment(false);
+    }
   };
 
   return (
@@ -628,7 +829,7 @@ export default function MasterAdminSubscriptionPlansPage() {
                         </div>
                       ) : (
                         <button
-                          onClick={() => handleOpenUpgradeModal(plan)}
+                          onClick={() => handleOpenPaymentForPlan(plan)}
                           className="w-full py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#073675] text-white text-xs font-bold transition-all shadow-xs hover:shadow-md cursor-pointer flex items-center justify-center gap-1.5 border-0"
                         >
                           <Zap size={14} className="text-yellow-400" />
@@ -641,110 +842,259 @@ export default function MasterAdminSubscriptionPlansPage() {
               })}
             </div>
           </div>
+
+          {/* Active Subscription Plan Details Table */}
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/80 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100 shadow-2xs">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                    Active Subscription Plan Details
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Comprehensive overview of active subscriptions, timelines, and instant license switching.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-[#0b4da2] border border-blue-200">
+                  12 Columns • Real-Time Countdown • Scrollable
+                </span>
+                <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                  Total Companies: {companies.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Table with Horizontal Scroll */}
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs bg-white">
+              <table className="w-full text-left border-collapse text-xs min-w-[1720px]">
+                <thead>
+                  <tr className="bg-slate-50/95 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px] tracking-wider whitespace-nowrap">
+                    <th className="py-3.5 px-4 text-center w-12">#</th>
+                    <th className="py-3.5 px-4 min-w-[220px]">Company Name</th>
+                    <th className="py-3.5 px-4 min-w-[150px]">ROC Number</th>
+                    <th className="py-3.5 px-4 min-w-[160px]">Sector / Industry</th>
+                    <th className="py-3.5 px-4 min-w-[180px]">Current Active Plan</th>
+                    <th className="py-3.5 px-4 min-w-[130px]">Plan Rate</th>
+                    <th className="py-3.5 px-4 min-w-[120px]">Duration</th>
+                    <th className="py-3.5 px-4 min-w-[140px]">Activation Date</th>
+                    <th className="py-3.5 px-4 min-w-[140px]">Expiration Date</th>
+                    <th className="py-3.5 px-4 min-w-[210px]">Live Countdown</th>
+                    <th className="py-3.5 px-4 min-w-[150px]">Validity Status</th>
+                    <th className="py-3.5 px-4 text-center min-w-[150px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-800">
+                  {companies.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="py-10 text-center text-slate-400 italic">
+                        No company records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    companies.map((comp, idx) => {
+                      const activePlan = getCompanyActivePlan(comp);
+                      const timeline = getCompanyTimeline(comp);
+                      const countdown = getCountdownInfo(comp.subscription_expires_at);
+                      const isCurrentlyInspected = comp.id === activeCompany?.id;
+
+                      return (
+                        <tr
+                          key={comp.id}
+                          className={`transition-colors hover:bg-blue-50/40 ${isCurrentlyInspected ? 'bg-blue-50/25' : ''}`}
+                        >
+                          {/* 1. Serial # */}
+                          <td className="py-3.5 px-4 text-center font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                            {String(idx + 1).padStart(2, '0')}
+                          </td>
+
+                          {/* 2. Company Name */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#0b4da2] font-black text-xs flex items-center justify-center border border-blue-100 shrink-0">
+                                {comp.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                                <span>{comp.name}</span>
+                                {isCurrentlyInspected && (
+                                  <span className="text-[10px] bg-blue-100 text-[#0b4da2] font-bold px-1.5 py-0.5 rounded">
+                                    Inspecting
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 3. ROC Number */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {comp.roc ? (
+                              <span className="font-mono text-xs text-slate-700 font-semibold px-2 py-0.5 rounded bg-slate-100/80 border border-slate-200/60">
+                                {comp.roc}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Not Provided</span>
+                            )}
+                          </td>
+
+                          {/* 4. Sector / Industry */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-medium text-[11px] border border-slate-200">
+                              {comp.sector || 'General Corporate'}
+                            </span>
+                          </td>
+
+                          {/* 5. Current Active Plan */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {activePlan ? (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs shadow-2xs">
+                                <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                                <span>{activePlan.name}</span>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-xs">
+                                <AlertCircle size={13} className="text-amber-600 shrink-0" />
+                                <span>{comp.subscription_plan_key || (comp as any).subscription_package || 'No Plan Active'}</span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 6. Plan Rate */}
+                          <td className="py-3.5 px-4 whitespace-nowrap font-mono">
+                            {activePlan ? (
+                              <span className="font-extrabold text-slate-900 text-xs">
+                                {activePlan.currency || 'RM'} {Number(activePlan.price).toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">N/A</span>
+                            )}
+                          </td>
+
+                          {/* 7. Duration */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {activePlan ? (
+                              <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-[#0b4da2] font-semibold text-[11px] border border-blue-100">
+                                {activePlan.duration_days} Days
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">—</span>
+                            )}
+                          </td>
+
+                          {/* 8. Activation Date */}
+                          <td className="py-3.5 px-4 whitespace-nowrap font-mono text-[11px] text-slate-600 font-medium">
+                            {timeline.formattedStarts}
+                          </td>
+
+                          {/* 9. Expiration Date */}
+                          <td className="py-3.5 px-4 whitespace-nowrap font-mono text-[11px] text-slate-700 font-semibold">
+                            {timeline.formattedExpires}
+                          </td>
+
+                          {/* 10. Live Countdown */}
+                          <td className="py-3.5 px-4 whitespace-nowrap" suppressHydrationWarning>
+                            {countdown.hasExpiry ? (
+                              <div
+                                suppressHydrationWarning
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono font-bold border shadow-2xs ${
+                                  mounted ? countdown.color : 'text-slate-400 bg-slate-50 border-slate-200'
+                                }`}
+                              >
+                                {countdown.isExpired ? (
+                                  <AlertCircle size={13} className="text-rose-600 shrink-0" />
+                                ) : countdown.isExpiringSoon ? (
+                                  <Hourglass size={13} className="text-amber-600 animate-spin shrink-0" />
+                                ) : (
+                                  <Clock size={13} className="text-emerald-600 shrink-0" />
+                                )}
+                                <span suppressHydrationWarning className="tracking-tight">
+                                  {mounted ? countdown.label : '...'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">No Expiry Set</span>
+                            )}
+                          </td>
+
+                          {/* 11. Validity Status */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {timeline.hasExpiry ? (
+                              timeline.isExpired ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                  Expired
+                                </span>
+                              ) : (
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-2xs ${
+                                  (timeline.daysLeft || 0) <= 7
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    (timeline.daysLeft || 0) <= 7 ? 'bg-amber-500' : 'bg-emerald-500'
+                                  }`} />
+                                  Active
+                                </span>
+                              )
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                Permanent / Active
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 12. Action */}
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPaymentForCompany(comp)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-[#0b4da2] text-[#0b4da2] hover:text-white border border-blue-200 hover:border-transparent font-bold text-xs transition-all shadow-2xs hover:shadow-md cursor-pointer"
+                            >
+                              <RefreshCw size={12} />
+                              <span>Change Plan</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
 
-      {/* Upgrade / Switch Confirmation Modal */}
-      {isUpgradeModalOpen && selectedPlanToUpgrade && activeCompany && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-100 relative">
-            <button
-              onClick={() => setIsUpgradeModalOpen(false)}
-              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
-            >
-              <X size={18} />
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#0b4da2] flex items-center justify-center shrink-0 border border-blue-100 shadow-2xs">
-                <Crown size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Confirm Plan Upgrade</h3>
-                <p className="text-xs text-slate-500">
-                  Switch subscription package for <strong>{activeCompany.name}</strong>
-                </p>
-              </div>
-            </div>
-
-            {/* Plan Comparison Summary Box */}
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3 text-xs">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500 font-medium">New Membership Tier:</span>
-                <strong className="text-slate-900 font-bold">{selectedPlanToUpgrade.name}</strong>
-              </div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500 font-medium">Coverage Duration:</span>
-                <strong className="text-slate-900 font-bold">{selectedPlanToUpgrade.duration_days} Days</strong>
-              </div>
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500 font-medium">Package Price:</span>
-                <strong className="text-emerald-700 font-bold text-sm">
-                  {selectedPlanToUpgrade.currency || 'RM'} {Number(selectedPlanToUpgrade.price).toFixed(2)}
-                </strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-medium">New Expiration Date:</span>
-                <strong className="text-slate-900 font-bold">
-                  {new Date(Date.now() + selectedPlanToUpgrade.duration_days * 86400000).toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </strong>
-              </div>
-            </div>
-
-            {/* Payment / Activation Method Selection */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700">Billing / Payment Method:</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-              >
-                <option value="Online Banking / FPX">Online Banking / FPX Instant Transfer</option>
-                <option value="Bank Transfer">Direct Bank Transfer / TT</option>
-                <option value="Corporate Cheque">Corporate Cheque / Deposit</option>
-              </select>
-            </div>
-
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              * Activating this tier will immediately apply the new subscription license and generate an automated official corporate invoice record.
-            </p>
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsUpgradeModalOpen(false)}
-                disabled={submittingUpgrade}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold cursor-pointer transition-colors bg-white"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmUpgrade}
-                disabled={submittingUpgrade}
-                className="px-5 py-2.5 rounded-xl bg-[#0b4da2] hover:bg-[#073675] text-white text-xs font-bold transition-all shadow-md cursor-pointer flex items-center gap-1.5 border-0 disabled:opacity-50"
-              >
-                {submittingUpgrade ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin" />
-                    <span>Activating License...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check size={14} />
-                    <span>Confirm & Activate Plan</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Official Platform Company Payment Modal ("amar format") */}
+      <CompanyPaymentModal
+        isOpen={!!paymentModalCompany}
+        onClose={() => {
+          setPaymentModalCompany(null);
+          setPaymentModalTargetPlan(null);
+        }}
+        data={
+          paymentModalCompany
+            ? {
+                id: paymentModalCompany.id,
+                companyName: paymentModalCompany.name,
+                roc: paymentModalCompany.roc,
+                email: paymentModalCompany.email,
+                phone: paymentModalCompany.phone,
+                address: paymentModalCompany.address,
+                planPackage: paymentModalTargetPlan?.plan_key || paymentModalCompany.subscription_plan_key || '1_month',
+                packageDurationDays: paymentModalTargetPlan?.duration_days,
+                amount: Number(paymentModalTargetPlan?.price) || 199,
+                walletBalance: (paymentModalCompany as any).wallet_balance,
+                walletAccountNo: (paymentModalCompany as any).wallet_account_no,
+              }
+            : null
+        }
+        isSubmitting={isSubmittingPayment}
+        onSubmit={handlePaymentSubmit}
+      />
     </div>
   );
 }

@@ -404,7 +404,7 @@ export default function MasterAdminLayout({
             isGroup: true,
             children: [
               {
-                name: 'Acco Companies',
+                name: 'Companies',
                 href: '/masteradmin/companies',
                 icon: Building2,
                 badge: permittedCompanyCount > 0 ? `${permittedCompanyCount}` : undefined,
