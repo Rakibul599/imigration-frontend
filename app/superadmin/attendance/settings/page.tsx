@@ -33,6 +33,10 @@ import {
   Wifi,
   WifiOff,
   Zap,
+  HeartPulse,
+  Stethoscope,
+  FileCheck,
+  Award,
 } from 'lucide-react';
 
 import {
@@ -62,20 +66,21 @@ import {
   deletePublicHoliday,
   calculateShiftDuration,
   updateYearlyAnnualLeave,
+  updateMedicalHolidaySettings,
 } from '@/lib/attendanceSettingsStorage';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function OfficeLocationSettingsPage() {
-  // Navigation Tabs: 'schedule' | 'holidays' | 'annual_leave' | 'geofence'
-  const [activeTab, setActiveTab] = useState<'schedule' | 'holidays' | 'annual_leave' | 'geofence'>('schedule');
+  // Navigation Tabs: 'schedule' | 'holidays' | 'medical_holiday' | 'annual_leave' | 'geofence'
+  const [activeTab, setActiveTab] = useState<'schedule' | 'holidays' | 'medical_holiday' | 'annual_leave' | 'geofence'>('schedule');
 
   // Detect URL tab query parameter if present
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab === 'geofence' || tab === 'schedule' || tab === 'holidays' || tab === 'annual_leave') {
+      if (tab === 'geofence' || tab === 'schedule' || tab === 'holidays' || tab === 'medical_holiday' || tab === 'annual_leave') {
         setActiveTab(tab as any);
       }
     }
@@ -100,6 +105,16 @@ export default function OfficeLocationSettingsPage() {
   const [yearlyAnnualLeaveDays, setYearlyAnnualLeaveDays] = useState<number>(14);
   const [annualLeaveNotes, setAnnualLeaveNotes] = useState<string>('Standard corporate yearly annual leave policy');
   const [isSavingAnnualLeave, setIsSavingAnnualLeave] = useState<boolean>(false);
+
+  // Medical Holiday (MC) & Paid Salary Form State
+  const [yearlyMedicalLeaveDays, setYearlyMedicalLeaveDays] = useState<number>(14);
+  const [medicalLeaveSalaryType, setMedicalLeaveSalaryType] = useState<'normal_salary' | 'custom_percentage' | 'unpaid'>('normal_salary');
+  const [medicalLeavePaidPercentage, setMedicalLeavePaidPercentage] = useState<number>(100);
+  const [medicalLeaveRequiresCertificate, setMedicalLeaveRequiresCertificate] = useState<boolean>(true);
+  const [medicalLeaveNotes, setMedicalLeaveNotes] = useState<string>(
+    'Standard corporate Medical Holiday (MC) policy: Full normal basic salary is maintained for all verified doctor-certified medical leaves.'
+  );
+  const [isSavingMedicalHoliday, setIsSavingMedicalHoliday] = useState<boolean>(false);
 
   // Shift Modal State
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -174,6 +189,21 @@ export default function OfficeLocationSettingsPage() {
         setMonthlyHolidays(Number(data.schedule.monthly_fixed_holidays) ?? 2);
         if (data.schedule.yearly_annual_leave_days !== undefined && data.schedule.yearly_annual_leave_days !== null) {
           setYearlyAnnualLeaveDays(Number(data.schedule.yearly_annual_leave_days));
+        }
+        if (data.schedule.yearly_medical_leave_days !== undefined && data.schedule.yearly_medical_leave_days !== null) {
+          setYearlyMedicalLeaveDays(Number(data.schedule.yearly_medical_leave_days));
+        }
+        if (data.schedule.medical_leave_salary_type) {
+          setMedicalLeaveSalaryType(data.schedule.medical_leave_salary_type as any);
+        }
+        if (data.schedule.medical_leave_paid_percentage !== undefined && data.schedule.medical_leave_paid_percentage !== null) {
+          setMedicalLeavePaidPercentage(Number(data.schedule.medical_leave_paid_percentage));
+        }
+        if (data.schedule.medical_leave_requires_certificate !== undefined && data.schedule.medical_leave_requires_certificate !== null) {
+          setMedicalLeaveRequiresCertificate(Boolean(data.schedule.medical_leave_requires_certificate));
+        }
+        if (data.schedule.medical_leave_notes) {
+          setMedicalLeaveNotes(data.schedule.medical_leave_notes);
         }
         if (data.schedule.notes) {
           setAnnualLeaveNotes(data.schedule.notes);
@@ -459,6 +489,31 @@ export default function OfficeLocationSettingsPage() {
     }
   };
 
+  // --- MEDICAL HOLIDAY (MC) & NORMAL SALARY ACTIONS ---
+  const handleSaveMedicalHoliday = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (yearlyMedicalLeaveDays < 0 || yearlyMedicalLeaveDays > 365) {
+      showToast('error', 'Please enter a valid number of medical leave days (0 to 365).');
+      return;
+    }
+    setIsSavingMedicalHoliday(true);
+    try {
+      const updated = await updateMedicalHolidaySettings({
+        yearly_medical_leave_days: yearlyMedicalLeaveDays,
+        medical_leave_salary_type: medicalLeaveSalaryType,
+        medical_leave_paid_percentage: medicalLeaveSalaryType === 'normal_salary' ? 100 : medicalLeavePaidPercentage,
+        medical_leave_requires_certificate: medicalLeaveRequiresCertificate,
+        medical_leave_notes: medicalLeaveNotes,
+      });
+      setSchedule(updated);
+      showToast('success', `Medical Holiday (MC) settings saved successfully! Normal Salary is active.`);
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to update Medical Holiday (MC) settings.');
+    } finally {
+      setIsSavingMedicalHoliday(false);
+    }
+  };
+
   // --- LOCATION ACTIONS ---
 
   const handleToggleLocationActive = async (loc: OfficeLocation) => {
@@ -615,6 +670,26 @@ export default function OfficeLocationSettingsPage() {
               }`}
             >
               {holidays.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('medical_holiday')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer border ${
+              activeTab === 'medical_holiday'
+                ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-xs'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+            }`}
+          >
+            <HeartPulse size={15} />
+            <span>Medical Holiday (MC)</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                activeTab === 'medical_holiday' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+              }`}
+            >
+              {yearlyMedicalLeaveDays}d
             </span>
           </button>
 
@@ -1068,6 +1143,271 @@ export default function OfficeLocationSettingsPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB: MEDICAL HOLIDAY (MC) & NORMAL SALARY SETTINGS */}
+      {/* ========================================================= */}
+      {activeTab === 'medical_holiday' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <HeartPulse size={18} className="text-[#0b4da2]" />
+                  <h2 className="text-base font-bold text-slate-900 m-0">Medical Holiday (MC) Policy</h2>
+                </div>
+                <p className="text-xs text-slate-500 m-0 mt-0.5">
+                  Configure annual medical leave entitlement and day salary payment rules.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSaveMedicalHoliday()}
+                disabled={isSavingMedicalHoliday}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0b4da2] text-white hover:bg-blue-800 font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer border-0"
+              >
+                {isSavingMedicalHoliday ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    <span>Save Policy</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMedicalHoliday} className="mt-5 space-y-6">
+              {/* Day Salary Policy on MC */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Salary Compensation on Medical Holiday
+                </label>
+                <p className="text-xs text-slate-500 mb-3">
+                  Specify whether employees receive normal salary during approved medical leave.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                      medicalLeaveSalaryType === 'normal_salary'
+                        ? 'border-[#0b4da2] bg-white ring-1 ring-[#0b4da2] shadow-2xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="medicalLeaveSalaryType"
+                      value="normal_salary"
+                      checked={medicalLeaveSalaryType === 'normal_salary'}
+                      onChange={() => setMedicalLeaveSalaryType('normal_salary')}
+                      className="mt-0.5 text-[#0b4da2] focus:ring-[#0b4da2]"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900">Normal Salary (Full Pay)</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                          Default
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 m-0">100% daily basic salary, no deduction.</p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                      medicalLeaveSalaryType === 'custom_percentage'
+                        ? 'border-[#0b4da2] bg-white ring-1 ring-[#0b4da2] shadow-2xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="medicalLeaveSalaryType"
+                      value="custom_percentage"
+                      checked={medicalLeaveSalaryType === 'custom_percentage'}
+                      onChange={() => setMedicalLeaveSalaryType('custom_percentage')}
+                      className="mt-0.5 text-[#0b4da2] focus:ring-[#0b4da2]"
+                    />
+                    <div className="w-full">
+                      <span className="text-xs font-bold text-slate-900">Custom Rate (%)</span>
+                      <p className="text-[11px] text-slate-500 mt-0.5 m-0">Partial daily wage payment.</p>
+                      {medicalLeaveSalaryType === 'custom_percentage' && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={medicalLeavePaidPercentage}
+                            onChange={(e) => setMedicalLeavePaidPercentage(Number(e.target.value) || 0)}
+                            className="w-16 px-2 py-1 text-xs font-bold border border-slate-300 rounded bg-white text-slate-900"
+                          />
+                          <span className="text-[11px] font-medium text-slate-600">% of normal pay</span>
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                      medicalLeaveSalaryType === 'unpaid'
+                        ? 'border-rose-500 bg-white ring-1 ring-rose-500 shadow-2xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="medicalLeaveSalaryType"
+                      value="unpaid"
+                      checked={medicalLeaveSalaryType === 'unpaid'}
+                      onChange={() => setMedicalLeaveSalaryType('unpaid')}
+                      className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-slate-900">Unpaid Leave</span>
+                      <p className="text-[11px] text-slate-500 mt-0.5 m-0">Daily salary deducted from payroll.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* MC Entitlement Days */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <div className="max-w-xl">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Yearly Medical Holiday Entitlement (Days / Year)
+                  </label>
+                  <p className="text-xs text-slate-500 mb-3">
+                    Number of paid medical leave days allocated per employee per calendar year.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-44">
+                      <input
+                        type="number"
+                        min="0"
+                        max="365"
+                        step="0.5"
+                        value={yearlyMedicalLeaveDays}
+                        onChange={(e) => setYearlyMedicalLeaveDays(parseFloat(e.target.value) || 0)}
+                        className="w-full pl-4 pr-12 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b4da2]/30 focus:border-[#0b4da2] text-sm font-black text-slate-800 bg-white"
+                        placeholder="14"
+                        required
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                        Days
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[14, 16, 18, 22, 30, 60].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setYearlyMedicalLeaveDays(preset)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                            yearlyMedicalLeaveDays === preset
+                              ? 'bg-[#0b4da2] text-white border-[#0b4da2]'
+                              : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {preset} {preset === 60 ? 'Days (Hospitalisation)' : 'Days'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MC Slip Attachment Requirement */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide m-0">
+                      Medical Certificate (MC Slip) Attachment
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5 mb-0">
+                      Require official doctor or clinic MC slip upload with leave requests.
+                    </p>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={medicalLeaveRequiresCertificate}
+                      onChange={(e) => setMedicalLeaveRequiresCertificate(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0b4da2]"></div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Policy Notes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Policy Notes &amp; Terms
+                </label>
+                <textarea
+                  rows={2}
+                  value={medicalLeaveNotes}
+                  onChange={(e) => setMedicalLeaveNotes(e.target.value)}
+                  placeholder="Standard corporate Medical Holiday (MC) policy terms."
+                  className="w-full p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#0b4da2]/30 focus:border-[#0b4da2] text-xs font-normal text-slate-800 bg-white"
+                />
+              </div>
+
+              {/* Policy Summary Card */}
+              <div className="border border-blue-100 bg-blue-50/40 rounded-2xl p-5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-2xs">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider m-0">
+                      Yearly Entitlement
+                    </p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-2xl font-black text-slate-900">{yearlyMedicalLeaveDays}</span>
+                      <span className="text-xs text-slate-500 font-bold">Days / Year</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-2xs">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider m-0">
+                      Salary Status
+                    </p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-base font-black text-emerald-700">
+                        {medicalLeaveSalaryType === 'normal_salary'
+                          ? '100% Normal Salary'
+                          : medicalLeaveSalaryType === 'custom_percentage'
+                          ? `${medicalLeavePaidPercentage}% Basic Pay`
+                          : 'Unpaid Leave'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-2xs">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider m-0">
+                      Certificate Verification
+                    </p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-sm font-bold text-slate-800">
+                        {medicalLeaveRequiresCertificate ? 'Doctor Slip Required' : 'Optional'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-3 m-0 flex items-center gap-1.5">
+                  <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                  <span>Approved Medical Holiday days receive normal salary without wage deductions.</span>
+                </p>
+              </div>
+            </form>
           </div>
         </div>
       )}

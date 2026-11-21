@@ -5,6 +5,11 @@ export interface AttendanceSchedule {
   rest_time_minutes: number;
   monthly_fixed_holidays: number;
   yearly_annual_leave_days?: number;
+  yearly_medical_leave_days?: number;
+  medical_leave_salary_type?: 'normal_salary' | 'custom_percentage' | 'unpaid' | string;
+  medical_leave_paid_percentage?: number;
+  medical_leave_requires_certificate?: boolean;
+  medical_leave_notes?: string;
   weekly_fixed_days: string[];
   require_wifi?: boolean;
   allowed_wifi_ssids?: string;
@@ -55,6 +60,11 @@ export const DEFAULT_SCHEDULE: AttendanceSchedule = {
   rest_time_minutes: 60,
   monthly_fixed_holidays: 2,
   yearly_annual_leave_days: 14,
+  yearly_medical_leave_days: 14,
+  medical_leave_salary_type: 'normal_salary',
+  medical_leave_paid_percentage: 100,
+  medical_leave_requires_certificate: true,
+  medical_leave_notes: 'Standard corporate Medical Holiday (MC) policy: Full normal basic salary is maintained for all verified doctor-certified medical leaves.',
   weekly_fixed_days: ['Friday', 'Saturday'],
   notes: 'Standard corporate attendance & leave policy',
 };
@@ -167,6 +177,34 @@ export async function updateYearlyAnnualLeave(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || 'Failed to update yearly annual leave settings.');
+  }
+
+  const json = await res.json();
+  return json.schedule;
+}
+
+/**
+ * Update Medical Holiday (MC) settings, entitlement days, and normal salary protection
+ */
+export async function updateMedicalHolidaySettings(data: {
+  yearly_medical_leave_days: number;
+  medical_leave_salary_type?: string;
+  medical_leave_paid_percentage?: number;
+  medical_leave_requires_certificate?: boolean;
+  medical_leave_notes?: string;
+}): Promise<AttendanceSchedule> {
+  const res = await fetch(`${API_BASE}/attendance-settings/medical-holiday`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to update Medical Holiday (MC) settings.');
   }
 
   const json = await res.json();
