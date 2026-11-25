@@ -39,6 +39,8 @@ import {
   Trash2,
   AlertTriangle,
   Filter,
+  Banknote,
+  Wallet,
 } from 'lucide-react';
 import {
   SiteSettings,
@@ -131,6 +133,214 @@ export type CleanableModule = {
   record_count?: number;
 };
 
+const DEFAULT_CLEANABLE_MODULES: CleanableModule[] = [
+  {
+    key: 'companies',
+    name: 'Companies & Employers',
+    category: 'Business & Employers',
+    icon: 'Building2',
+    description: 'Registered employers, ROC data, quotations, invoices, and company wallet transactions.',
+    tables: [
+      'companies',
+      'working_sectors',
+      'company_trial_applications',
+      'company_quotations',
+      'company_invoices',
+      'company_wallet_transactions',
+    ],
+    storage_dirs: ['companies/logos', 'companies/directors'],
+    local_storage_keys: [
+      'agency_companies_data',
+      'agency_companies_updated',
+      'agency_company_quotations_v1',
+      'agency_company_invoices_v1',
+      'agency_company_trials_v1',
+    ],
+    record_count: 0,
+  },
+  {
+    key: 'customers',
+    name: 'Foreign Workers & Customers',
+    category: 'Foreign Workers',
+    icon: 'Users',
+    description: 'Foreign workers directory, cost wallets, deposits, dues, and target balances.',
+    tables: [
+      'customers',
+      'future_customers',
+      'customer_company_costs',
+      'customer_deposit_amounts',
+      'customer_pending_amounts',
+      'customer_target_amounts',
+    ],
+    storage_dirs: [
+      'customers/documents',
+      'customers/profiles',
+      'customers/company_costs',
+      'customers/deposits',
+    ],
+    local_storage_keys: [
+      'agency_customers_v1',
+      'agency_customer_targets_v1',
+      'agency_customer_deposits_v1',
+      'agency_customer_pendings_v1',
+      'agency_customer_costs_v1',
+    ],
+    record_count: 0,
+  },
+  {
+    key: 'employees',
+    name: 'Employees & Staff',
+    category: 'Staff & Payroll',
+    icon: 'UserCheck',
+    description: 'Internal employee roster, access roles, and permissions.',
+    tables: ['employees'],
+    storage_dirs: ['employees'],
+    local_storage_keys: ['agency_employees_v1'],
+    record_count: 0,
+  },
+  {
+    key: 'employee_salaries',
+    name: 'Salaries, Payroll & Overtime',
+    category: 'Staff & Payroll',
+    icon: 'Banknote',
+    description: 'Monthly employee salaries, auto calculated attendance pay, overtime, and statutory contributions.',
+    tables: ['employee_salaries', 'employee_statutory_contributions'],
+    storage_dirs: [],
+    local_storage_keys: [],
+    record_count: 0,
+  },
+  {
+    key: 'employee_wallets',
+    name: 'Employee Digital Wallets',
+    category: 'Staff & Payroll',
+    icon: 'Wallet',
+    description: 'Employee wallet audit transactions, payout requests, and advance settlements.',
+    tables: ['employee_wallet_transactions'],
+    storage_dirs: [],
+    local_storage_keys: [],
+    record_count: 0,
+  },
+  {
+    key: 'employee_leaves_resignations',
+    name: 'Leaves & Resignations',
+    category: 'Staff & Payroll',
+    icon: 'FileText',
+    description: 'Staff leave applications, resignation letters, and clearance requests.',
+    tables: ['employee_leaves', 'employee_resignations'],
+    storage_dirs: [],
+    local_storage_keys: ['agency_employee_leaves_v1', 'agency_employee_resignations_v1'],
+    record_count: 0,
+  },
+  {
+    key: 'attendances',
+    name: 'Attendance, Shifts & GPS',
+    category: 'Attendance & Operations',
+    icon: 'Clock',
+    description: 'Daily check-in logs, geofenced office coordinates, shift schedules, and public holidays.',
+    tables: [
+      'attendances',
+      'attendance_schedules',
+      'office_locations',
+      'working_shifts',
+      'public_holidays',
+    ],
+    storage_dirs: [],
+    local_storage_keys: ['agency_attendance_list_v1'],
+    record_count: 0,
+  },
+  {
+    key: 'face_profiles',
+    name: 'Biometric Face Templates',
+    category: 'Attendance & Operations',
+    icon: 'ScanFace',
+    description: 'Facial feature vectors, enrollment photos, and recognition cache.',
+    tables: ['face_profiles'],
+    storage_dirs: ['face-matching'],
+    local_storage_keys: [],
+    record_count: 0,
+  },
+  {
+    key: 'programs_agents',
+    name: 'Programs & Agency Partners',
+    category: 'Recruitment & Partners',
+    icon: 'Briefcase',
+    description: 'Recruitment visa programs, assigned agents, and agency partners.',
+    tables: ['programs', 'agents'],
+    storage_dirs: [],
+    local_storage_keys: [
+      'agency_programs_cache',
+      'agency_programs_v1',
+      'agency_agents_cache',
+      'agency_agents_v1',
+    ],
+    record_count: 0,
+  },
+  {
+    key: 'master_admins',
+    name: 'Master Administrators',
+    category: 'Staff & Access',
+    icon: 'ShieldAlert',
+    description: 'Master admin user accounts and assigned company access permissions.',
+    tables: ['master_admins'],
+    storage_dirs: [],
+    local_storage_keys: ['agency_master_admins_v1'],
+    record_count: 0,
+  },
+  {
+    key: 'subscription_plans',
+    name: 'Subscription & Pricing Plans',
+    category: 'Business & Employers',
+    icon: 'Crown',
+    description: 'Configured subscription packages, duration days, and plan pricing tiers.',
+    tables: ['company_subscription_plans'],
+    storage_dirs: [],
+    local_storage_keys: ['agency_subscription_plans_v1'],
+    record_count: 0,
+  },
+  {
+    key: 'storage_files',
+    name: 'Uploaded Storage Files',
+    category: 'Storage & Media',
+    icon: 'FolderArchive',
+    description: 'Document PDFs, logos, director ICs, and passports in public storage.',
+    tables: [],
+    storage_dirs: [
+      'companies/logos',
+      'companies/directors',
+      'customers/documents',
+      'customers/profiles',
+      'customers/company_costs',
+      'customers/deposits',
+      'employees',
+    ],
+    local_storage_keys: [],
+    record_count: 0,
+  },
+];
+
+function getCleanupApiBases(): string[] {
+  const list: string[] = [];
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      list.push(`http://${window.location.hostname}:8000/api`);
+      list.push('http://localhost:8000/api');
+      list.push('http://127.0.0.1:8000/api');
+    } else {
+      list.push(`${window.location.protocol}//api.${window.location.hostname.replace(/^myadmin\./, '')}/api`);
+    }
+  }
+  if (process.env.NEXT_PUBLIC_BACKEND_API_URL) {
+    list.push(process.env.NEXT_PUBLIC_BACKEND_API_URL);
+  }
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    list.push(process.env.NEXT_PUBLIC_API_URL);
+  }
+  list.push('http://localhost:8000/api');
+  list.push('http://127.0.0.1:8000/api');
+  list.push('https://api.acco.ink/api');
+  return Array.from(new Set(list.map((u) => u.replace(/\/+$/, ''))));
+}
+
 function renderModuleIcon(iconName?: string) {
   switch (iconName) {
     case 'Building2': return <Building2 size={16} className="text-blue-600" />;
@@ -148,6 +358,8 @@ function renderModuleIcon(iconName?: string) {
     case 'FolderArchive': return <FolderArchive size={16} className="text-orange-600" />;
     case 'Palette': return <Palette size={16} className="text-fuchsia-600" />;
     case 'Globe2': return <Globe2 size={16} className="text-emerald-600" />;
+    case 'Banknote': return <Banknote size={16} className="text-emerald-600" />;
+    case 'Wallet': return <Wallet size={16} className="text-blue-600" />;
     default: return <Database size={16} className="text-slate-600" />;
   }
 }
@@ -161,8 +373,8 @@ export default function SuperAdminSettingsPage() {
   const [cleanupResult, setCleanupResult] = useState<any>(null);
 
   // Selective Database Cleanup States
-  const [cleanableModules, setCleanableModules] = useState<CleanableModule[]>([]);
-  const [selectedCleanKeys, setSelectedCleanKeys] = useState<string[]>([]);
+  const [cleanableModules, setCleanableModules] = useState<CleanableModule[]>(DEFAULT_CLEANABLE_MODULES);
+  const [selectedCleanKeys, setSelectedCleanKeys] = useState<string[]>(DEFAULT_CLEANABLE_MODULES.map((m) => m.key));
   const [isLoadingModules, setIsLoadingModules] = useState(false);
   const [searchCleanTerm, setSearchCleanTerm] = useState('');
   const [cleanCategoryFilter, setCleanCategoryFilter] = useState<string>('ALL');
@@ -411,35 +623,29 @@ export default function SuperAdminSettingsPage() {
   const fetchModuleSummary = async () => {
     setIsLoadingModules(true);
     try {
-      const rawApi =
-        process.env.NEXT_PUBLIC_BACKEND_API_URL ||
-        process.env.NEXT_PUBLIC_API_URL ||
-        (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-          ? `${window.location.protocol}//api.${window.location.hostname.replace(/^myadmin\./, '')}/api`
-          : 'http://127.0.0.1:8000/api');
-      const cleanApi = rawApi.replace(/\/+$/, '');
+      const candidates = getCleanupApiBases();
+      let successfulModules: CleanableModule[] | null = null;
 
-      let res = await fetch(`${cleanApi}/clean-database/summary`, {
-        headers: { Accept: 'application/json' },
-      });
-      if (!res.ok && cleanApi.endsWith('/api')) {
-        const rootBase = cleanApi.replace(/\/api$/, '');
-        res = await fetch(`${rootBase}/clean-database/summary`, {
-          headers: { Accept: 'application/json' },
-        });
-      }
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.modules)) {
-          setCleanableModules(data.modules);
-          // Pre-select non-settings modules by default if none selected yet
-          setSelectedCleanKeys((prev) => {
-            if (prev.length > 0) return prev;
-            return data.modules
-              .filter((m: CleanableModule) => !['theme_settings', 'site_settings'].includes(m.key))
-              .map((m: CleanableModule) => m.key);
+      for (const base of candidates) {
+        try {
+          const res = await fetch(`${base}/clean-database/summary`, {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
           });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && Array.isArray(data.modules) && data.modules.length > 0) {
+              successfulModules = data.modules;
+              break;
+            }
+          }
+        } catch {
+          // try next candidate
         }
+      }
+
+      if (successfulModules && successfulModules.length > 0) {
+        setCleanableModules(successfulModules);
       }
     } catch (err) {
       console.error('Failed to fetch cleanup modules:', err);
@@ -447,6 +653,10 @@ export default function SuperAdminSettingsPage() {
       setIsLoadingModules(false);
     }
   };
+
+  useEffect(() => {
+    fetchModuleSummary();
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'system') {
@@ -472,9 +682,6 @@ export default function SuperAdminSettingsPage() {
     setSelectedCleanKeys([
       'companies',
       'customers',
-      'company_trial_applications',
-      'company_quotations_invoices',
-      'company_stat_cards',
     ]);
   };
 
@@ -529,8 +736,8 @@ export default function SuperAdminSettingsPage() {
 
     const isAll = targetKeys.length === cleanableModules.length;
     const confirmMessage = isAll
-      ? '⚠️ DANGER: You have selected ALL modules across the entire database!\n\nThis will permanently delete all records.\n\nOnly Super Admin access credentials (admin / superadmin2026) will be preserved.\n\nAre you sure you want to proceed?'
-      : `⚠️ Confirm Selective Database Cleanup:\n\nYou have selected ${targetKeys.length} module(s) to permanently delete:\n• ${selectedModuleNames.join('\n• ')}\n\nAll non-selected database tables will remain completely safe.\n\nProceed with deleting the selected data?`;
+      ? '⚠️ DANGER: You have selected ALL operational modules across the system!\n\nThis will permanently delete companies, customers, employees, salaries, wallets, attendances, and transactions.\n\n🛡️ GUARANTEE: All Service Cards and Stat Cards are 100% protected and will NOT be deleted (card values simply reset to 0).\n🛡️ Super Admin access credentials (admin / superadmin2026) are permanently preserved.\n\nAre you sure you want to proceed?'
+      : `⚠️ Confirm Selective Database Cleanup:\n\nYou have selected ${targetKeys.length} module(s) to permanently delete:\n• ${selectedModuleNames.join('\n• ')}\n\n🛡️ All Service Cards and Stat Cards are 100% protected and cannot be deleted.\nAll non-selected database tables will remain completely safe.\n\nProceed with deleting the selected data?`;
 
     if (!confirm(confirmMessage)) {
       return;
@@ -538,32 +745,43 @@ export default function SuperAdminSettingsPage() {
 
     setIsCleaningDatabase(true);
     try {
-      const rawApi =
-        process.env.NEXT_PUBLIC_BACKEND_API_URL ||
-        process.env.NEXT_PUBLIC_API_URL ||
-        (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
-          ? `${window.location.protocol}//api.${window.location.hostname.replace(/^myadmin\./, '')}/api`
-          : 'http://127.0.0.1:8000/api');
-      const cleanApi = rawApi.replace(/\/+$/, '');
+      const candidates = getCleanupApiBases();
+      let data: any = null;
+      let lastError: any = null;
 
-      let res = await fetch(`${cleanApi}/clean-database`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ selected_keys: targetKeys }),
-      });
+      for (const base of candidates) {
+        try {
+          let res = await fetch(`${base}/clean-database`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ selected_keys: targetKeys }),
+          });
 
-      if (res.status === 404 && cleanApi.endsWith('/api')) {
-        const rootBase = cleanApi.replace(/\/api$/, '');
-        res = await fetch(`${rootBase}/clean-database`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ selected_keys: targetKeys }),
-        });
+          if (res.status === 404 && base.endsWith('/api')) {
+            const rootBase = base.replace(/\/api$/, '');
+            res = await fetch(`${rootBase}/clean-database`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify({ selected_keys: targetKeys }),
+            });
+          }
+
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.success !== false) {
+              data = json;
+              break;
+            } else {
+              lastError = new Error(json.message || 'Operation failed');
+            }
+          }
+        } catch (err) {
+          lastError = err;
+        }
       }
 
-      const data = await res.json();
-      if (!res.ok || data.success === false) {
-        throw new Error(data.message || `Server returned error (${res.status})`);
+      if (!data) {
+        throw lastError || new Error('Could not connect to cleanup server endpoint');
       }
 
       // Clear client localStorage keys returned by backend or determined by selected modules
@@ -590,6 +808,16 @@ export default function SuperAdminSettingsPage() {
       }
       if (targetKeys.includes('subscription_plans')) {
         window.dispatchEvent(new Event('agency_subscription_plans_updated'));
+      }
+      if (targetKeys.includes('programs_agents')) {
+        try {
+          localStorage.removeItem('agency_programs_cache');
+          localStorage.removeItem('agency_agents_cache');
+          localStorage.removeItem('agency_programs_v1');
+          localStorage.removeItem('agency_agents_v1');
+          window.dispatchEvent(new CustomEvent('superadmin_agents_updated', { detail: [] }));
+          window.dispatchEvent(new CustomEvent('agency_programs_updated', { detail: [] }));
+        } catch {}
       }
 
       setCleanupResult(data);
@@ -1499,15 +1727,27 @@ export default function SuperAdminSettingsPage() {
               </div>
             </div>
 
-            {/* Preserved Super Admin Notice */}
-            <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-                <span>Super Admin Access Is Guaranteed &amp; Preserved</span>
+            {/* Cards Protection Guarantee & Super Admin Notice */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                  <span>Cards Protection Guarantee (Cards Never Deleted)</span>
+                </div>
+                <p className="m-0 text-emerald-800 text-[11px] leading-relaxed">
+                  All <strong>Service Cards</strong> and <strong>Stat Cards</strong> are 100% protected and cannot be deleted. When database data is cleared, card structural designs, titles, and icons remain intact while live metric counters and balances reset to 0.
+                </p>
               </div>
-              <p className="m-0 text-amber-800 text-[11px] leading-relaxed">
-                Your Super Administrator credentials (<code>admin</code> / <code>superadmin@agency.gov.my</code>) and core Laravel migrations are permanently protected and will never be deleted.
-              </p>
+
+              <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-900">
+                  <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+                  <span>Super Admin Access Guaranteed</span>
+                </div>
+                <p className="m-0 text-amber-800 text-[11px] leading-relaxed">
+                  Super Administrator credentials (<code>admin</code> / <code>superadmin2026</code>) and Laravel migrations are protected and preserved.
+                </p>
+              </div>
             </div>
 
             {/* Quick Action & Filter Toolbar */}

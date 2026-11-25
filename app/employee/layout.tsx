@@ -32,6 +32,7 @@ import {
   User,
   UserCheck,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
 import {
@@ -194,6 +195,17 @@ export default function EmployeeLayout({
               href: '/employee',
               icon: LayoutDashboard,
               badge: 'Desk',
+            },
+          ],
+        },
+        {
+          title: 'Wallet & Finance',
+          items: [
+            {
+              name: 'My Wallet',
+              href: '/employee/wallet',
+              icon: Wallet,
+              badge: 'Pay',
             },
           ],
         },

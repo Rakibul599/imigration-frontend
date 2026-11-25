@@ -548,6 +548,11 @@ export default function SuperAdminLayout({
                 badge: employeeCount > 0 ? `${employeeCount}` : undefined,
               },
               {
+                name: 'Employee Wallet',
+                href: '/superadmin/employees/wallet',
+                icon: Wallet,
+              },
+              {
                 name: 'Joining Letter',
                 href: '/superadmin/employees/joining-letter',
                 icon: FileCheck,
