@@ -646,6 +646,8 @@ export default function SuperAdminSettingsPage() {
 
       if (successfulModules && successfulModules.length > 0) {
         setCleanableModules(successfulModules);
+      } else {
+        setCleanableModules(DEFAULT_CLEANABLE_MODULES);
       }
     } catch (err) {
       console.error('Failed to fetch cleanup modules:', err);
@@ -801,6 +803,19 @@ export default function SuperAdminSettingsPage() {
         try {
           localStorage.setItem('agency_companies_data', JSON.stringify([]));
           window.dispatchEvent(new Event('agency_companies_updated'));
+        } catch {}
+      }
+      if (targetKeys.includes('customers')) {
+        try {
+          localStorage.removeItem('agency_customers_v1');
+          localStorage.removeItem('agency_customer_targets_v1');
+          localStorage.removeItem('agency_customer_deposits_v1');
+          localStorage.removeItem('agency_customer_refunds_v1');
+          localStorage.removeItem('agency_customer_pendings_v1');
+          localStorage.removeItem('agency_customer_costs_v1');
+          window.dispatchEvent(new Event('customersUpdated'));
+          window.dispatchEvent(new Event('customerDepositsUpdated'));
+          window.dispatchEvent(new Event('customerRefundsUpdated'));
         } catch {}
       }
       if (targetKeys.includes('company_trial_applications')) {

@@ -36,6 +36,7 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
@@ -1391,6 +1392,14 @@ export default function MasterAdminCustomersPage() {
                             title="View Full Profile Details"
                           >
                             <Eye size={14} />
+                          </Link>
+
+                          <Link
+                            href={`/masteradmin/customers/statement?id=${cust.id}`}
+                            className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent inline-flex items-center justify-center"
+                            title="View Financial Statement & Wallet"
+                          >
+                            <Wallet size={14} />
                           </Link>
 
                           <Link

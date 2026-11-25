@@ -42,6 +42,7 @@ import {
   UserMinus,
   Users,
   UserX,
+  Wallet,
   X,
 } from 'lucide-react';
 import { getStoredCompanies, fetchCompaniesFromBackend } from '@/lib/companyStorage';
@@ -1413,6 +1414,14 @@ export default function CustomerStatusListing({
                             title="View customer dossier"
                           >
                             <Eye size={15} />
+                          </Link>
+
+                          <Link
+                            href={`${baseRoute}/statement?id=${cust.id}`}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                            title="View Financial Statement & Wallet"
+                          >
+                            <Wallet size={15} />
                           </Link>
 
                           <Link

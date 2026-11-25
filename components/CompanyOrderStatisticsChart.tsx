@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   AreaChart,
   Area,
@@ -30,6 +30,7 @@ import {
   getCompanyPendingWallet,
 } from '@/lib/companies';
 import { CompanyStatCard, DEFAULT_COMPANY_STAT_CARDS } from '@/lib/companyStatCards';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
 
 interface CompanyOrderStatisticsChartProps {
   companies: Company[];
@@ -44,12 +45,6 @@ const MONTH_NAMES = [
 
 const YEARS = ['2024', '2025', '2026', '2027'];
 
-// Realistic wave multipliers across 31 days to reproduce realistic peak/dip trends
-const BASE_DAILY_WAVE = [
-  0.0, 0.74, 0.28, 0.38, 0.71, 0.24, 0.32, 0.65, 0.0, 0.39,
-  0.86, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05, 0.33, 0.37, 0.0,
-  0.37, 0.0, 0.81, 1.00, 0.32, 0.22, 0.38, 0.0, 0.16, 0.58, 0.23,
-];
 
 // Safe local YYYY-MM-DD formatting (avoids UTC timezone shift issues)
 const formatYMD = (d: Date): string => {
@@ -251,13 +246,13 @@ export default function CompanyOrderStatisticsChart({
     return { validStart: actualStart, validEnd: actualEnd, totalDays: days };
   }, [startDate, endDate]);
 
-  // Total baseline metric for the selected scope
-  const totalScopeMetric = useMemo(() => {
-    const key = currentCard.card_key || selectedMetricKey;
-
-    const calcForCompany = (comp: Company): number => {
+  // Calculation helper for a single company
+  const calcForCompany = useCallback(
+    (comp: Company): number => {
+      const key = currentCard.card_key || selectedMetricKey;
       switch (key) {
         case 'registered_companies':
+        case 'total_companies':
           return 1;
         case 'active_workers':
           return getCompanyActiveWorkers(comp);
@@ -275,49 +270,35 @@ export default function CompanyOrderStatisticsChart({
           return getCompanyPendingWallet(comp);
         case 'others_cost':
         case 'others_expense':
-          return Number(currentCard.custom_value) || 45000;
         case 'others_profit':
-          return Number(currentCard.custom_value) || 32500;
         case 'others_pending':
-          return Number(currentCard.custom_value) || 18200;
+          return Number(currentCard.custom_value) || 0;
         case 'total_profit':
-          return getCompanyProfitWallet(comp) + 32500;
+          return getCompanyProfitWallet(comp);
         default:
           return getCompanyIncomeWallet(comp);
       }
-    };
+    },
+    [currentCard.card_key, currentCard.custom_value, selectedMetricKey]
+  );
+
+  // Total baseline metric for the selected scope
+  const totalScopeMetric = useMemo(() => {
+    const key = currentCard.card_key || selectedMetricKey;
 
     if (currentCompany) {
-      const val = calcForCompany(currentCompany);
-      return val > 0 ? val : 50000;
+      return calcForCompany(currentCompany);
     }
 
     if (['others_cost', 'others_expense', 'others_profit', 'others_pending'].includes(key)) {
-      return Number(currentCard.custom_value) || 45000;
+      return Number(currentCard.custom_value) || 0;
     }
 
-    const sum = companies.reduce((acc, comp) => acc + calcForCompany(comp), 0);
-    return sum > 0 ? sum : 250000;
-  }, [currentCompany, companies, currentCard, selectedMetricKey]);
+    return companies.reduce((acc, comp) => acc + calcForCompany(comp), 0);
+  }, [currentCompany, companies, currentCard.card_key, currentCard.custom_value, selectedMetricKey, calcForCompany]);
 
   // Generate date-wise daily data points across the selected Date Range
   const chartData = useMemo(() => {
-    // Generate deterministic seed based on selected filters
-    const seed =
-      (selectedCompanyId.split('').reduce((a, b) => a + b.charCodeAt(0), 0) +
-        selectedMetricKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) +
-        validStart.getFullYear() * 12 +
-        validStart.getMonth() * 31) %
-      100;
-
-    // Peak amplitude scale
-    const targetPeak =
-      totalScopeMetric > 0
-        ? Math.max(isCurrency ? 5400 : 150, (totalScopeMetric / 18) * (1 + (seed % 20) / 100))
-        : isCurrency
-        ? 5400
-        : 120;
-
     const isSingleMonth =
       validStart.getMonth() === validEnd.getMonth() &&
       validStart.getFullYear() === validEnd.getFullYear();
@@ -346,21 +327,19 @@ export default function CompanyOrderStatisticsChart({
       // Label on X-Axis: If single month & short range, just day number; otherwise day + month
       const tickLabel = isSingleMonth && totalDays <= 31 ? String(dayNum) : `${dayNum} ${monthShort}`;
 
-      // Periodic wave multiplier with safe index
-      const waveIndex = (dayNum - 1 + cur.getMonth() * 3) % BASE_DAILY_WAVE.length;
-      let rawMultiplier = BASE_DAILY_WAVE[Math.abs(waveIndex)];
+      // Date-accurate matching: only count events/companies created on this specific date!
+      let pointVal = 0;
+      if (companies.length > 0) {
+        const companiesOnDay = companies.filter((comp) => {
+          if (selectedCompanyId !== 'ALL' && comp.id !== selectedCompanyId) return false;
+          const regDate = (comp.createdAt || (comp as any).created_at || comp.subscription_starts_at || '').slice(0, 10);
+          return regDate === dateStr;
+        });
 
-      // Deterministic day-specific jitter
-      const dateHash = dateStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      const jitter = (((dateHash * 7 + seed * 3) % 21) - 10) / 100;
-      let adjusted = rawMultiplier > 0 ? Math.max(0.05, rawMultiplier + jitter) : 0;
-
-      // Inactive day check
-      if (rawMultiplier === 0 && dayNum % 6 !== 0) {
-        adjusted = 0;
+        if (companiesOnDay.length > 0) {
+          pointVal = companiesOnDay.reduce((acc, comp) => acc + calcForCompany(comp), 0);
+        }
       }
-
-      const pointVal = Math.round(targetPeak * adjusted);
 
       data.push({
         day: tickLabel,
@@ -371,13 +350,13 @@ export default function CompanyOrderStatisticsChart({
         fullDate: `${weekdayShort}, ${dayNum} ${monthShort} ${yearNum}`,
         value: pointVal,
         displayValue: isCurrency
-          ? `RM ${pointVal.toLocaleString()}`
+          ? `RM ${pointVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           : pointVal.toLocaleString(),
       });
     }
 
     return data;
-  }, [validStart, validEnd, totalDays, totalScopeMetric, isCurrency, selectedCompanyId, selectedMetricKey]);
+  }, [validStart, validEnd, totalDays, isCurrency, selectedCompanyId, companies, calcForCompany]);
 
   // Range Total & Daily Average
   const rangeTotal = useMemo(() => {
@@ -418,8 +397,11 @@ export default function CompanyOrderStatisticsChart({
     return Math.floor(count / 25);
   }, [chartData.length]);
 
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
+
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+    <div className={`${isGlass ? 'dashboard-card-glass' : 'bg-white border border-slate-200'} rounded-2xl p-5 sm:p-6 shadow-xs space-y-4`}>
       {/* 1. Top Header: Title & All 4 Dropdowns (Card, Company, Year, Month) */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-4">
         {/* Left: Icon, Title & Active Card Badge */}
@@ -531,7 +513,7 @@ export default function CompanyOrderStatisticsChart({
       {/* 2. Structured Summary Stats Bar (Equal Grid, Clean & Aligned) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         {/* Stat 1: Selected Period */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2 flex items-center justify-between">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2 flex items-center justify-between`}>
           <div className="min-w-0">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Period</span>
             <span className="text-xs font-bold text-slate-800 truncate block mt-0.5">
@@ -544,7 +526,7 @@ export default function CompanyOrderStatisticsChart({
         </div>
 
         {/* Stat 2: Range Total */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2`}>
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Range Total</span>
           <span className="text-xs sm:text-sm font-extrabold text-slate-900 font-mono block mt-0.5 truncate">
             {isCurrency ? `RM ${rangeTotal.toLocaleString()}` : rangeTotal.toLocaleString()}
@@ -552,7 +534,7 @@ export default function CompanyOrderStatisticsChart({
         </div>
 
         {/* Stat 3: Daily Average */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2`}>
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Daily Average</span>
           <span className="text-xs sm:text-sm font-extrabold text-slate-900 font-mono block mt-0.5 truncate">
             {isCurrency ? `RM ${dailyAverage.toLocaleString()}` : dailyAverage.toLocaleString()}
@@ -560,7 +542,7 @@ export default function CompanyOrderStatisticsChart({
         </div>
 
         {/* Stat 4: Peak Day */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2 flex items-center justify-between">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2 flex items-center justify-between`}>
           <div className="min-w-0">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Peak Day</span>
             <span className="text-xs font-bold text-emerald-600 block mt-0.5 truncate">

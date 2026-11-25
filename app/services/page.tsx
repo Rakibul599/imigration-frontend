@@ -30,6 +30,7 @@ import {
   Sparkles,
   Layers,
   User,
+  Wallet,
   X,
 } from 'lucide-react';
 import Navbar from '@/components/Navbar';
@@ -944,11 +945,23 @@ function ServicesContent() {
             </div>
 
             <div className="flex items-center gap-3 shrink-0 flex-wrap">
-              {panelInfo.hasPanel && (
+              {/* 1. Worker / Customer Financial Panel Button (Always visible at the top) */}
+              <Link
+                href={`/customer/panel?company=${encodeURIComponent(activeCompany.id)}`}
+                id="services-worker-panel-btn"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-0.5 no-underline border border-emerald-400/40 whitespace-nowrap"
+                title="Open Worker / Customer Financial Panel"
+              >
+                <Wallet size={15} />
+                <span>Worker Panel</span>
+              </Link>
+
+              {/* 2. Admin / User Panel Button */}
+              {panelInfo.hasPanel ? (
                 <Link
                   href={panelInfo.panelUrl}
                   id="services-your-panel-btn"
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-0.5 no-underline border border-amber-300 ring-2 ring-amber-400/30"
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-0.5 no-underline border border-amber-300 ring-2 ring-amber-400/30 whitespace-nowrap"
                   title={`Open ${panelInfo.panelBadge} Panel`}
                 >
                   <LayoutDashboard size={16} className="text-slate-950" />
@@ -957,10 +970,21 @@ function ServicesContent() {
                     {panelInfo.panelBadge}
                   </span>
                 </Link>
+              ) : (
+                <a
+                  href={process.env.NEXT_PUBLIC_SUPERADMIN_URL || 'http://localhost:3002'}
+                  id="services-admin-console-btn"
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-400 via-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-0.5 no-underline border border-amber-300 ring-2 ring-amber-400/30 whitespace-nowrap"
+                  title="Open Admin Control Console"
+                >
+                  <LayoutDashboard size={16} className="text-slate-950" />
+                  <span className="tracking-wide">Control Console</span>
+                </a>
               )}
+
               <Link
                 href="/companies"
-                className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2.5 rounded-xl border border-white/25 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2.5 rounded-xl border border-white/25 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Building2 size={15} />
                 <span>Switch Company</span>
@@ -971,7 +995,7 @@ function ServicesContent() {
                   logoutUser();
                   router.push('/login');
                 }}
-                className="inline-flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold px-4 py-2.5 rounded-xl border border-red-400/30 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold px-4 py-2.5 rounded-xl border border-red-400/30 transition-all cursor-pointer whitespace-nowrap"
               >
                 <LogOut size={15} />
                 <span>Sign Out</span>

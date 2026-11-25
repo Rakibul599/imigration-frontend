@@ -139,18 +139,61 @@ export interface CustomerFinanceBalance {
   customer_id: number | string;
   total_target: number;
   total_deposited: number;
+  total_refunded?: number;
+  net_balance?: number;
   net_pending: number;
   deposit_percentage: number;
   status: 'Pending' | 'Partially Paid' | 'Settled';
   targets_count: number;
   deposits_count: number;
+  refunds_count?: number;
 }
+
+export interface CustomerRefundAmountRecord {
+  id: string | number;
+  customer_id: number | string;
+  customer_name: string;
+  passport_no?: string;
+  nid_no?: string;
+  company_id?: string;
+  company_name?: string;
+  program_id?: string;
+  program_name?: string;
+  working_sector?: string;
+  refund_amount: number; // in RM
+  refund_date: string;
+  payment_method: 'Bank Transfer' | 'Cash' | 'CDM' | 'Cheque' | 'Online FPX' | 'Direct Debit' | string;
+  bank_name?: string;
+  bank_account_no?: string;
+  receipt_no?: string; // Reference / Voucher No
+  purpose: string; // Visa Rejected, Quota Cancelled, Advance Adjustment, Overpayment, etc.
+  refunded_by?: string;
+  receipt_url?: string;
+  receipt_filename?: string;
+  status: 'Completed' | 'Pending' | 'Processed' | 'Rejected' | string;
+  remarks?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export const REFUND_PURPOSES = [
+  'Visa Application Rejected',
+  'Quota Allocation Cancelled',
+  'Worker Medical Unfit / FOMEMA Failure',
+  'Repatriation / Runaway Deduction',
+  'Advance Payment Adjustment',
+  'Excess Deposit / Overpayment Return',
+  'Voluntary Cancellation by Customer',
+  'Employer Security Bond Refund',
+  'General Administration Refund',
+];
 
 const STORAGE_KEYS = {
   TARGETS: 'agency_customer_targets',
   DEPOSITS: 'agency_customer_deposits',
   PENDINGS: 'agency_customer_pendings',
   COMPANY_COSTS: 'agency_customer_company_costs',
+  REFUNDS: 'agency_customer_refunds',
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
@@ -559,9 +602,12 @@ export function getCustomerFinanceBalance(customerId: number | string): Customer
   const cIdStr = String(customerId);
   const targets = getStoredCustomerTargets().filter((t) => String(t.customer_id) === cIdStr);
   const deposits = getStoredCustomerDeposits().filter((d) => String(d.customer_id) === cIdStr);
+  const refunds = getStoredCustomerRefunds().filter((r) => String(r.customer_id) === cIdStr);
 
   const total_target = targets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0);
   const total_deposited = deposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+  const total_refunded = refunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
+  const net_balance = total_deposited - total_refunded;
   const net_pending = Math.max(0, total_target - total_deposited);
   const deposit_percentage = total_target > 0 ? Math.min(100, Math.round((total_deposited / total_target) * 100)) : 0;
 
@@ -576,11 +622,14 @@ export function getCustomerFinanceBalance(customerId: number | string): Customer
     customer_id: customerId,
     total_target,
     total_deposited,
+    total_refunded,
+    net_balance,
     net_pending,
     deposit_percentage,
     status,
     targets_count: targets.length,
     deposits_count: deposits.length,
+    refunds_count: refunds.length,
   };
 }
 
@@ -872,6 +921,140 @@ export async function deleteCompanyCost(id: string | number): Promise<CustomerCo
     });
   } catch (err) {
     console.error('Failed to delete company cost record from database:', err);
+  }
+
+  return updated;
+}
+
+// ==========================================
+// 6. REFUND AMOUNT HELPERS & API
+// ==========================================
+
+export async function fetchCustomerRefunds(companyId?: string, search?: string): Promise<CustomerRefundAmountRecord[]> {
+  try {
+    const params = new URLSearchParams();
+    if (companyId && companyId !== 'ALL') params.append('company_id', companyId);
+    if (search) params.append('search', search);
+
+    const res = await fetch(`${API_BASE}/customer-refunds?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (res.ok) {
+      const dbList: CustomerRefundAmountRecord[] = await res.json();
+      if (Array.isArray(dbList)) {
+        if (dbList.length > 0) {
+          localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(dbList));
+          window.dispatchEvent(new Event('customerRefundsUpdated'));
+          return dbList;
+        }
+
+        const localList = getStoredCustomerRefunds();
+        if (localList.length > 0) {
+          for (const item of localList) {
+            try {
+              await fetch(`${API_BASE}/customer-refunds`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(item),
+              });
+            } catch {}
+          }
+          const reRes = await fetch(`${API_BASE}/customer-refunds`, { cache: 'no-store' });
+          if (reRes.ok) {
+            const reList = await reRes.json();
+            localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(reList));
+            window.dispatchEvent(new Event('customerRefundsUpdated'));
+            return reList;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('API error fetching customer refunds, using local cache:', err);
+  }
+  return getStoredCustomerRefunds();
+}
+
+export function getStoredCustomerRefunds(): CustomerRefundAmountRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.REFUNDS);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+export async function saveCustomerRefund(record: CustomerRefundAmountRecord): Promise<CustomerRefundAmountRecord[]> {
+  const current = getStoredCustomerRefunds();
+  const index = current.findIndex((r) => String(r.id) === String(record.id));
+  let updated: CustomerRefundAmountRecord[];
+
+  if (index >= 0) {
+    updated = [...current];
+    updated[index] = { ...record, updated_at: new Date().toISOString() };
+  } else {
+    updated = [{ ...record, created_at: record.created_at || new Date().toISOString() }, ...current];
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(updated));
+    window.dispatchEvent(new Event('customerRefundsUpdated'));
+  } catch {}
+
+  // Asynchronous Database Save via Laravel API
+  try {
+    const isNumericId = typeof record.id === 'number' || (!isNaN(Number(record.id)) && !String(record.id).includes('_'));
+    const url = isNumericId && index >= 0
+      ? `${API_BASE}/customer-refunds/${record.id}`
+      : `${API_BASE}/customer-refunds`;
+    const method = isNumericId && index >= 0 ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(record),
+    });
+
+    if (res.ok) {
+      const savedRecord: CustomerRefundAmountRecord = await res.json();
+      const currentList = getStoredCustomerRefunds();
+      const replaceIdx = currentList.findIndex(
+        (r) => String(r.id) === String(record.id) || String(r.id) === String(savedRecord.id)
+      );
+      if (replaceIdx >= 0) {
+        currentList[replaceIdx] = savedRecord;
+      } else {
+        currentList.unshift(savedRecord);
+      }
+      localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(currentList));
+      window.dispatchEvent(new Event('customerRefundsUpdated'));
+      return currentList;
+    }
+  } catch (err) {
+    console.error('Failed to save customer refund to database:', err);
+  }
+
+  return updated;
+}
+
+export async function deleteCustomerRefund(id: string | number): Promise<CustomerRefundAmountRecord[]> {
+  const current = getStoredCustomerRefunds();
+  const updated = current.filter((r) => String(r.id) !== String(id));
+
+  try {
+    localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(updated));
+    window.dispatchEvent(new Event('customerRefundsUpdated'));
+  } catch {}
+
+  try {
+    await fetch(`${API_BASE}/customer-refunds/${id}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    console.error('Failed to delete customer refund from database:', err);
   }
 
   return updated;

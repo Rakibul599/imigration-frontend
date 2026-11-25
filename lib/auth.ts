@@ -333,13 +333,13 @@ export function getUserPanelInfo(): {
   const masterLogged = localStorage.getItem(MASTER_ADMIN_LOGGED_KEY) === 'true';
   const masterUser = getMasterAdminUser();
 
-  // 0. Customer / Foreign Worker Check: Customer has NO administrative panel!
+  // 0. Customer / Foreign Worker Check: Customer has their own Worker Panel!
   if (current?.role === 'Customer' || current?.role === 'Worker') {
     return {
-      hasPanel: false,
-      panelUrl: '/services',
-      panelLabel: '',
-      panelBadge: '',
+      hasPanel: true,
+      panelUrl: '/customer/panel',
+      panelLabel: 'Worker Panel',
+      panelBadge: 'Worker Panel',
       roleType: 'User',
     };
   }

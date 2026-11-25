@@ -23,6 +23,8 @@ import { CustomerRecord } from '@/lib/customerStorage';
 import { Company } from '@/lib/companies';
 import { getStoredFutureCustomers, FutureCustomerRecord } from '@/lib/futureCustomerStorage';
 import { PageStatCardConfig } from '@/lib/pageCardStorage';
+import { useDashboardCardDesign } from '@/lib/themeSettings';
+import { getStoredCustomerDeposits, getStoredCustomerRefunds } from '@/lib/customerFinanceStorage';
 
 interface CustomerOrderStatisticsChartProps {
   customers: CustomerRecord[];
@@ -38,12 +40,6 @@ const MONTH_NAMES = [
 
 const YEARS = ['2024', '2025', '2026', '2027'];
 
-// Realistic wave multipliers across 31 days to reproduce realistic peak/dip trends
-const BASE_DAILY_WAVE = [
-  0.0, 0.74, 0.28, 0.38, 0.71, 0.24, 0.32, 0.65, 0.0, 0.39,
-  0.86, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05, 0.33, 0.37, 0.0,
-  0.37, 0.0, 0.81, 1.00, 0.32, 0.22, 0.38, 0.0, 0.16, 0.58, 0.23,
-];
 
 // Safe local YYYY-MM-DD formatting (avoids UTC timezone shift issues)
 const formatYMD = (d: Date): string => {
@@ -327,6 +323,9 @@ export default function CustomerOrderStatisticsChart({
       case 'deposit_wallet':
       case 'deposit_amount':
         return list.length * 2800;
+      case 'refund_wallet':
+      case 'refund_amount':
+        return 0;
       case 'cost_wallet':
         return list.length * 1200;
       case 'pending_wallet':
@@ -339,25 +338,12 @@ export default function CustomerOrderStatisticsChart({
 
   // Generate date-wise daily data points across the selected Date Range
   const chartData = useMemo(() => {
-    // Generate deterministic seed based on selected filters
-    const seed =
-      (selectedCompanyId.split('').reduce((a, b) => a + b.charCodeAt(0), 0) +
-        selectedMetricKey.split('').reduce((a, b) => a + b.charCodeAt(0), 0) +
-        validStart.getFullYear() * 12 +
-        validStart.getMonth() * 31) %
-      100;
-
-    // Peak amplitude scale
-    const targetPeak =
-      totalScopeMetric > 0
-        ? Math.max(isCurrency ? 5400 : 15, (totalScopeMetric / 18) * (1 + (seed % 20) / 100))
-        : isCurrency
-        ? 5400
-        : 20;
-
     const isSingleMonth =
       validStart.getMonth() === validEnd.getMonth() &&
       validStart.getFullYear() === validEnd.getFullYear();
+
+    const allDeposits = currentCard.key.includes('deposit') ? getStoredCustomerDeposits() : [];
+    const allRefunds = currentCard.key.includes('refund') ? getStoredCustomerRefunds() : [];
 
     const data: {
       day: string;
@@ -383,21 +369,75 @@ export default function CustomerOrderStatisticsChart({
       // Label on X-Axis: If single month & short range, just day number; otherwise day + month
       const tickLabel = isSingleMonth && totalDays <= 31 ? String(dayNum) : `${dayNum} ${monthShort}`;
 
-      // Periodic wave multiplier with safe index
-      const waveIndex = (dayNum - 1 + cur.getMonth() * 3) % BASE_DAILY_WAVE.length;
-      let rawMultiplier = BASE_DAILY_WAVE[Math.abs(waveIndex)];
+      // Date-accurate matching: only count events occurring exactly on dateStr. Days with no activity stay flat at 0!
+      let pointVal = 0;
+      const customersOnDay = scopedCustomers.filter((c) => {
+        const d = (c.created_at || '').slice(0, 10);
+        return d === dateStr;
+      });
 
-      // Deterministic day-specific jitter
-      const dateHash = dateStr.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      const jitter = (((dateHash * 7 + seed * 3) % 21) - 10) / 100;
-      let adjusted = rawMultiplier > 0 ? Math.max(0.05, rawMultiplier + jitter) : 0;
-
-      // Inactive day check
-      if (rawMultiplier === 0 && dayNum % 6 !== 0) {
-        adjusted = 0;
+      switch (currentCard.key) {
+        case 'total_customers':
+          pointVal = customersOnDay.length;
+          break;
+        case 'active_customers':
+          pointVal = customersOnDay.filter((c) => c.status?.toLowerCase() === 'active').length;
+          break;
+        case 'pending_customers':
+          pointVal = customersOnDay.filter((c) => c.status?.toLowerCase() === 'pending').length;
+          break;
+        case 'completed_customers':
+          pointVal = customersOnDay.filter((c) => c.status?.toLowerCase() === 'completed').length;
+          break;
+        case 'future_customers':
+          pointVal = futureCustomers.filter((f) => (f.created_at || '').slice(0, 10) === dateStr).length;
+          break;
+        case 'photo_verified':
+          pointVal = customersOnDay.filter((c) => (c.profile_pic || c.profile_image || (c as any).photo)?.trim()).length;
+          break;
+        case 'passport_verified':
+          pointVal = customersOnDay.filter((c) => c.passport_no && c.passport_no.trim()).length;
+          break;
+        case 'document_dossiers':
+          pointVal = customersOnDay.reduce((acc, c) => acc + (c.documents?.length || 0), 0);
+          break;
+        case 'deposit_wallet':
+        case 'deposit_amount': {
+          const relevant = allDeposits.filter((dep) => {
+            const dDate = (dep.deposit_date || dep.created_at || '').slice(0, 10);
+            if (dDate !== dateStr) return false;
+            if (selectedCompanyId !== 'ALL' && dep.company_id !== selectedCompanyId) return false;
+            return true;
+          });
+          pointVal = relevant.reduce((sum, dep) => sum + (Number(dep.deposit_amount) || 0), 0);
+          break;
+        }
+        case 'refund_wallet':
+        case 'refund_amount': {
+          const relevant = allRefunds.filter((ref) => {
+            const rDate = (ref.refund_date || ref.created_at || '').slice(0, 10);
+            if (rDate !== dateStr) return false;
+            if (selectedCompanyId !== 'ALL' && ref.company_id !== selectedCompanyId) return false;
+            return true;
+          });
+          pointVal = relevant.reduce((sum, ref) => sum + (Number(ref.refund_amount) || 0), 0);
+          break;
+        }
+        case 'target_wallet':
+        case 'target_amount':
+          pointVal = customersOnDay.length * 3500;
+          break;
+        case 'cost_wallet':
+          pointVal = customersOnDay.length * 1200;
+          break;
+        case 'pending_wallet':
+        case 'pending_amount':
+          pointVal = customersOnDay.length * 700;
+          break;
+        default:
+          pointVal = customersOnDay.length;
+          break;
       }
-
-      const pointVal = Math.round(targetPeak * adjusted);
 
       data.push({
         day: tickLabel,
@@ -408,13 +448,13 @@ export default function CustomerOrderStatisticsChart({
         fullDate: `${weekdayShort}, ${dayNum} ${monthShort} ${yearNum}`,
         value: pointVal,
         displayValue: isCurrency
-          ? `RM ${pointVal.toLocaleString()}`
+          ? `RM ${pointVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
           : pointVal.toLocaleString(),
       });
     }
 
     return data;
-  }, [validStart, validEnd, totalDays, totalScopeMetric, isCurrency, selectedCompanyId, selectedMetricKey]);
+  }, [validStart, validEnd, totalDays, isCurrency, selectedCompanyId, scopedCustomers, futureCustomers, currentCard.key]);
 
   // Range Total & Daily Average
   const rangeTotal = useMemo(() => {
@@ -455,8 +495,11 @@ export default function CustomerOrderStatisticsChart({
     return Math.floor(count / 25);
   }, [chartData.length]);
 
+  const cardDesign = useDashboardCardDesign();
+  const isGlass = cardDesign === 'glassmorphism';
+
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+    <div className={`${isGlass ? 'dashboard-card-glass' : 'bg-white border border-slate-200'} rounded-2xl p-5 sm:p-6 shadow-xs space-y-4`}>
       {/* 1. Top Header: Title & All 4 Dropdowns (Card, Company, Year, Month) */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 border-b border-slate-100 pb-4">
         {/* Left: Icon, Title & Active Card Badge */}
@@ -568,7 +611,7 @@ export default function CustomerOrderStatisticsChart({
       {/* 2. Structured Summary Stats Bar (Equal Grid, Clean & Aligned) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         {/* Stat 1: Selected Period */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2 flex items-center justify-between">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2 flex items-center justify-between`}>
           <div className="min-w-0">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Period</span>
             <span className="text-xs font-bold text-slate-800 truncate block mt-0.5">
@@ -581,7 +624,7 @@ export default function CustomerOrderStatisticsChart({
         </div>
 
         {/* Stat 2: Range Total */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2`}>
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Range Total</span>
           <span className="text-xs sm:text-sm font-extrabold text-slate-900 font-mono block mt-0.5 truncate">
             {isCurrency ? `RM ${rangeTotal.toLocaleString()}` : rangeTotal.toLocaleString()}
@@ -589,7 +632,7 @@ export default function CustomerOrderStatisticsChart({
         </div>
 
         {/* Stat 3: Daily Average */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2`}>
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Daily Average</span>
           <span className="text-xs sm:text-sm font-extrabold text-slate-900 font-mono block mt-0.5 truncate">
             {isCurrency ? `RM ${dailyAverage.toLocaleString()}` : dailyAverage.toLocaleString()}
@@ -597,7 +640,7 @@ export default function CustomerOrderStatisticsChart({
         </div>
 
         {/* Stat 4: Peak Day */}
-        <div className="bg-slate-50/80 border border-slate-200/70 rounded-xl px-3 py-2 flex items-center justify-between">
+        <div className={`${isGlass ? 'bg-white/40 border border-white/60' : 'bg-slate-50/80 border border-slate-200/70'} rounded-xl px-3 py-2 flex items-center justify-between`}>
           <div className="min-w-0">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Peak Day</span>
             <span className="text-xs font-bold text-emerald-600 block mt-0.5 truncate">

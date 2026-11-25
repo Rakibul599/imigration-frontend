@@ -90,10 +90,16 @@ import {
   CustomerDepositAmountRecord,
   CustomerPendingAmountRecord,
   CustomerCompanyCostRecord,
+  CustomerRefundAmountRecord,
   fetchCustomerTargets,
   fetchCustomerDeposits,
   fetchCustomerPendings,
   fetchCustomerCompanyCosts,
+  fetchCustomerRefunds,
+  getStoredCustomerRefunds,
+  saveCustomerRefund,
+  REFUND_PURPOSES,
+  getCustomerFinanceBalance,
 } from '@/lib/customerFinanceStorage';
 import {
   useDashboardCardDesign,
@@ -115,8 +121,9 @@ const DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS: PageStatCardConfig[] = [
   { id: 'future_customers', title: 'Future Customer', subtitle: '', icon: 'Sparkles', order_num: 6, metric_type: 'future_customers' },
   { id: 'target_amount', title: 'Customer Target Amount', subtitle: '', icon: 'Target', order_num: 7, metric_type: 'target_wallet' },
   { id: 'deposit_amount', title: 'Customer Deposit Amount', subtitle: '', icon: 'DollarSign', order_num: 8, metric_type: 'deposit_wallet' },
-  { id: 'pending_amount', title: 'Customer Pending Amount', subtitle: '', icon: 'Clock', order_num: 9, metric_type: 'pending_wallet' },
-  { id: 'cost_amount', title: 'Customer Cost Amount', subtitle: '', icon: 'FileSpreadsheet', order_num: 10, metric_type: 'cost_wallet' },
+  { id: 'refund_amount', title: 'Customer Refund Amount', subtitle: '', icon: 'RotateCcw', order_num: 9, metric_type: 'refund_wallet' },
+  { id: 'pending_amount', title: 'Customer Pending Amount', subtitle: '', icon: 'Clock', order_num: 10, metric_type: 'pending_wallet' },
+  { id: 'cost_amount', title: 'Customer Cost Amount', subtitle: '', icon: 'FileSpreadsheet', order_num: 11, metric_type: 'cost_wallet' },
 ];
 
 const CUSTOMER_CARD_METRIC_OPTIONS = [
@@ -130,7 +137,21 @@ const CUSTOMER_CARD_METRIC_OPTIONS = [
   { id: 'deposit_wallet', label: 'Customer Deposit Amount (RM Value)' },
   { id: 'pending_wallet', label: 'Customer Pending Amount (RM Value)' },
   { id: 'cost_wallet', label: 'Customer Cost Amount (RM Value)' },
+  { id: 'refund_wallet', label: 'Customer Refund Amount (RM Value)' },
   { id: 'custom', label: 'Custom Value / Fixed Number' },
+];
+
+const MALAYSIAN_BANKS = [
+  'Maybank (Malayan Banking Berhad)',
+  'CIMB Bank',
+  'Public Bank Berhad',
+  'RHB Bank',
+  'Hong Leong Bank',
+  'AmBank',
+  'Bank Islam',
+  'Touch n Go eWallet / DuitNow',
+  'Cash Counter',
+  'Other / Direct CDM',
 ];
 
 interface CustomerDashboardContentProps {
@@ -160,7 +181,25 @@ export default function CustomerDashboardContent({
   const [depositRecords, setDepositRecords] = useState<CustomerDepositAmountRecord[]>([]);
   const [pendingRecords, setPendingRecords] = useState<CustomerPendingAmountRecord[]>([]);
   const [costRecords, setCostRecords] = useState<CustomerCompanyCostRecord[]>([]);
+  const [refundRecords, setRefundRecords] = useState<CustomerRefundAmountRecord[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Customer Refund Modal State
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [selectedRefundCustomerId, setSelectedRefundCustomerId] = useState<string>('');
+  const [refundAmount, setRefundAmount] = useState<string | number>('');
+  const [refundDate, setRefundDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [refundPurpose, setRefundPurpose] = useState<string>('Visa Application Rejected');
+  const [refundCustomPurpose, setRefundCustomPurpose] = useState<string>('');
+  const [refundPaymentMethod, setRefundPaymentMethod] = useState<string>('Bank Transfer');
+  const [refundBankName, setRefundBankName] = useState<string>('Maybank (Malayan Banking Berhad)');
+  const [refundBankAccountNo, setRefundBankAccountNo] = useState<string>('');
+  const [refundReceiptNo, setRefundReceiptNo] = useState<string>(() => `REF-${Date.now().toString().slice(-6)}`);
+  const [refundSlipUrl, setRefundSlipUrl] = useState<string | null>(null);
+  const [refundSlipFilename, setRefundSlipFilename] = useState<string>('');
+  const [refundRemarks, setRefundRemarks] = useState<string>('');
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [voucherToPrint, setVoucherToPrint] = useState<CustomerRefundAmountRecord | null>(null);
 
   // Top Card Select2 Filters (matching Companies Dashboard)
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
@@ -209,10 +248,12 @@ export default function CustomerDashboardContent({
 
   useEffect(() => {
     const stored = getStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
-    const hasLegacy = stored.some(
-      (c) => c.id === 'passport_verified' || c.id === 'document_dossiers' || c.title === 'TOTAL FOREIGN WORKERS'
-    );
-    if (hasLegacy || stored.length !== 10) {
+    const sorted = [...stored].sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+    const depositIdx = sorted.findIndex((c) => c.id === 'deposit_amount' || c.metric_type === 'deposit_wallet');
+    const refundIdx = sorted.findIndex((c) => c.id === 'refund_amount' || c.metric_type === 'refund_wallet');
+    const isDirectlyAfter = depositIdx >= 0 && refundIdx === depositIdx + 1;
+
+    if (!isDirectlyAfter || sorted.length !== DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS.length) {
       saveStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
       setCards(DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
     } else {
@@ -241,7 +282,7 @@ export default function CustomerDashboardContent({
   const loadData = async () => {
     setLoading(true);
     try {
-      const [comps, secList, custList, progList, futureList, targets, deposits, pendings, costs] = await Promise.all([
+      const [comps, secList, custList, progList, futureList, targets, deposits, pendings, costs, refunds] = await Promise.all([
         fetchCompaniesFromBackend().catch(() => getStoredCompanies()),
         fetchWorkingSectors(),
         fetchCustomers(),
@@ -251,6 +292,7 @@ export default function CustomerDashboardContent({
         fetchCustomerDeposits().catch(() => []),
         fetchCustomerPendings().catch(() => []),
         fetchCustomerCompanyCosts().catch(() => []),
+        fetchCustomerRefunds().catch(() => []),
       ]);
       setCompanies(comps);
       setSectors(secList);
@@ -261,6 +303,7 @@ export default function CustomerDashboardContent({
       setDepositRecords(deposits || []);
       setPendingRecords(pendings || []);
       setCostRecords(costs || []);
+      setRefundRecords(refunds || []);
     } catch (err) {
       console.error('Failed to load customer dashboard data:', err);
     } finally {
@@ -276,11 +319,234 @@ export default function CustomerDashboardContent({
     const unsubCompany = subscribeToCompanyChanges(() => {
       setCompanies(getStoredCompanies());
     });
+    const handleRefundsUpdated = () => {
+      setRefundRecords(getStoredCustomerRefunds());
+    };
+    const handleDataReload = () => {
+      loadData();
+    };
+    window.addEventListener('customerRefundsUpdated', handleRefundsUpdated);
+    window.addEventListener('customersUpdated', handleDataReload);
+    window.addEventListener('customerDepositsUpdated', handleDataReload);
     return () => {
       unsubFuture();
       unsubCompany();
+      window.removeEventListener('customerRefundsUpdated', handleRefundsUpdated);
+      window.removeEventListener('customersUpdated', handleDataReload);
+      window.removeEventListener('customerDepositsUpdated', handleDataReload);
     };
   }, []);
+
+  const handleOpenRefundModal = (cust?: CustomerRecord) => {
+    if (cust) {
+      setSelectedRefundCustomerId(String(cust.id));
+    }
+    setRefundAmount('');
+    setRefundDate(new Date().toISOString().split('T')[0]);
+    setRefundReceiptNo(`REF-${Date.now().toString().slice(-6)}`);
+    setRefundSlipUrl(null);
+    setRefundSlipFilename('');
+    setRefundRemarks('');
+    setIsRefundModalOpen(true);
+  };
+
+  const handleRefundSlipUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRefundSlipFilename(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setRefundSlipUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const selectedRefundCustomer = useMemo(() => {
+    if (!selectedRefundCustomerId) return null;
+    return customers.find((c) => String(c.id) === String(selectedRefundCustomerId)) || null;
+  }, [customers, selectedRefundCustomerId]);
+
+  const selectedRefundCustomerBalance = useMemo(() => {
+    if (!selectedRefundCustomerId) return null;
+    return getCustomerFinanceBalance(selectedRefundCustomerId);
+  }, [selectedRefundCustomerId, depositRecords, refundRecords]);
+
+  const handleSubmitRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRefundCustomer) {
+      showToast('error', 'Please select a customer to refund.');
+      return;
+    }
+    const amt = Number(refundAmount);
+    if (!amt || amt <= 0) {
+      showToast('error', 'Please enter a valid refund amount in RM.');
+      return;
+    }
+
+    setRefundSubmitting(true);
+    try {
+      const finalPurpose = refundPurpose === 'Other' && refundCustomPurpose.trim() ? refundCustomPurpose.trim() : refundPurpose;
+      const matchedComp = companies.find((c) => c.id.toLowerCase() === selectedRefundCustomer.company_id?.toLowerCase());
+      const compName = matchedComp?.name || selectedRefundCustomer.other_company_name || undefined;
+
+      const newRecord: CustomerRefundAmountRecord = {
+        id: `ref_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        customer_id: selectedRefundCustomer.id,
+        customer_name: selectedRefundCustomer.full_name,
+        passport_no: selectedRefundCustomer.passport_no || undefined,
+        nid_no: selectedRefundCustomer.nid_no || undefined,
+        company_id: selectedRefundCustomer.company_id || undefined,
+        company_name: compName,
+        program_id: selectedRefundCustomer.program_id || undefined,
+        program_name: selectedRefundCustomer.program_name || undefined,
+        working_sector: selectedRefundCustomer.working_sector || undefined,
+        refund_amount: amt,
+        refund_date: refundDate || new Date().toISOString().split('T')[0],
+        payment_method: refundPaymentMethod,
+        bank_name: refundBankName || undefined,
+        bank_account_no: refundBankAccountNo || undefined,
+        receipt_no: refundReceiptNo || `REF-${Date.now().toString().slice(-6)}`,
+        purpose: finalPurpose,
+        refunded_by: 'Super Admin',
+        receipt_url: refundSlipUrl || undefined,
+        receipt_filename: refundSlipFilename || undefined,
+        status: 'Completed',
+        remarks: refundRemarks || undefined,
+        created_at: new Date().toISOString(),
+      };
+
+      const updated = await saveCustomerRefund(newRecord);
+      setRefundRecords(updated);
+      showToast('success', `Refund of RM ${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })} processed successfully for ${selectedRefundCustomer.full_name}.`);
+      setIsRefundModalOpen(false);
+      setVoucherToPrint(newRecord);
+
+      // Reset fields
+      setRefundAmount('');
+      setRefundRemarks('');
+      setRefundSlipUrl(null);
+      setRefundSlipFilename('');
+      setRefundReceiptNo(`REF-${Date.now().toString().slice(-6)}`);
+    } catch (err) {
+      console.error('Failed to issue refund:', err);
+      showToast('error', 'Failed to process refund. Please try again.');
+    } finally {
+      setRefundSubmitting(false);
+    }
+  };
+
+  const handlePrintRefundVoucher = (voucher: CustomerRefundAmountRecord) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Customer Refund Voucher - ${voucher.receipt_no}</title>
+          <style>
+            @page { size: A4; margin: 20mm; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #0f172a; margin: 0; padding: 20px; }
+            .header { border-bottom: 3px solid #0b4da2; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start; }
+            .title { font-size: 24px; font-weight: 800; color: #0b4da2; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+            .subtitle { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500; }
+            .badge { display: inline-block; background-color: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+            .card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
+            .card-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
+            .card-val { font-size: 14px; font-weight: 700; color: #1e293b; }
+            .amount-box { background: linear-gradient(135deg, #fdf2f8, #fff1f2); border: 2px solid #fecdd3; border-radius: 10px; padding: 18px 22px; margin-bottom: 24px; text-align: center; }
+            .amount-label { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #9f1239; margin-bottom: 4px; }
+            .amount-val { font-size: 32px; font-weight: 800; color: #e11d48; font-family: monospace; }
+            .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 28px; }
+            .meta-table th { background-color: #0b4da2; color: white; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+            .meta-table td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #334155; }
+            .slip-preview { margin-top: 20px; margin-bottom: 28px; text-align: center; }
+            .slip-preview img { max-width: 320px; max-height: 220px; border: 1px solid #cbd5e1; border-radius: 8px; }
+            .signatures { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+            .sig-line { border-top: 1px solid #94a3b8; padding-top: 8px; text-align: center; font-size: 12px; font-weight: 600; color: #475569; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Official Customer Refund Voucher</h1>
+              <div class="subtitle">Agency Treasury & Foreign Worker Financial Management</div>
+            </div>
+            <div style="text-align: right;">
+              <span class="badge">Refund Processed</span>
+              <div style="font-size: 11px; color: #64748b; margin-top: 6px;">Voucher No: <strong>${voucher.receipt_no}</strong></div>
+              <div style="font-size: 11px; color: #64748b;">Date: <strong>${voucher.refund_date}</strong></div>
+            </div>
+          </div>
+
+          <div class="amount-box">
+            <div class="amount-label">Total Refunded Amount</div>
+            <div class="amount-val">RM ${(Number(voucher.refund_amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card-label">Beneficiary / Customer Information</div>
+              <div class="card-val">${voucher.customer_name}</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Passport: <strong>${voucher.passport_no || '—'}</strong> • NID: <strong>${voucher.nid_no || '—'}</strong></div>
+              <div style="font-size: 12px; color: #64748b;">Company: <strong>${voucher.company_name || 'Individual Worker'}</strong></div>
+            </div>
+            <div class="card">
+              <div class="card-label">Payment & Banking Details</div>
+              <div class="card-val">${voucher.payment_method}</div>
+              <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Bank: <strong>${voucher.bank_name || 'Direct Treasury'}</strong></div>
+              <div style="font-size: 12px; color: #64748b;">Account No: <strong>${voucher.bank_account_no || '—'}</strong></div>
+            </div>
+          </div>
+
+          <table class="meta-table">
+            <thead>
+              <tr>
+                <th>Description / Purpose</th>
+                <th>Payment Mode</th>
+                <th>Authorized By</th>
+                <th style="text-align: right;">Amount (RM)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>${voucher.purpose}</strong>${voucher.remarks ? `<div style="font-size: 11px; color: #64748b; margin-top: 3px;">Note: ${voucher.remarks}</div>` : ''}</td>
+                <td>${voucher.payment_method}</td>
+                <td>${voucher.refunded_by || 'Super Admin'}</td>
+                <td style="text-align: right; font-weight: 700; font-family: monospace;">RM ${(Number(voucher.refund_amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          ${voucher.receipt_url ? `
+            <div class="slip-preview">
+              <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">Attached Refund Slip / Proof</div>
+              <img src="${voucher.receipt_url}" alt="Refund Slip" />
+            </div>
+          ` : ''}
+
+          <div class="signatures">
+            <div>
+              <div style="height: 50px;"></div>
+              <div class="sig-line">Authorized Agency Officer Signature & Stamp</div>
+            </div>
+            <div>
+              <div style="height: 50px;"></div>
+              <div class="sig-line">Beneficiary / Customer Acknowledgement</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+    }, 300);
+  };
 
   const handleDelete = async (id: number) => {
     try {
@@ -390,6 +656,22 @@ export default function CustomerDashboardContent({
       })),
     ];
   }, [programs]);
+
+  const customerRefundSelectOptions: Select2Option[] = useMemo(() => {
+    return [
+      { value: '', label: 'Select Customer to Refund...', subLabel: 'Search by worker name, passport, or company' },
+      ...customers.map((c) => {
+        const cComp = companies.find((comp) => comp.id.toLowerCase() === c.company_id?.toLowerCase());
+        const compLabel = cComp?.name || c.other_company_name || 'Individual Worker';
+        return {
+          value: String(c.id),
+          label: c.full_name,
+          subLabel: `Passport: ${c.passport_no || '—'} • ${compLabel}`,
+          badge: c.status,
+        };
+      }),
+    ];
+  }, [customers, companies]);
 
   // Dynamic Card Metric Values calculation based on selected filters
   const getCardMetrics = (card: PageStatCardConfig) => {
@@ -545,6 +827,21 @@ export default function CustomerDashboardContent({
           isLink: true,
           link: `${baseRoute}/pending-amount`,
           theme: { bg: 'bg-amber-50', text: 'text-amber-700', valColor: 'text-amber-600' },
+        };
+      }
+      case 'refund_wallet':
+      case 'refund_amount':
+      case 'customer_refund_amount': {
+        const relevantRefunds = refundRecords.filter((r) => {
+          if (selectedCompanyCardId !== 'ALL' && r.company_id && r.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return true;
+        });
+        const refundSum = relevantRefunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
+        return {
+          value: `RM ${refundSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          isLink: true,
+          link: `${baseRoute}/refund-amount`,
+          theme: { bg: 'bg-rose-50', text: 'text-rose-700', valColor: 'text-rose-600' },
         };
       }
       default: {
@@ -1009,9 +1306,35 @@ export default function CustomerDashboardContent({
   };
 
   const activeStatCards = useMemo(() => {
-    return (cards && cards.length > 0 ? cards : DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS)
-      .filter((c) => c.visible !== false)
-      .sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+    const list = (cards && cards.length > 0 ? cards : DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS)
+      .filter((c) => c.visible !== false);
+
+    const canonicalOrder: Record<string, number> = {
+      total_customers: 1,
+      active_customers: 2,
+      inactive_customers: 3,
+      runaway_customers: 4,
+      blacklist_customers: 5,
+      future_customers: 6,
+      target_amount: 7,
+      target_wallet: 7,
+      deposit_amount: 8,
+      deposit_wallet: 8,
+      refund_amount: 9,
+      refund_wallet: 9,
+      pending_amount: 10,
+      pending_wallet: 10,
+      cost_amount: 11,
+      cost_wallet: 11,
+    };
+
+    return [...list].sort((a, b) => {
+      const aKey = a.id || a.metric_type || '';
+      const bKey = b.id || b.metric_type || '';
+      const aOrder = canonicalOrder[aKey] ?? a.order_num ?? 99;
+      const bOrder = canonicalOrder[bKey] ?? b.order_num ?? 99;
+      return aOrder - bOrder;
+    });
   }, [cards]);
 
   return (
@@ -1060,6 +1383,14 @@ export default function CustomerDashboardContent({
           </div>
 
           <div className="flex items-center gap-2">
+            <Link
+              href={`${baseRoute}/panel`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#0b4da2] hover:bg-blue-700 text-white shadow-xs transition-colors cursor-pointer border-0 no-underline whitespace-nowrap"
+            >
+              <Wallet size={14} />
+              <span>Worker Panel</span>
+            </Link>
+
             <Link
               href={`${baseRoute}/create`}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-xs transition-colors cursor-pointer border-0 no-underline"
@@ -1205,6 +1536,16 @@ export default function CustomerDashboardContent({
               <SlidersHorizontal size={14} />
               <span>Manage Cards &amp; Priority</span>
             </button>
+
+            {/* Worker / Customer Panel Link Button */}
+            <Link
+              href={`${baseRoute}/panel`}
+              title="Go to Worker / Customer Financial Panel"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#0b4da2] hover:bg-blue-700 text-white shadow-xs hover:shadow transition-all cursor-pointer border-0 no-underline whitespace-nowrap"
+            >
+              <Wallet size={14} />
+              <span>Worker / Customer Panel</span>
+            </Link>
           </div>
         </div>
 
@@ -1621,6 +1962,14 @@ export default function CustomerDashboardContent({
                           </Link>
 
                           <Link
+                            href={`${baseRoute}/statement?id=${cust.id}`}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-purple-600 hover:bg-purple-50 transition-colors"
+                            title="View Financial Statement & Wallet"
+                          >
+                            <Wallet size={15} />
+                          </Link>
+
+                          <Link
                             href={`${baseRoute}/create?id=${cust.id}`}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                             title="Edit customer details"
@@ -1690,6 +2039,358 @@ export default function CustomerDashboardContent({
         initialShowAdd={initialShowAdd}
         allowAdd={true}
       />
+
+      {/* ========================================================================= */}
+      {/* 5. ISSUE CUSTOMER REFUND MODAL */}
+      {/* ========================================================================= */}
+      {isRefundModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-[#0b4da2] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
+                  <RotateCcw size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white m-0">Issue Customer Refund</h3>
+                  <p className="text-xs text-blue-100 m-0">
+                    Process official deposit refund &amp; generate refundable voucher
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRefundModalOpen(false)}
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer border-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSubmitRefund} className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Customer Select2 Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  Select Foreign Worker / Customer <span className="text-rose-500">*</span>
+                </label>
+                <Select2Search
+                  options={customerRefundSelectOptions}
+                  value={selectedRefundCustomerId}
+                  onChange={(val) => setSelectedRefundCustomerId(val)}
+                  placeholder="Search and select worker by name, passport, or company..."
+                  searchPlaceholder="Type name, passport number, NID, employer..."
+                  icon={<User size={15} className="text-[#0b4da2]" />}
+                />
+              </div>
+
+              {/* Customer Financial Balance Snapshot */}
+              {selectedRefundCustomer && selectedRefundCustomerBalance && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">Customer Financial Balance:</span>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      Passport: {selectedRefundCustomer.passport_no || '—'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5 text-center">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Total Deposited</div>
+                      <div className="text-xs font-bold text-emerald-600 font-mono mt-0.5">
+                        RM {selectedRefundCustomerBalance.total_deposited.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-2.5 text-center">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase">Total Refunded</div>
+                      <div className="text-xs font-bold text-rose-600 font-mono mt-0.5">
+                        RM {(selectedRefundCustomerBalance.total_refunded || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <div className="bg-white border border-emerald-300 rounded-lg p-2.5 text-center bg-emerald-50/50">
+                      <div className="text-[10px] font-bold text-emerald-800 uppercase">Net Available</div>
+                      <div className="text-xs font-bold text-emerald-700 font-mono mt-0.5">
+                        RM {(selectedRefundCustomerBalance.net_balance !== undefined ? selectedRefundCustomerBalance.net_balance : selectedRefundCustomerBalance.total_deposited).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Quick Fill Button */}
+                  {(selectedRefundCustomerBalance.net_balance ?? selectedRefundCustomerBalance.total_deposited) > 0 && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const avail = selectedRefundCustomerBalance.net_balance ?? selectedRefundCustomerBalance.total_deposited;
+                          if (avail > 0) setRefundAmount(avail);
+                        }}
+                        className="text-[11px] font-bold text-[#0b4da2] hover:text-blue-800 hover:underline cursor-pointer bg-transparent border-0 p-0"
+                      >
+                        + Use Full Available Balance (RM {(selectedRefundCustomerBalance.net_balance ?? selectedRefundCustomerBalance.total_deposited).toLocaleString()})
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Amount and Date Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Refund Amount (RM) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                      RM
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={refundAmount}
+                      onChange={(e) => setRefundAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-white border border-slate-300 rounded-lg pl-10 pr-3 py-2 text-xs font-bold font-mono text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Refund Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={refundDate}
+                    onChange={(e) => setRefundDate(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+              </div>
+
+              {/* Refund Category / Purpose */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  Refund Category / Reason <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={refundPurpose}
+                  onChange={(e) => setRefundPurpose(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 cursor-pointer"
+                >
+                  {REFUND_PURPOSES.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                  <option value="Other">Other (Custom Purpose)</option>
+                </select>
+                {refundPurpose === 'Other' && (
+                  <input
+                    type="text"
+                    required
+                    value={refundCustomPurpose}
+                    onChange={(e) => setRefundCustomPurpose(e.target.value)}
+                    placeholder="Enter custom refund reason..."
+                    className="mt-2 w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                )}
+              </div>
+
+              {/* Payment Method & Bank Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Payment Method
+                  </label>
+                  <select
+                    value={refundPaymentMethod}
+                    onChange={(e) => setRefundPaymentMethod(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cash">Cash Counter</option>
+                    <option value="CDM">Cash Deposit Machine (CDM)</option>
+                    <option value="Cheque">Bank Cheque</option>
+                    <option value="Online FPX">Online FPX / DuitNow</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Bank Name
+                  </label>
+                  <select
+                    value={refundBankName}
+                    onChange={(e) => setRefundBankName(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    {MALAYSIAN_BANKS.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Bank Account No / Ref
+                  </label>
+                  <input
+                    type="text"
+                    value={refundBankAccountNo}
+                    onChange={(e) => setRefundBankAccountNo(e.target.value)}
+                    placeholder="Account number..."
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Voucher / Slip Attachment */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Voucher Reference No
+                  </label>
+                  <input
+                    type="text"
+                    value={refundReceiptNo}
+                    onChange={(e) => setRefundReceiptNo(e.target.value)}
+                    placeholder="REF-XXXXXX"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                    Attach Refund Slip / Receipt
+                  </label>
+                  <div className="relative border border-dashed border-slate-300 rounded-lg p-2.5 flex items-center justify-between gap-2 bg-slate-50/60 hover:bg-slate-50 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={handleRefundSlipUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      title="Upload refund slip receipt"
+                    />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCheck2 size={16} className="text-[#0b4da2] shrink-0" />
+                      <span className="text-xs text-slate-600 truncate">
+                        {refundSlipFilename || 'Click or drag slip / receipt...'}
+                      </span>
+                    </div>
+                    {refundSlipUrl && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRefundSlipUrl(null);
+                          setRefundSlipFilename('');
+                        }}
+                        className="text-xs text-rose-600 hover:text-rose-800 font-bold p-1 z-10 cursor-pointer bg-transparent border-0"
+                        title="Remove attached file"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  Remarks / Administrative Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={refundRemarks}
+                  onChange={(e) => setRefundRemarks(e.target.value)}
+                  placeholder="Add approval reference, authorization notes, or deduction details..."
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsRefundModalOpen(false)}
+                  disabled={refundSubmitting}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={refundSubmitting}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#0b4da2] hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-0 disabled:opacity-50"
+                >
+                  {refundSubmitting ? (
+                    <>
+                      <RotateCcw size={14} className="animate-spin" />
+                      <span>Processing Refund...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Confirm &amp; Issue Refund</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. PRINT OFFICIAL REFUND VOUCHER DIALOG */}
+      {/* ========================================================================= */}
+      {voucherToPrint && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 size={24} />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 mb-1">Refund Processed Successfully</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Voucher <strong>{voucherToPrint.receipt_no}</strong> for <strong>RM {(Number(voucherToPrint.refund_amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> has been issued for <strong>{voucherToPrint.customer_name}</strong>.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-5 text-left text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-600">
+                <span>Passport No:</span>
+                <span className="font-bold text-slate-800">{voucherToPrint.passport_no || '—'}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Purpose:</span>
+                <span className="font-bold text-slate-800">{voucherToPrint.purpose}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Payment Mode:</span>
+                <span className="font-bold text-slate-800">{voucherToPrint.payment_method}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setVoucherToPrint(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer border-0 bg-transparent"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePrintRefundVoucher(voucherToPrint)}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#0b4da2] hover:bg-blue-700 transition-colors shadow-xs cursor-pointer border-0"
+              >
+                <Printer size={14} />
+                <span>Print Official Voucher</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import {
   Plus,
   PlusCircle,
   Receipt,
+  RotateCcw,
   Settings,
   Shield,
   ShieldAlert,
