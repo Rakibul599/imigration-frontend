@@ -216,34 +216,9 @@ export async function fetchCustomerTargets(companyId?: string, search?: string):
     if (res.ok) {
       const dbList: CustomerTargetAmountRecord[] = await res.json();
       if (Array.isArray(dbList)) {
-        // If DB has records, save to local cache
-        if (dbList.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(dbList));
-          window.dispatchEvent(new Event('customerTargetsUpdated'));
-          return dbList;
-        }
-
-        // If DB is empty, check if we have unmigrated records in localStorage to upload
-        const localList = getStoredCustomerTargets();
-        if (localList.length > 0) {
-          for (const item of localList) {
-            try {
-              await fetch(`${API_BASE}/customer-targets`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify(item),
-              });
-            } catch {}
-          }
-          // Re-fetch after migration
-          const reRes = await fetch(`${API_BASE}/customer-targets`, { cache: 'no-store' });
-          if (reRes.ok) {
-            const reList = await reRes.json();
-            localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(reList));
-            window.dispatchEvent(new Event('customerTargetsUpdated'));
-            return reList;
-          }
-        }
+        localStorage.setItem(STORAGE_KEYS.TARGETS, JSON.stringify(dbList));
+        window.dispatchEvent(new Event('customerTargetsUpdated'));
+        return dbList;
       }
     }
   } catch (err) {
@@ -266,32 +241,9 @@ export async function fetchCustomerDeposits(companyId?: string, search?: string)
     if (res.ok) {
       const dbList: CustomerDepositAmountRecord[] = await res.json();
       if (Array.isArray(dbList)) {
-        if (dbList.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(dbList));
-          window.dispatchEvent(new Event('customerDepositsUpdated'));
-          return dbList;
-        }
-
-        // Check if unmigrated local deposits exist
-        const localList = getStoredCustomerDeposits();
-        if (localList.length > 0) {
-          for (const item of localList) {
-            try {
-              await fetch(`${API_BASE}/customer-deposits`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify(item),
-              });
-            } catch {}
-          }
-          const reRes = await fetch(`${API_BASE}/customer-deposits`, { cache: 'no-store' });
-          if (reRes.ok) {
-            const reList = await reRes.json();
-            localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(reList));
-            window.dispatchEvent(new Event('customerDepositsUpdated'));
-            return reList;
-          }
-        }
+        localStorage.setItem(STORAGE_KEYS.DEPOSITS, JSON.stringify(dbList));
+        window.dispatchEvent(new Event('customerDepositsUpdated'));
+        return dbList;
       }
     }
   } catch (err) {
@@ -339,32 +291,9 @@ export async function fetchCustomerCompanyCosts(companyId?: string, search?: str
     if (res.ok) {
       const dbList: CustomerCompanyCostRecord[] = await res.json();
       if (Array.isArray(dbList)) {
-        if (dbList.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(dbList));
-          window.dispatchEvent(new Event('companyCostsUpdated'));
-          return dbList;
-        }
-
-        // Check if unmigrated local company costs exist
-        const localList = getStoredCompanyCosts();
-        if (localList.length > 0) {
-          for (const item of localList) {
-            try {
-              await fetch(`${API_BASE}/customer-company-costs`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify(item),
-              });
-            } catch {}
-          }
-          const reRes = await fetch(`${API_BASE}/customer-company-costs`, { cache: 'no-store' });
-          if (reRes.ok) {
-            const reList = await reRes.json();
-            localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(reList));
-            window.dispatchEvent(new Event('companyCostsUpdated'));
-            return reList;
-          }
-        }
+        localStorage.setItem(STORAGE_KEYS.COMPANY_COSTS, JSON.stringify(dbList));
+        window.dispatchEvent(new Event('companyCostsUpdated'));
+        return dbList;
       }
     }
   } catch (err) {
@@ -944,31 +873,9 @@ export async function fetchCustomerRefunds(companyId?: string, search?: string):
     if (res.ok) {
       const dbList: CustomerRefundAmountRecord[] = await res.json();
       if (Array.isArray(dbList)) {
-        if (dbList.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(dbList));
-          window.dispatchEvent(new Event('customerRefundsUpdated'));
-          return dbList;
-        }
-
-        const localList = getStoredCustomerRefunds();
-        if (localList.length > 0) {
-          for (const item of localList) {
-            try {
-              await fetch(`${API_BASE}/customer-refunds`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                body: JSON.stringify(item),
-              });
-            } catch {}
-          }
-          const reRes = await fetch(`${API_BASE}/customer-refunds`, { cache: 'no-store' });
-          if (reRes.ok) {
-            const reList = await reRes.json();
-            localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(reList));
-            window.dispatchEvent(new Event('customerRefundsUpdated'));
-            return reList;
-          }
-        }
+        localStorage.setItem(STORAGE_KEYS.REFUNDS, JSON.stringify(dbList));
+        window.dispatchEvent(new Event('customerRefundsUpdated'));
+        return dbList;
       }
     }
   } catch (err) {

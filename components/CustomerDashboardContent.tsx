@@ -328,12 +328,18 @@ export default function CustomerDashboardContent({
     window.addEventListener('customerRefundsUpdated', handleRefundsUpdated);
     window.addEventListener('customersUpdated', handleDataReload);
     window.addEventListener('customerDepositsUpdated', handleDataReload);
+    window.addEventListener('customerTargetsUpdated', handleDataReload);
+    window.addEventListener('customerPendingsUpdated', handleDataReload);
+    window.addEventListener('companyCostsUpdated', handleDataReload);
     return () => {
       unsubFuture();
       unsubCompany();
       window.removeEventListener('customerRefundsUpdated', handleRefundsUpdated);
       window.removeEventListener('customersUpdated', handleDataReload);
       window.removeEventListener('customerDepositsUpdated', handleDataReload);
+      window.removeEventListener('customerTargetsUpdated', handleDataReload);
+      window.removeEventListener('customerPendingsUpdated', handleDataReload);
+      window.removeEventListener('companyCostsUpdated', handleDataReload);
     };
   }, []);
 
@@ -768,9 +774,9 @@ export default function CustomerDashboardContent({
           if (selectedCompanyCardId !== 'ALL' && t.company_id && t.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
           return true;
         });
-        const targetSum = relevantTargets.length > 0
-          ? relevantTargets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0)
-          : list.length * 3500;
+        const targetSum = list.length === 0
+          ? 0
+          : relevantTargets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0);
         return {
           value: `RM ${targetSum.toLocaleString()}`,
           isLink: true,
@@ -785,9 +791,9 @@ export default function CustomerDashboardContent({
           if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
           return true;
         });
-        const depositSum = relevantDeposits.length > 0
-          ? relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0)
-          : list.length * 2800;
+        const depositSum = list.length === 0
+          ? 0
+          : relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
         return {
           value: `RM ${depositSum.toLocaleString()}`,
           isLink: true,
@@ -802,9 +808,9 @@ export default function CustomerDashboardContent({
           if (selectedCompanyCardId !== 'ALL' && c.company_id && c.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
           return true;
         });
-        const costSum = relevantCosts.length > 0
-          ? relevantCosts.reduce((sum, c) => sum + (Number(c.total_cost_amount) || 0), 0)
-          : list.length * 1200;
+        const costSum = list.length === 0
+          ? 0
+          : relevantCosts.reduce((sum, c) => sum + (Number(c.total_cost_amount) || 0), 0);
         return {
           value: `RM ${costSum.toLocaleString()}`,
           isLink: true,
@@ -819,9 +825,9 @@ export default function CustomerDashboardContent({
           if (selectedCompanyCardId !== 'ALL' && p.company_id && p.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
           return true;
         });
-        const pendingSum = relevantPendings.length > 0
-          ? relevantPendings.reduce((sum, p) => sum + (Number(p.pending_amount) || 0), 0)
-          : list.length * 700;
+        const pendingSum = list.length === 0
+          ? 0
+          : relevantPendings.reduce((sum, p) => sum + (Number(p.pending_amount) || 0), 0);
         return {
           value: `RM ${pendingSum.toLocaleString()}`,
           isLink: true,
@@ -836,7 +842,9 @@ export default function CustomerDashboardContent({
           if (selectedCompanyCardId !== 'ALL' && r.company_id && r.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
           return true;
         });
-        const refundSum = relevantRefunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
+        const refundSum = list.length === 0
+          ? 0
+          : relevantRefunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
         return {
           value: `RM ${refundSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
           isLink: true,

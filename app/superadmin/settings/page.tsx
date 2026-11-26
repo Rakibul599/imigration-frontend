@@ -179,10 +179,17 @@ const DEFAULT_CLEANABLE_MODULES: CleanableModule[] = [
       'customers/deposits',
     ],
     local_storage_keys: [
+      'agency_customers_cache',
       'agency_customers_v1',
+      'agency_customer_targets',
       'agency_customer_targets_v1',
+      'agency_customer_deposits',
       'agency_customer_deposits_v1',
+      'agency_customer_refunds',
+      'agency_customer_refunds_v1',
+      'agency_customer_pendings',
       'agency_customer_pendings_v1',
+      'agency_customer_company_costs',
       'agency_customer_costs_v1',
     ],
     record_count: 0,
@@ -807,14 +814,23 @@ export default function SuperAdminSettingsPage() {
       }
       if (targetKeys.includes('customers')) {
         try {
+          localStorage.removeItem('agency_customers_cache');
           localStorage.removeItem('agency_customers_v1');
+          localStorage.removeItem('agency_customer_targets');
           localStorage.removeItem('agency_customer_targets_v1');
+          localStorage.removeItem('agency_customer_deposits');
           localStorage.removeItem('agency_customer_deposits_v1');
+          localStorage.removeItem('agency_customer_refunds');
           localStorage.removeItem('agency_customer_refunds_v1');
+          localStorage.removeItem('agency_customer_pendings');
           localStorage.removeItem('agency_customer_pendings_v1');
+          localStorage.removeItem('agency_customer_company_costs');
           localStorage.removeItem('agency_customer_costs_v1');
           window.dispatchEvent(new Event('customersUpdated'));
+          window.dispatchEvent(new Event('customerTargetsUpdated'));
           window.dispatchEvent(new Event('customerDepositsUpdated'));
+          window.dispatchEvent(new Event('customerPendingsUpdated'));
+          window.dispatchEvent(new Event('companyCostsUpdated'));
           window.dispatchEvent(new Event('customerRefundsUpdated'));
         } catch {}
       }
