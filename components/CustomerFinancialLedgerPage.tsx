@@ -580,7 +580,7 @@ function CustomerFinancialLedgerContent({
       {/* Main Container */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
         {/* Customer Profile Banner & Quick Switcher */}
-        <div className={`${isGlass ? 'dashboard-card-glass rounded-2xl' : 'bg-white border border-slate-200 rounded-2xl'} p-5 sm:p-6 shadow-xs`}>
+        <div className={`${isGlass ? 'dashboard-card-glass rounded-2xl' : 'bg-white border border-slate-200 rounded-2xl'} p-5 sm:p-6 shadow-xs relative z-30 !overflow-visible`}>
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
             <div>
               <div className="flex items-center gap-2.5 mb-1.5">
@@ -600,7 +600,7 @@ function CustomerFinancialLedgerContent({
             </div>
 
             {/* Customer Switcher Select2 */}
-            <div className="w-full sm:w-80 lg:w-96 shrink-0">
+            <div className="w-full sm:w-80 lg:w-96 shrink-0 relative z-40">
               <Select2Search
                 options={customerSelectOptions}
                 value={selectedCustomerId}
@@ -611,6 +611,7 @@ function CustomerFinancialLedgerContent({
                 placeholder="Search / Switch Customer..."
                 searchPlaceholder="Search by name, passport, or company..."
                 icon={<User size={15} className="text-[#0b4da2]" />}
+                dropdownAlign="right"
               />
             </div>
           </div>

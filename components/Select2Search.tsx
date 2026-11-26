@@ -47,22 +47,17 @@ export default function Select2Search({
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Dynamic alignment calculation to avoid right-edge overflow
-  useEffect(() => {
-    if (isOpen && containerRef.current) {
-      if (dropdownAlign === 'right') {
-        setEffectiveAlign('right');
-      } else {
-        const rect = containerRef.current.getBoundingClientRect();
-        const estDropdownWidth = 320;
-        if (rect.left + estDropdownWidth > (typeof window !== 'undefined' ? window.innerWidth : 1200) - 24) {
-          setEffectiveAlign('right');
-        } else {
-          setEffectiveAlign('left');
-        }
+  const calculateAlign = () => {
+    if (dropdownAlign === 'right') return 'right';
+    if (containerRef.current && typeof window !== 'undefined') {
+      const rect = containerRef.current.getBoundingClientRect();
+      const estDropdownWidth = 340;
+      if (rect.left + estDropdownWidth > window.innerWidth - 20) {
+        return 'right';
       }
     }
-  }, [isOpen, dropdownAlign]);
+    return 'left';
+  };
 
   // Selected Option Object
   const selectedOption = useMemo(() => {
@@ -82,6 +77,11 @@ export default function Select2Search({
     });
   }, [options, searchTerm]);
 
+  // Sync alignment whenever dropdownAlign prop or isOpen changes
+  useEffect(() => {
+    setEffectiveAlign(calculateAlign());
+  }, [isOpen, dropdownAlign]);
+
   // Click outside to close
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -93,15 +93,23 @@ export default function Select2Search({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Auto-focus search input when opened
+  // Auto-focus search input when opened WITHOUT scrolling page or container
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
+      setEffectiveAlign(calculateAlign());
       setTimeout(() => {
-        searchInputRef.current?.focus();
+        searchInputRef.current?.focus({ preventScroll: true });
       }, 50);
     }
   }, [isOpen]);
+
+  const handleToggle = () => {
+    if (!isOpen) {
+      setEffectiveAlign(calculateAlign());
+    }
+    setIsOpen((prev) => !prev);
+  };
 
   const handleSelect = (val: string) => {
     onChange(val);
@@ -120,7 +128,7 @@ export default function Select2Search({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={handleToggle}
         className={`w-full text-xs text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-2xs ${
           triggerClassName
             ? triggerClassName

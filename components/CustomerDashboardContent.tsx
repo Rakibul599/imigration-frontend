@@ -1362,7 +1362,7 @@ export default function CustomerDashboardContent({
       {/* ========================================================================= */}
       {/* 1. TOP HEADER (Exact Same Clean Style as Companies Dashboard) */}
       {/* ========================================================================= */}
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs relative z-30 !overflow-visible">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -1412,15 +1412,15 @@ export default function CustomerDashboardContent({
         </div>
 
         {/* Company, Program, Working Sector & Year Select2 Filter for Cards Information */}
-        <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-3 overflow-x-auto scrollbar-none pb-0.5">
-          <div className="flex items-center gap-2.5 flex-nowrap shrink-0">
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 relative z-30 !overflow-visible">
+          <div className="flex flex-wrap items-center gap-2.5">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
               <Building2 size={16} className="text-[#0b4da2]" />
               <span>Filter Cards by Company:</span>
             </div>
 
             {/* 1. Company Filter */}
-            <div className="w-48 sm:w-52 md:w-56 shrink-0">
+            <div className="w-48 sm:w-52 md:w-56 shrink-0 relative z-40">
               <Select2Search
                 options={companyCardFilterOptions}
                 value={selectedCompanyCardId}
@@ -1433,7 +1433,7 @@ export default function CustomerDashboardContent({
             </div>
 
             {/* 2. Program Filter */}
-            <div className="w-40 sm:w-44 md:w-48 shrink-0">
+            <div className="w-40 sm:w-44 md:w-48 shrink-0 relative z-30">
               <Select2Search
                 options={programCardFilterOptions}
                 value={selectedProgramCardId}
@@ -1446,7 +1446,7 @@ export default function CustomerDashboardContent({
             </div>
 
             {/* 3. Working Sector Filter (Placed immediately beside Program Filter) */}
-            <div className="w-40 sm:w-44 md:w-48 shrink-0">
+            <div className="w-40 sm:w-44 md:w-48 shrink-0 relative z-20">
               <Select2Search
                 options={sectorCardFilterOptions}
                 value={selectedSectorCardId}
@@ -1459,7 +1459,7 @@ export default function CustomerDashboardContent({
             </div>
 
             {/* 4. Year Filter */}
-            <div className="w-28 sm:w-32 md:w-36 shrink-0">
+            <div className="w-28 sm:w-32 md:w-36 shrink-0 relative z-10">
               <Select2Search
                 options={yearCardFilterOptions}
                 value={selectedYearCardId}
