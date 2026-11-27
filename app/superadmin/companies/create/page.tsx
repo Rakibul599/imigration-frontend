@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   ArrowLeft,
+  BookOpen,
   Briefcase,
   Building2,
   Calendar,
@@ -59,6 +60,7 @@ import {
   updateStoredCompany,
 } from '@/lib/companyStorage';
 import { WorkingSector, fetchWorkingSectors, createWorkingSector } from '@/lib/customerStorage';
+import { fetchPrograms, ProgramRecord } from '@/lib/programStorage';
 import Select2Search from '@/components/Select2Search';
 import { ALL_WORLD_LANGUAGES } from '@/lib/languages';
 import { ALL_WORLD_CURRENCIES } from '@/lib/currencies';
@@ -244,6 +246,9 @@ function CreateCompanyFormContent() {
   const [sector, setSector] = useState('');
   const [companySectors, setCompanySectors] = useState<string[]>([]);
   const [sectorsList, setSectorsList] = useState<WorkingSector[]>([]);
+  const [programsList, setProgramsList] = useState<ProgramRecord[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('');
+  const [selectedProgramName, setSelectedProgramName] = useState<string>('');
   const [totalWorkers, setTotalWorkers] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState('Verified JIM');
@@ -298,6 +303,25 @@ function CreateCompanyFormContent() {
     return () => window.removeEventListener('working_sectors_updated', loadSectors);
   }, []);
 
+  // Load programs from backend
+  useEffect(() => {
+    let mounted = true;
+    async function loadPrograms() {
+      try {
+        const progs = await fetchPrograms();
+        if (mounted && Array.isArray(progs)) {
+          setProgramsList(progs);
+        }
+      } catch (err) {
+        console.error('Failed to load programs:', err);
+      }
+    }
+    loadPrograms();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Load existing data in Edit mode
   useEffect(() => {
     if (editId) {
@@ -338,6 +362,10 @@ function CreateCompanyFormContent() {
         const primarySec = secArr[0] || secStr || '';
         setCompanySectors(secArr.length > 0 ? secArr : (primarySec ? [primarySec] : []));
         setSector(primarySec);
+        if (comp.program_id) {
+          setSelectedProgramId(String(comp.program_id));
+          setSelectedProgramName(comp.program_name || '');
+        }
         setTotalWorkers(comp.totalWorkers || 0);
         setDescription(comp.description || '');
         setTag(comp.tag || 'Verified JIM');
@@ -393,12 +421,20 @@ function CreateCompanyFormContent() {
     }
   }, [editId]);
 
-  // Load subscription plans for Master Admin dropdown
+  // Load subscription plans for Master Admin dropdown (including Free Plans)
   useEffect(() => {
-    fetchSubscriptionPlans()
+    fetchSubscriptionPlans(false, true)
       .then((plans) => {
         if (plans && plans.length > 0) {
           setSubscriptionPlans(plans);
+          setMasterAdmins((prev) =>
+            prev.map((ma) => ({
+              ...ma,
+              subscription_package: plans.some((p) => p.plan_key === ma.subscription_package)
+                ? ma.subscription_package
+                : plans[0].plan_key,
+            }))
+          );
         }
       })
       .catch(() => {});
@@ -476,6 +512,39 @@ function CreateCompanyFormContent() {
   const handleRegenerateEmployeePassword = (index: number) => {
     handleUpdateEmployee(index, 'password', generateSecurePassword(10));
     handleUpdateEmployee(index, 'showPassword', true);
+  };
+
+  // Filter sectors by selected program
+  const programSectors = useMemo(() => {
+    if (!selectedProgramId) return [];
+    const prog = programsList.find((p) => String(p.id) === String(selectedProgramId));
+    if (!prog || !prog.category) return [];
+    return prog.category
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [selectedProgramId, programsList]);
+
+  const handleProgramChange = (progId: string) => {
+    setSelectedProgramId(progId);
+    const prog = programsList.find((p) => String(p.id) === String(progId));
+    setSelectedProgramName(prog ? prog.name : '');
+
+    if (prog && prog.category) {
+      const pSectors = prog.category
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (pSectors.length > 0) {
+        if (!pSectors.includes(sector)) {
+          handleSectorChange(pSectors[0]);
+        }
+      } else {
+        handleSectorChange('');
+      }
+    } else {
+      handleSectorChange('');
+    }
   };
 
   const handleSectorChange = (selectedSector: string) => {
@@ -1087,12 +1156,16 @@ function CreateCompanyFormContent() {
         ? editId
         : name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
 
+      const selectedPlan = subscriptionPlans.find((p) => p.plan_key === (masterAdmins[0]?.subscription_package || subscriptionPlans[0]?.plan_key));
+
       const companyData: Company = {
         id: sanitizedId,
         name: name.trim().toUpperCase(),
         roc: roc.trim(),
         sector: companySectors.join(', ') || sector,
         sectors: companySectors.length > 0 ? companySectors : [sector],
+        program_id: selectedProgramId || undefined,
+        program_name: selectedProgramName || undefined,
         tag,
         totalWorkers: Number(totalWorkers) || 0,
         logo: logo || '',
@@ -1146,6 +1219,14 @@ function CreateCompanyFormContent() {
             excelDocuments: dir.excelDocuments || [],
           };
         }),
+        subscription_plan_key: selectedPlan?.plan_key || '1year',
+        subscription_plan_price: selectedPlan ? Number(selectedPlan.price) : 0,
+        subscription_plan_name: selectedPlan ? selectedPlan.name : 'Subscription Plan',
+        subscription_status: 'active',
+        subscription_starts_at: new Date().toISOString(),
+        subscription_expires_at: selectedPlan?.is_free_plan || !selectedPlan?.duration_days
+          ? null
+          : new Date(Date.now() + selectedPlan.duration_days * 86400000).toISOString(),
       };
 
       if (editId) {
@@ -1306,163 +1387,11 @@ function CreateCompanyFormContent() {
 
       {/* THE COMPREHENSIVE FORM */}
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* SECTION 1: COMPANY IDENTIFICATION & CONTACT */}
+        {/* SECTION 1: COMPANY LOGO & BRANDING */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
           <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
             <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
               1
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 m-0">Company Profile &amp; Registration</h2>
-              <p className="text-[11px] text-slate-500 m-0">Official business registration details, ROC, and contact coordinates.</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {/* ROW 1: 3 Fields (Company Name, ROC, Sector) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Company Name */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Company Name <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all uppercase"
-                  />
-                </div>
-              </div>
-
-              {/* Registration No (ROC) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Registration No (ROC) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <ShieldCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    required
-                    value={roc}
-                    onChange={(e) => setRoc(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Working Sector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Company Working Sector <span className="text-red-500">*</span>
-                </label>
-
-                <div className="relative">
-                  <Briefcase size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  <select
-                    required
-                    value={sector}
-                    onChange={(e) => handleSectorChange(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all cursor-pointer appearance-none"
-                  >
-                    <option value="">-- Choose Company Sector --</option>
-                    {sectorsList
-                      .filter((s) => (s.status || 'active') === 'active')
-                      .map((s) => (
-                        <option key={s.id} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
-                    {/* Keep existing sector visible if editing a legacy company */}
-                    {sector && !sectorsList.some((s) => s.name === sector) && (
-                      <option value={sector}>{sector} (Assigned)</option>
-                    )}
-                  </select>
-                  <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* ROW 2: Phone Number, Telephone Number & Email Address (3 Columns) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Phone No */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Telephone No */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Telephone Number
-                </label>
-                <div className="relative">
-                  <PhoneCall size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={telephone}
-                    onChange={(e) => setTelephone(e.target.value.replace(/\D/g, ''))}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Email No */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* ROW 3: Company Registered Address */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">
-                Company Registered Address
-              </label>
-              <div className="relative">
-                <MapPin size={16} className="absolute left-3.5 top-3 text-slate-400" />
-                <textarea
-                  rows={2}
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 2: COMPANY LOGO & BRANDING */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
-          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
-              2
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900 m-0">Company Logo Upload</h2>
@@ -1524,6 +1453,201 @@ function CreateCompanyFormContent() {
               <p className="text-[11px] text-slate-400 m-0">
                 Upload official company crest or logo (PNG, JPG, or SVG up to 2MB).
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 2: COMPANY PROFILE & REGISTRATION */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+          <div className="flex items-center gap-2.5 pb-4 border-b border-slate-100">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold text-xs">
+              2
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 m-0">Company Profile &amp; Registration</h2>
+              <p className="text-[11px] text-slate-500 m-0">Official business registration details, ROC, and contact coordinates.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* ROW 1: 2 Fields (Company Name, ROC) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Company Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Company Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Registration No (ROC) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Registration No (ROC) <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <ShieldCheck size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={roc}
+                    onChange={(e) => setRoc(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ROW 2: Program Selection & Company Working Sector */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Select Program */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Select Program <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <BookOpen size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <select
+                    required
+                    value={selectedProgramId}
+                    onChange={(e) => handleProgramChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all cursor-pointer appearance-none"
+                  >
+                    <option value="">-- Choose Assigned Program --</option>
+                    {programsList
+                      .filter((p) => (p.status || 'active') === 'active')
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{p.year ? ` (${p.year})` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Working Sector (Filtered by Program) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                  <span>
+                    Company Working Sector <span className="text-red-500">*</span>
+                  </span>
+                  {selectedProgramId && programSectors.length > 0 && (
+                    <span className="text-[10px] text-blue-600 font-semibold">
+                      {programSectors.length} program {programSectors.length === 1 ? 'sector' : 'sectors'}
+                    </span>
+                  )}
+                </label>
+
+                <div className="relative">
+                  <Briefcase size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <select
+                    required
+                    value={sector}
+                    onChange={(e) => handleSectorChange(e.target.value)}
+                    disabled={!selectedProgramId}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all cursor-pointer appearance-none disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    {!selectedProgramId ? (
+                      <option value="">-- Please select a program first --</option>
+                    ) : programSectors.length === 0 ? (
+                      <option value="">-- No sectors in this program --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Choose Company Sector --</option>
+                        {programSectors.map((secName) => (
+                          <option key={secName} value={secName}>
+                            {secName}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                    {/* Keep existing sector visible if editing legacy company */}
+                    {sector && !programSectors.includes(sector) && (
+                      <option value={sector}>{sector} (Current)</option>
+                    )}
+                  </select>
+                  <ChevronDown size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* ROW 3: Phone Number, Telephone Number & Email Address (3 Columns) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Phone No */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Telephone No */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Telephone Number
+                </label>
+                <div className="relative">
+                  <PhoneCall size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={telephone}
+                    onChange={(e) => setTelephone(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Email No */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ROW 4: Company Registered Address */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                Company Registered Address
+              </label>
+              <div className="relative">
+                <MapPin size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <textarea
+                  rows={2}
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 transition-all"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1870,7 +1994,7 @@ function CreateCompanyFormContent() {
                         {subscriptionPlans.length > 0 ? (
                           subscriptionPlans.map((plan) => (
                             <option key={plan.id} value={plan.plan_key}>
-                              {plan.name} ({plan.duration_days || 30} Days) - {plan.price ? `${plan.price} ${plan.currency || 'RM'}` : 'Default'}
+                              {plan.name} ({plan.duration_days || 30} Days) - {plan.is_free_plan ? 'FREE PLAN (RM 0.00)' : (plan.price ? `${plan.price} ${plan.currency || 'RM'}` : 'Default')}
                             </option>
                           ))
                         ) : (

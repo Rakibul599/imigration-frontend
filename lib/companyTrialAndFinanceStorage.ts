@@ -533,14 +533,19 @@ export interface SubscriptionPlan {
   trial_days: number;
   is_popular: boolean;
   is_active: boolean;
+  is_free_plan?: boolean;
   sort_order: number;
   created_at?: string;
   updated_at?: string;
 }
 
-export async function fetchSubscriptionPlans(includeInactive = false): Promise<SubscriptionPlan[]> {
+export async function fetchSubscriptionPlans(includeInactive = false, includeFree = false): Promise<SubscriptionPlan[]> {
   try {
-    const res = await fetch(`${API_BASE}/subscription-plans${includeInactive ? '?all=1' : ''}`, {
+    const params = new URLSearchParams();
+    if (includeInactive) params.append('all', '1');
+    if (includeFree) params.append('include_free', '1');
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/subscription-plans${qs}`, {
       headers: { Accept: 'application/json' },
     });
     if (!res.ok) throw new Error('Failed to fetch subscription plans');

@@ -7,6 +7,7 @@ export interface ProgramRecord {
   name: string;
   code?: string;
   category?: string;
+  year?: string | number;
   description?: string;
   duration?: string;
   fees?: number | string;

@@ -44,12 +44,12 @@ export default function FreeTrialDropdownButton({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Load plans from backend dynamically
+  // Load plans from backend dynamically (excluding Free Plans)
   useEffect(() => {
     fetchSubscriptionPlans()
       .then((res) => {
         if (Array.isArray(res)) {
-          setDynamicPlans(res);
+          setDynamicPlans(res.filter((p) => !p.is_free_plan));
         }
       })
       .catch(() => {})

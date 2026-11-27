@@ -101,6 +101,8 @@ export type Company = {
   roc: string; // Registration of Companies number
   sector: string;
   sectors?: string[];
+  program_id?: string;
+  program_name?: string;
   description: string;
   logo: string;
   tag?: string;
@@ -138,6 +140,8 @@ export type Company = {
   deactivation_reason?: string | null;
   deactivation_duration?: string | null;
   subscription_plan_key?: string | null;
+  subscription_plan_price?: number | null;
+  subscription_plan_name?: string | null;
   subscription_starts_at?: string | null;
   subscription_expires_at?: string | null;
   subscription_status?: string | null;
@@ -162,16 +166,58 @@ export function getCompanyInactiveWorkers(c: Company): number {
   return Math.max(0, total - getCompanyActiveWorkers(c));
 }
 
+export function getCompanySubscriptionPlanPrice(c: Company): number {
+  if (typeof c.subscription_plan_price === 'number' && c.subscription_plan_price >= 0) {
+    return c.subscription_plan_price;
+  }
+  const key = (c.subscription_plan_key || '').toLowerCase().trim();
+  if (key === '1year' || key === '1_year' || key === '12 month' || key === '12month' || key === '1_month' || key === '1month') {
+    return 999;
+  }
+  if (key === '3_months' || key === '3months') return 499;
+  if (key === '6_months' || key === '6months') return 799;
+
+  // Check localStorage if in browser
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('agency_subscription_plans');
+      if (raw) {
+        const plans = JSON.parse(raw);
+        if (Array.isArray(plans)) {
+          const match = plans.find(
+            (p: any) =>
+              (p.plan_key && p.plan_key.toLowerCase() === key) ||
+              (p.name && p.name.toLowerCase() === key)
+          );
+          if (match && Number(match.price) > 0) {
+            return Number(match.price);
+          }
+          if (plans.length === 1 && Number(plans[0].price) > 0) {
+            return Number(plans[0].price);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (key) return 999;
+  return 0;
+}
+
 export function getCompanyIncomeWallet(c: Company): number {
   if (typeof c.incomeWallet === 'number') return c.incomeWallet;
   const active = getCompanyActiveWorkers(c);
-  return active * 450 + 15000;
+  const planFee = getCompanySubscriptionPlanPrice(c);
+  // When no active workers, income reflects the company's purchased subscription plan fee
+  // When active workers exist, income is (active * 450) + planFee
+  return active * 450 + planFee;
 }
 
 export function getCompanyCostWallet(c: Company): number {
   if (typeof c.costWallet === 'number') return c.costWallet;
   const active = getCompanyActiveWorkers(c);
-  return active * 180 + 6000;
+  // Worker-based operational cost without arbitrary baseline
+  return active * 180;
 }
 
 export function getCompanyProfitWallet(c: Company): number {
@@ -182,7 +228,7 @@ export function getCompanyProfitWallet(c: Company): number {
 export function getCompanyWorkerWallet(c: Company): number {
   if (typeof c.workerWallet === 'number') return c.workerWallet;
   const active = getCompanyActiveWorkers(c);
-  return active * 135 + 4500;
+  return active * 135;
 }
 
 export function getCompanyPendingWallet(c: Company): number {

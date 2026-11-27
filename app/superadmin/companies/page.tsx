@@ -2387,7 +2387,11 @@ export default function SuperAdminCompaniesPage() {
 
                   {/* 9. Expire Date */}
                   <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap" suppressHydrationWarning>
-                    {expiry ? (
+                    {assignedPlan?.is_free_plan ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                        Lifetime Access
+                      </span>
+                    ) : expiry ? (
                       <div className="flex flex-col items-center justify-center" suppressHydrationWarning>
                         <span className="font-mono font-semibold text-slate-700 text-xs" suppressHydrationWarning>
                           {mounted ? expiry.date : '—'}
@@ -2403,7 +2407,12 @@ export default function SuperAdminCompaniesPage() {
 
                   {/* 10. Countdown */}
                   <td className="py-3.5 px-4 border-r border-slate-200 align-middle text-center whitespace-nowrap" suppressHydrationWarning>
-                    {company.subscription_expires_at ? (
+                    {assignedPlan?.is_free_plan ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
+                        <CheckCircle2 size={12} className="text-emerald-600" />
+                        <span>Lifetime</span>
+                      </span>
+                    ) : company.subscription_expires_at ? (
                       <span
                         suppressHydrationWarning
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold border ${mounted ? countdown.color : 'text-slate-400 bg-slate-50 border-slate-200'}`}

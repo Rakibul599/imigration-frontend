@@ -124,6 +124,7 @@ const DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS: PageStatCardConfig[] = [
   { id: 'refund_amount', title: 'Customer Refund Amount', subtitle: '', icon: 'RotateCcw', order_num: 9, metric_type: 'refund_wallet' },
   { id: 'pending_amount', title: 'Customer Pending Amount', subtitle: '', icon: 'Clock', order_num: 10, metric_type: 'pending_wallet' },
   { id: 'cost_amount', title: 'Customer Cost Amount', subtitle: '', icon: 'FileSpreadsheet', order_num: 11, metric_type: 'cost_wallet' },
+  { id: 'total_profit', title: 'Total Profit Amount', subtitle: '', icon: 'TrendingUp', order_num: 12, metric_type: 'profit_wallet' },
 ];
 
 const CUSTOMER_CARD_METRIC_OPTIONS = [
@@ -138,6 +139,7 @@ const CUSTOMER_CARD_METRIC_OPTIONS = [
   { id: 'pending_wallet', label: 'Customer Pending Amount (RM Value)' },
   { id: 'cost_wallet', label: 'Customer Cost Amount (RM Value)' },
   { id: 'refund_wallet', label: 'Customer Refund Amount (RM Value)' },
+  { id: 'profit_wallet', label: 'Total Profit Amount (RM Value)' },
   { id: 'custom', label: 'Custom Value / Fixed Number' },
 ];
 
@@ -252,8 +254,9 @@ export default function CustomerDashboardContent({
     const depositIdx = sorted.findIndex((c) => c.id === 'deposit_amount' || c.metric_type === 'deposit_wallet');
     const refundIdx = sorted.findIndex((c) => c.id === 'refund_amount' || c.metric_type === 'refund_wallet');
     const isDirectlyAfter = depositIdx >= 0 && refundIdx === depositIdx + 1;
+    const hasProfit = sorted.some((c) => (c.id === 'total_profit' || c.metric_type === 'profit_wallet') && c.title === 'Total Profit Amount');
 
-    if (!isDirectlyAfter || sorted.length !== DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS.length) {
+    if (!isDirectlyAfter || sorted.length !== DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS.length || !hasProfit) {
       saveStoredPageCards('customer_dashboard', DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
       setCards(DEFAULT_CUSTOMER_DASHBOARD_STAT_CARDS);
     } else {
@@ -299,11 +302,31 @@ export default function CustomerDashboardContent({
       setCustomers(custList);
       setPrograms(progList);
       setFutureCustomers(futureList || []);
-      setTargetRecords(targets || []);
-      setDepositRecords(deposits || []);
-      setPendingRecords(pendings || []);
-      setCostRecords(costs || []);
-      setRefundRecords(refunds || []);
+
+      if (custList.length === 0) {
+        // Automatically prune orphan localStorage records when 0 customers exist
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('agency_customer_targets', JSON.stringify([]));
+            localStorage.setItem('agency_customer_deposits', JSON.stringify([]));
+            localStorage.setItem('agency_customer_pendings', JSON.stringify([]));
+            localStorage.setItem('agency_customer_company_costs', JSON.stringify([]));
+            localStorage.setItem('agency_customer_refunds', JSON.stringify([]));
+          } catch {}
+        }
+        setTargetRecords([]);
+        setDepositRecords([]);
+        setPendingRecords([]);
+        setCostRecords([]);
+        setRefundRecords([]);
+      } else {
+        const validIds = new Set(custList.map((c) => String(c.id)));
+        setTargetRecords((targets || []).filter((t) => validIds.has(String(t.customer_id))));
+        setDepositRecords((deposits || []).filter((d) => validIds.has(String(d.customer_id))));
+        setPendingRecords((pendings || []).filter((p) => validIds.has(String(p.customer_id))));
+        setCostRecords((costs || []).filter((c) => validIds.has(String(c.customer_id))));
+        setRefundRecords((refunds || []).filter((r) => validIds.has(String(r.customer_id))));
+      }
     } catch (err) {
       console.error('Failed to load customer dashboard data:', err);
     } finally {
@@ -683,6 +706,7 @@ export default function CustomerDashboardContent({
   const getCardMetrics = (card: PageStatCardConfig) => {
     const metric = card.metric_type || card.id;
     const list = customersFilteredForCards;
+    const listCustomerIds = new Set(list.map((c) => String(c.id)));
 
     switch (metric) {
       case 'total_customers': {
@@ -772,7 +796,7 @@ export default function CustomerDashboardContent({
       case 'customer_target_amount': {
         const relevantTargets = targetRecords.filter((t) => {
           if (selectedCompanyCardId !== 'ALL' && t.company_id && t.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
-          return true;
+          return listCustomerIds.has(String(t.customer_id));
         });
         const targetSum = list.length === 0
           ? 0
@@ -789,7 +813,7 @@ export default function CustomerDashboardContent({
       case 'customer_deposit_amount': {
         const relevantDeposits = depositRecords.filter((d) => {
           if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
-          return true;
+          return listCustomerIds.has(String(d.customer_id));
         });
         const depositSum = list.length === 0
           ? 0
@@ -806,7 +830,7 @@ export default function CustomerDashboardContent({
       case 'customer_cost_amount': {
         const relevantCosts = costRecords.filter((c) => {
           if (selectedCompanyCardId !== 'ALL' && c.company_id && c.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
-          return true;
+          return listCustomerIds.has(String(c.customer_id));
         });
         const costSum = list.length === 0
           ? 0
@@ -821,13 +845,17 @@ export default function CustomerDashboardContent({
       case 'pending_wallet':
       case 'pending_amount':
       case 'customer_pending_amount': {
-        const relevantPendings = pendingRecords.filter((p) => {
-          if (selectedCompanyCardId !== 'ALL' && p.company_id && p.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
-          return true;
+        const relevantTargets = targetRecords.filter((t) => {
+          if (selectedCompanyCardId !== 'ALL' && t.company_id && t.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(t.customer_id));
         });
-        const pendingSum = list.length === 0
-          ? 0
-          : relevantPendings.reduce((sum, p) => sum + (Number(p.pending_amount) || 0), 0);
+        const relevantDeposits = depositRecords.filter((d) => {
+          if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(d.customer_id));
+        });
+        const tSum = list.length === 0 ? 0 : relevantTargets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0);
+        const dSum = list.length === 0 ? 0 : relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+        const pendingSum = Math.max(0, tSum - dSum);
         return {
           value: `RM ${pendingSum.toLocaleString()}`,
           isLink: true,
@@ -840,7 +868,7 @@ export default function CustomerDashboardContent({
       case 'customer_refund_amount': {
         const relevantRefunds = refundRecords.filter((r) => {
           if (selectedCompanyCardId !== 'ALL' && r.company_id && r.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
-          return true;
+          return listCustomerIds.has(String(r.customer_id));
         });
         const refundSum = list.length === 0
           ? 0
@@ -850,6 +878,37 @@ export default function CustomerDashboardContent({
           isLink: true,
           link: `${baseRoute}/refund-amount`,
           theme: { bg: 'bg-rose-50', text: 'text-rose-700', valColor: 'text-rose-600' },
+        };
+      }
+      case 'profit_wallet':
+      case 'total_profit':
+      case 'customer_profit_amount':
+      case 'total_profit_amount': {
+        const relevantDeposits = depositRecords.filter((d) => {
+          if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(d.customer_id));
+        });
+        const relevantRefunds = refundRecords.filter((r) => {
+          if (selectedCompanyCardId !== 'ALL' && r.company_id && r.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(r.customer_id));
+        });
+        const relevantCosts = costRecords.filter((c) => {
+          if (selectedCompanyCardId !== 'ALL' && c.company_id && c.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(c.customer_id));
+        });
+
+        const depositSum = list.length === 0 ? 0 : relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+        const refundSum = list.length === 0 ? 0 : relevantRefunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
+        const costSum = list.length === 0 ? 0 : relevantCosts.reduce((sum, c) => sum + (Number(c.total_cost_amount) || 0), 0);
+
+        const profitSum = Math.max(0, depositSum - refundSum - costSum);
+
+        return {
+          value: `RM ${profitSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          sub: 'Total Net Retained Margin',
+          isLink: true,
+          link: `${baseRoute}/statement`,
+          theme: { bg: 'bg-emerald-50', text: 'text-emerald-700', valColor: 'text-emerald-600' },
         };
       }
       default: {

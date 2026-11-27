@@ -11,6 +11,7 @@ import {
   Copy,
   Edit2,
   FileText,
+  MapPin,
   MessageSquare,
   Phone,
   Plus,
@@ -99,6 +100,7 @@ export default function SuperAdminAgentManagementPage() {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
+    leaving_address: '',
     company_id: '',
     company_name: '',
     program_id: '',
@@ -154,6 +156,17 @@ export default function SuperAdminAgentManagementPage() {
     defaults.forEach((d) => set.add(d));
     return Array.from(set).sort();
   }, [sectors]);
+
+  // Modal Program Sectors
+  const modalProgramSectors = useMemo(() => {
+    if (!formData.program_id) return [];
+    const prog = programs.find((p) => String(p.id) === String(formData.program_id));
+    if (!prog || !prog.category) return [];
+    return prog.category
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [formData.program_id, programs]);
 
   // Load cards layout and data
   useEffect(() => {
@@ -219,8 +232,9 @@ export default function SuperAdminAgentManagementPage() {
       const term = searchTerm.toLowerCase();
       const matchName = agent.name?.toLowerCase().includes(term);
       const matchPhone = agent.phone?.toLowerCase().includes(term);
+      const matchAddress = agent.leaving_address?.toLowerCase().includes(term);
       const matchNotes = agent.notes?.toLowerCase().includes(term);
-      return matchName || matchPhone || matchNotes;
+      return matchName || matchPhone || matchAddress || matchNotes;
     });
   }, [agents, searchTerm]);
 
@@ -230,6 +244,7 @@ export default function SuperAdminAgentManagementPage() {
     setFormData({
       name: '',
       phone: '',
+      leaving_address: '',
       company_id: '',
       company_name: '',
       program_id: '',
@@ -248,6 +263,7 @@ export default function SuperAdminAgentManagementPage() {
     setFormData({
       name: agent.name || '',
       phone: agent.phone || '',
+      leaving_address: agent.leaving_address || '',
       company_id: agent.company_id || '',
       company_name: agent.company_name || '',
       program_id: agent.program_id || '',
@@ -297,6 +313,7 @@ export default function SuperAdminAgentManagementPage() {
         const updated = await updateAgent(editingAgent.id, {
           name: formData.name.trim(),
           phone: formData.phone.trim(),
+          leaving_address: formData.leaving_address.trim() || undefined,
           company_id: formData.company_id || undefined,
           company_name: selectedComp?.name || formData.company_name || undefined,
           program_id: formData.program_id || undefined,
@@ -312,6 +329,7 @@ export default function SuperAdminAgentManagementPage() {
         const created = await createAgent({
           name: formData.name.trim(),
           phone: formData.phone.trim(),
+          leaving_address: formData.leaving_address.trim() || undefined,
           company_id: formData.company_id || undefined,
           company_name: selectedComp?.name || undefined,
           program_id: formData.program_id || undefined,
@@ -675,6 +693,12 @@ export default function SuperAdminAgentManagementPage() {
                             )}
                           </button>
                         </div>
+                        {agent.leaving_address && (
+                          <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 max-w-xs" title={agent.leaving_address}>
+                            <MapPin size={11} className="text-slate-400 shrink-0" />
+                            <span className="truncate">{agent.leaving_address}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Note / Remarks */}
@@ -857,6 +881,25 @@ export default function SuperAdminAgentManagementPage() {
                 </span>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                  <span>Leaving Address</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <MapPin size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    value={formData.leaving_address}
+                    onChange={(e) => setFormData({ ...formData, leaving_address: e.target.value })}
+                    placeholder="e.g. 123, Jalan Ampang, Kuala Lumpur / Dhaka, Bangladesh"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50/70 rounded-xl border border-slate-200">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
@@ -894,10 +937,12 @@ export default function SuperAdminAgentManagementPage() {
                     onChange={(e) => {
                       const pId = e.target.value;
                       const prog = programs.find((p) => String(p.id) === pId);
+                      const pSectors = prog?.category ? prog.category.split(',').map((s) => s.trim()).filter(Boolean) : [];
                       setFormData((p) => ({
                         ...p,
                         program_id: pId,
                         program_name: prog?.name || '',
+                        sector: pSectors.length > 0 && !pSectors.includes(p.sector) ? pSectors[0] : (pId ? p.sector : ''),
                       }));
                     }}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
@@ -917,15 +962,24 @@ export default function SuperAdminAgentManagementPage() {
                   </label>
                   <select
                     value={formData.sector}
+                    disabled={!formData.program_id}
                     onChange={(e) => setFormData((p) => ({ ...p, sector: e.target.value }))}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2]"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
-                    <option value="">-- Select Sector --</option>
-                    {sectorOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    {!formData.program_id ? (
+                      <option value="">-- Select Program First --</option>
+                    ) : modalProgramSectors.length === 0 ? (
+                      <option value="">-- No sectors defined for this program --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Sector --</option>
+                        {modalProgramSectors.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 

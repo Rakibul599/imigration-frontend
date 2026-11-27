@@ -175,9 +175,10 @@ function FreeTrialForm() {
     fetchSubscriptionPlans()
       .then((res) => {
         if (Array.isArray(res) && res.length > 0) {
-          setDynamicPlans(res);
-          if (!planParam) {
-            const pop = res.find((p) => p.is_popular) || res[0];
+          const publicPlans = res.filter((p) => !p.is_free_plan);
+          setDynamicPlans(publicPlans);
+          if (!planParam && publicPlans.length > 0) {
+            const pop = publicPlans.find((p) => p.is_popular) || publicPlans[0];
             setSelectedPlan(pop.plan_key);
           }
         }

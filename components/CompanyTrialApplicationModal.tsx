@@ -146,9 +146,10 @@ export default function CompanyTrialApplicationModal({
     fetchSubscriptionPlans()
       .then((res) => {
         if (Array.isArray(res)) {
-          setDynamicPlans(res);
-          if (res.length > 0 && !res.some((p) => p.plan_key === selectedPlan)) {
-            setSelectedPlan(res[0].plan_key);
+          const publicPlans = res.filter((p) => !p.is_free_plan);
+          setDynamicPlans(publicPlans);
+          if (publicPlans.length > 0 && !publicPlans.some((p) => p.plan_key === selectedPlan)) {
+            setSelectedPlan(publicPlans[0].plan_key);
           }
         }
       })

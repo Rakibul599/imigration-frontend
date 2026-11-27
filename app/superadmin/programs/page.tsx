@@ -547,8 +547,15 @@ function ProgramsPageContent() {
                   >
                     {/* Program Name */}
                     <td className="py-4 px-4 align-middle">
-                      <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                        {program.name}
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
+                          {program.name}
+                        </span>
+                        {program.year && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            {program.year}
+                          </span>
+                        )}
                       </div>
                     </td>
 

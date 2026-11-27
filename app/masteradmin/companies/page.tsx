@@ -7,6 +7,7 @@ import Select2Search, { Select2Option } from '@/components/Select2Search';
 import {
   AlertCircle,
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   BookOpen,
   Briefcase,
@@ -25,21 +26,45 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Globe2,
+  KeyRound,
   Layers,
+  LayoutDashboard,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  Plus,
   Printer,
   RotateCcw,
   Search,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
+  Target,
+  Trash2,
   TrendingUp,
+  User,
   UserCheck,
+  UserMinus,
+  UserPlus,
   Users,
   UserX,
   Wallet,
   X,
 } from 'lucide-react';
-import { CustomerRecord, fetchCustomers } from '@/lib/customerStorage';
+import {
+  CustomerRecord,
+  WorkingSector,
+  fetchCustomers,
+  fetchWorkingSectors,
+} from '@/lib/customerStorage';
+import {
+  FutureCustomerRecord,
+  getStoredFutureCustomers,
+  fetchFutureCustomers,
+} from '@/lib/futureCustomerStorage';
 import { ProgramRecord, fetchPrograms } from '@/lib/programStorage';
 import {
   Company,
@@ -60,14 +85,25 @@ import {
   updateStoredCompany,
 } from '@/lib/companyStorage';
 import {
-  CompanyStatCard,
-  DEFAULT_COMPANY_STAT_CARDS,
-  getStoredCompanyStatCards,
-  fetchCompanyStatCards,
-  subscribeToCompanyStatCardsChange,
-} from '@/lib/companyStatCards';
+  CustomerTargetAmountRecord,
+  CustomerDepositAmountRecord,
+  CustomerPendingAmountRecord,
+  CustomerCompanyCostRecord,
+  CustomerRefundAmountRecord,
+  fetchCustomerTargets,
+  fetchCustomerDeposits,
+  fetchCustomerPendings,
+  fetchCustomerCompanyCosts,
+  fetchCustomerRefunds,
+  getStoredCustomerTargets,
+  getStoredCustomerDeposits,
+  getStoredCustomerPendings,
+  getStoredCompanyCosts,
+  getStoredCustomerRefunds,
+} from '@/lib/customerFinanceStorage';
+import { PageStatCardConfig } from '@/lib/pageCardStorage';
 import { DynamicCardIcon } from '@/components/DynamicCardIcon';
-import CompanyOrderStatisticsChart from '@/components/CompanyOrderStatisticsChart';
+import CustomerOrderStatisticsChart from '@/components/CustomerOrderStatisticsChart';
 import { getMasterAdminUser, AuthUser } from '@/lib/auth';
 import {
   useDashboardCardDesign,
@@ -82,6 +118,37 @@ import {
   fetchSubscriptionPlans,
   SubscriptionPlan,
 } from '@/lib/companyTrialAndFinanceStorage';
+
+export type MasterAdminEmployeeRecord = {
+  id: number;
+  employee_code: string;
+  name: string;
+  email: string;
+  role: 'Employee' | 'Admin';
+  assigned_companies: string[];
+  assigned_service_cards?: string[];
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  status: 'active' | 'inactive';
+};
+
+export type DashboardViewMode = 'foreign_customer' | 'employees_permissions';
+
+const FOREIGN_CUSTOMER_STAT_CARDS: PageStatCardConfig[] = [
+  { id: 'total_customers', title: 'Total Customer', subtitle: 'Across selected employer entities', icon: 'Users', order_num: 1, metric_type: 'total_customers' },
+  { id: 'active_customers', title: 'Active Customer', subtitle: 'Authorized worker permits', icon: 'UserCheck', order_num: 2, metric_type: 'active_customers' },
+  { id: 'inactive_customers', title: 'Inactive Customer', subtitle: 'Suspended worker accounts', icon: 'UserX', order_num: 3, metric_type: 'inactive_customers' },
+  { id: 'runaway_customers', title: 'Runaway Customer', subtitle: 'Absentee & runaway alerts', icon: 'UserMinus', order_num: 4, metric_type: 'runaway_customers' },
+  { id: 'blacklist_customers', title: 'Black List Customer', subtitle: 'Flagged immigration records', icon: 'ShieldAlert', order_num: 5, metric_type: 'blacklist_customers' },
+  { id: 'future_customers', title: 'Future Customer', subtitle: 'Upcoming candidate leads', icon: 'Sparkles', order_num: 6, metric_type: 'future_customers' },
+  { id: 'target_amount', title: 'Customer Target Amount', subtitle: 'Cumulative target pool', icon: 'Target', order_num: 7, metric_type: 'target_wallet' },
+  { id: 'deposit_amount', title: 'Customer Deposit Amount', subtitle: 'Total received customer deposit', icon: 'DollarSign', order_num: 8, metric_type: 'deposit_wallet' },
+  { id: 'refund_amount', title: 'Customer Refund Amount', subtitle: 'Total refunded to customers', icon: 'RotateCcw', order_num: 9, metric_type: 'refund_wallet' },
+  { id: 'pending_amount', title: 'Customer Pending Amount', subtitle: 'Outstanding clearance dues', icon: 'Clock', order_num: 10, metric_type: 'pending_wallet' },
+  { id: 'cost_amount', title: 'Customer Cost Amount', subtitle: 'Company operational & levy cost', icon: 'FileSpreadsheet', order_num: 11, metric_type: 'cost_wallet' },
+  { id: 'total_profit', title: 'Total Profit Amount', subtitle: 'Net retained company profit', icon: 'TrendingUp', order_num: 12, metric_type: 'profit_wallet' },
+];
 
 const SECTOR_OPTIONS = [
   'Civil & Building Construction',
@@ -103,16 +170,35 @@ export default function MasterAdminCompaniesPage() {
     stagger: cardStagger,
     animTriggerKey,
   } = useCardAnimationSettings();
+
   const [mounted, setMounted] = useState(false);
+  const [dashboardViewMode, setDashboardViewMode] = useState<DashboardViewMode>('foreign_customer');
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
-  const [statCards, setStatCards] = useState<CompanyStatCard[]>(DEFAULT_COMPANY_STAT_CARDS);
-  const [selectedCardKey, setSelectedCardKey] = useState<string>('deposit_wallet');
+  const [selectedCardKey, setSelectedCardKey] = useState<string>('total_customers');
+
+  // Top Card Select2 Filters
   const [selectedCompanyCardId, setSelectedCompanyCardId] = useState<string>('ALL');
   const [selectedProgramCardId, setSelectedProgramCardId] = useState<string>('ALL');
+  const [selectedSectorCardId, setSelectedSectorCardId] = useState<string>('ALL');
   const [selectedYearCardId, setSelectedYearCardId] = useState<string>('ALL');
-  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
-  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([]);
 
+  // Data Collections
+  const [programs, setPrograms] = useState<ProgramRecord[]>([]);
+  const [sectors, setSectors] = useState<WorkingSector[]>([]);
+  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([]);
+  const [futureCustomers, setFutureCustomers] = useState<FutureCustomerRecord[]>([]);
+  const [targetRecords, setTargetRecords] = useState<CustomerTargetAmountRecord[]>([]);
+  const [depositRecords, setDepositRecords] = useState<CustomerDepositAmountRecord[]>([]);
+  const [pendingRecords, setPendingRecords] = useState<CustomerPendingAmountRecord[]>([]);
+  const [costRecords, setCostRecords] = useState<CustomerCompanyCostRecord[]>([]);
+  const [refundRecords, setRefundRecords] = useState<CustomerRefundAmountRecord[]>([]);
+  const [employees, setEmployees] = useState<MasterAdminEmployeeRecord[]>([]);
+
+  // Staff Member table states for Employees & Permissions view
+  const [staffSearchTerm, setStaffSearchTerm] = useState('');
+  const [staffStatusFilter, setStaffStatusFilter] = useState<'ALL' | 'active' | 'inactive'>('ALL');
+
+  // Table & Modal States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
@@ -158,58 +244,81 @@ export default function MasterAdminCompaniesPage() {
   }, []);
 
   const assignedList = useMemo(() => {
-    return (currentUser && Array.isArray(currentUser.assigned_companies))
+    return currentUser && Array.isArray(currentUser.assigned_companies)
       ? currentUser.assigned_companies
       : [];
   }, [currentUser]);
 
-  // Load companies & stat cards safely on mount to eliminate hydration mismatches
+  // Load companies & all dataset safely on mount
   useEffect(() => {
     setMounted(true);
     const user = getMasterAdminUser();
     setCurrentUser(user);
     setAllCompanies(getStoredCompanies());
-    setStatCards(getStoredCompanyStatCards());
+    setFutureCustomers(getStoredFutureCustomers());
+    setTargetRecords(getStoredCustomerTargets());
+    setDepositRecords(getStoredCustomerDeposits());
+    setPendingRecords(getStoredCustomerPendings());
+    setCostRecords(getStoredCompanyCosts());
+    setRefundRecords(getStoredCustomerRefunds());
 
     fetchCompaniesFromBackend().then((list) => {
       if (Array.isArray(list) && list.length > 0) {
         setAllCompanies(list);
       }
-    }).catch(() => {});
-
-    fetchCompanyStatCards().then((cards) => {
-      if (Array.isArray(cards) && cards.length > 0) {
-        setStatCards(cards);
-      }
-    }).catch(() => {});
+    }).catch(() => { });
 
     fetchPrograms().then((progs) => {
       if (Array.isArray(progs) && progs.length > 0) {
         setPrograms(progs);
       }
-    }).catch(() => {});
+    }).catch(() => { });
+
+    fetchWorkingSectors().then((secs) => {
+      if (Array.isArray(secs) && secs.length > 0) {
+        setSectors(secs);
+      }
+    }).catch(() => { });
 
     fetchCustomers().then((custs) => {
       if (Array.isArray(custs) && custs.length > 0) {
         setAllCustomers(custs);
       }
-    }).catch(() => {});
+    }).catch(() => { });
+
+    fetchFutureCustomers().then((fCusts) => {
+      if (Array.isArray(fCusts) && fCusts.length > 0) {
+        setFutureCustomers(fCusts);
+      }
+    }).catch(() => { });
+
+    fetchCustomerTargets().then(setTargetRecords).catch(() => { });
+    fetchCustomerDeposits().then(setDepositRecords).catch(() => { });
+    fetchCustomerPendings().then(setPendingRecords).catch(() => { });
+    fetchCustomerCompanyCosts().then(setCostRecords).catch(() => { });
+    fetchCustomerRefunds().then(setRefundRecords).catch(() => { });
 
     fetchSubscriptionPlans(true).then((plans) => {
       if (Array.isArray(plans)) setSubscriptionPlans(plans);
-    }).catch(() => {});
+    }).catch(() => { });
+
+    const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+    fetch(`${apiBase}/employees`, { cache: 'no-store' })
+      .then((res) => {
+        if (res.ok) return res.json();
+        return [];
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setEmployees(data);
+      })
+      .catch(() => { });
 
     const unsubCompanies = subscribeToCompanyChanges(() => {
       setAllCompanies(getStoredCompanies());
     });
 
-    const unsubCards = subscribeToCompanyStatCardsChange(() => {
-      setStatCards(getStoredCompanyStatCards());
-    });
-
     return () => {
       unsubCompanies();
-      unsubCards();
     };
   }, []);
 
@@ -251,7 +360,7 @@ export default function MasterAdminCompaniesPage() {
     {
       value: 'ALL',
       label: `All Permitted Companies (${permittedCompanies.length})`,
-      subLabel: '',
+      subLabel: 'Aggregated scope across assigned entities',
       badge: 'ALL',
     },
     ...permittedCompanies.map((c) => ({
@@ -296,6 +405,30 @@ export default function MasterAdminCompaniesPage() {
     })),
   ], [programs]);
 
+  const sectorCardFilterOptions: Select2Option[] = useMemo(() => {
+    const set = new Set<string>();
+    sectors.forEach((s) => {
+      if (s.name) set.add(s.name);
+    });
+    SECTOR_OPTIONS.forEach((s) => set.add(s));
+    allCustomers.forEach((c) => {
+      if (c.working_sector) set.add(c.working_sector);
+    });
+    const list = Array.from(set).sort();
+    return [
+      {
+        value: 'ALL',
+        label: `All Working Sectors (${list.length})`,
+        subLabel: 'All job & economic sectors',
+        badge: `${list.length} Sectors`,
+      },
+      ...list.map((s) => ({
+        value: s,
+        label: s,
+      })),
+    ];
+  }, [sectors, allCustomers]);
+
   const yearCardFilterOptions: Select2Option[] = useMemo(() => [
     {
       value: 'ALL',
@@ -323,13 +456,14 @@ export default function MasterAdminCompaniesPage() {
     return permittedCompanies;
   }, [selectedSingleCompany, permittedCompanies]);
 
+  // Scoped customers filtered by permitted companies and top filter cards
   const scopedCustomers = useMemo(() => {
     return allCustomers.filter((c) => {
       const compMatch = permittedCompanies.some(
         (pc) =>
           c.company_id &&
           (c.company_id.toLowerCase() === pc.id.toLowerCase() ||
-           c.company_id.toLowerCase() === pc.name.toLowerCase())
+            c.company_id.toLowerCase() === pc.name.toLowerCase())
       );
       if (!compMatch) return false;
 
@@ -337,11 +471,16 @@ export default function MasterAdminCompaniesPage() {
         const matchesComp =
           c.company_id &&
           (c.company_id.toLowerCase() === selectedCompanyCardId.toLowerCase() ||
-           (selectedSingleCompany && c.company_id.toLowerCase() === selectedSingleCompany.name.toLowerCase()));
+            (selectedSingleCompany && c.company_id.toLowerCase() === selectedSingleCompany.name.toLowerCase()));
         if (!matchesComp) return false;
       }
       if (selectedProgramCardId !== 'ALL') {
         if (String(c.program_id) !== String(selectedProgramCardId)) return false;
+      }
+      if (selectedSectorCardId !== 'ALL') {
+        if (!c.working_sector || c.working_sector.toLowerCase() !== selectedSectorCardId.toLowerCase()) {
+          return false;
+        }
       }
       if (selectedYearCardId !== 'ALL') {
         const y = (c.created_at || '').slice(0, 4);
@@ -350,7 +489,43 @@ export default function MasterAdminCompaniesPage() {
       }
       return true;
     });
-  }, [allCustomers, permittedCompanies, selectedCompanyCardId, selectedSingleCompany, selectedProgramCardId, selectedYearCardId]);
+  }, [allCustomers, permittedCompanies, selectedCompanyCardId, selectedSingleCompany, selectedProgramCardId, selectedSectorCardId, selectedYearCardId]);
+
+  // Scoped future customers
+  const scopedFutureCustomers = useMemo(() => {
+    if (selectedYearCardId === 'ALL') return futureCustomers;
+    return futureCustomers.filter(
+      (fc) => fc.created_at && fc.created_at.slice(0, 4) === selectedYearCardId
+    );
+  }, [futureCustomers, selectedYearCardId]);
+
+  // Scoped employees belonging to permitted scope
+  const scopedEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      const assigned = Array.isArray(emp.assigned_companies) ? emp.assigned_companies : [];
+      const inPermitted =
+        assignedList.length === 0 ||
+        assignedList.includes('*') ||
+        assigned.some((cId) =>
+          permittedCompanies.some(
+            (pc) => pc.id.toLowerCase() === cId.toLowerCase() || pc.name.toLowerCase() === cId.toLowerCase()
+          )
+        );
+
+      if (!inPermitted) return false;
+
+      if (selectedCompanyCardId !== 'ALL') {
+        const matchComp = assigned.some(
+          (cId) =>
+            cId.toLowerCase() === selectedCompanyCardId.toLowerCase() ||
+            (selectedSingleCompany && cId.toLowerCase() === selectedSingleCompany.name.toLowerCase())
+        );
+        if (!matchComp) return false;
+      }
+
+      return true;
+    });
+  }, [employees, assignedList, permittedCompanies, selectedCompanyCardId, selectedSingleCompany]);
 
   // Filter table with search & sector
   const filteredCompanies = useMemo(() => {
@@ -369,7 +544,18 @@ export default function MasterAdminCompaniesPage() {
           (cust) =>
             cust.company_id &&
             (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
-             cust.company_id.toLowerCase() === c.name.toLowerCase())
+              cust.company_id.toLowerCase() === c.name.toLowerCase())
+        );
+
+      const matchesSectorCard =
+        selectedSectorCardId === 'ALL' ||
+        c.sector.toLowerCase() === selectedSectorCardId.toLowerCase() ||
+        scopedCustomers.some(
+          (cust) =>
+            cust.working_sector?.toLowerCase() === selectedSectorCardId.toLowerCase() &&
+            cust.company_id &&
+            (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
+              cust.company_id.toLowerCase() === c.name.toLowerCase())
         );
 
       const matchesYear =
@@ -378,19 +564,319 @@ export default function MasterAdminCompaniesPage() {
           (cust) =>
             cust.company_id &&
             (cust.company_id.toLowerCase() === c.id.toLowerCase() ||
-             cust.company_id.toLowerCase() === c.name.toLowerCase())
+              cust.company_id.toLowerCase() === c.name.toLowerCase())
         );
 
-      return matchSearch && matchSector && matchCardCompany && matchesProgram && matchesYear;
+      return matchSearch && matchSector && matchCardCompany && matchesProgram && matchesSectorCard && matchesYear;
     });
-  }, [permittedCompanies, searchTerm, selectedSector, selectedSingleCompany, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
+  }, [permittedCompanies, searchTerm, selectedSector, selectedSingleCompany, selectedProgramCardId, selectedSectorCardId, selectedYearCardId, scopedCustomers]);
+
+  // Foreign Customer Card Metrics Calculation
+  const getForeignCustomerCardMetrics = (card: PageStatCardConfig) => {
+    const metric = card.metric_type || card.id;
+    const list = scopedCustomers;
+    const listCustomerIds = new Set(list.map((c) => String(c.id)));
+
+    switch (metric) {
+      case 'total_customers': {
+        return {
+          value: list.length.toLocaleString(),
+          sub: selectedSingleCompany ? `${selectedSingleCompany.name} Customers` : 'Across permitted entities',
+          isLink: true,
+          link: '/customers/dashboard',
+          theme: { bg: 'bg-blue-50', text: 'text-[#0b4da2]', valColor: 'text-slate-900' },
+        };
+      }
+      case 'active_customers': {
+        const c = list.filter((w) => w.status === 'active').length;
+        return {
+          value: c.toLocaleString(),
+          sub: 'Authorized worker permits',
+          isLink: true,
+          link: '/customers/active',
+          theme: { bg: 'bg-emerald-50', text: 'text-emerald-700', valColor: 'text-emerald-600' },
+        };
+      }
+      case 'inactive_customers': {
+        const c = list.filter((w) => w.status === 'inactive').length;
+        return {
+          value: c.toLocaleString(),
+          sub: 'Suspended worker accounts',
+          isLink: true,
+          link: '/customers/inactive',
+          theme: { bg: 'bg-rose-50', text: 'text-rose-700', valColor: 'text-rose-600' },
+        };
+      }
+      case 'runaway_customers': {
+        const c = list.filter((w) => w.status === 'runaway').length;
+        return {
+          value: c.toLocaleString(),
+          sub: 'Absentee & runaway alerts',
+          isLink: true,
+          link: '/customers/runaway',
+          theme: { bg: 'bg-orange-50', text: 'text-orange-700', valColor: 'text-orange-600' },
+        };
+      }
+      case 'blacklist_customers': {
+        const c = list.filter((w) => w.status === 'blacklist').length;
+        return {
+          value: c.toLocaleString(),
+          sub: 'Flagged immigration records',
+          isLink: true,
+          link: '/customers/blacklist',
+          theme: { bg: 'bg-slate-900', text: 'text-white', valColor: 'text-slate-900' },
+        };
+      }
+      case 'future_customers': {
+        const c = scopedFutureCustomers.length;
+        return {
+          value: c.toLocaleString(),
+          sub: 'Upcoming candidate leads',
+          isLink: true,
+          link: '/customers/future',
+          theme: { bg: 'bg-purple-50', text: 'text-purple-700', valColor: 'text-purple-600' },
+        };
+      }
+      case 'target_wallet':
+      case 'target_amount':
+      case 'customer_target_amount': {
+        const relevantTargets = targetRecords.filter((t) => {
+          if (selectedCompanyCardId !== 'ALL' && t.company_id && t.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(t.customer_id));
+        });
+        const targetSum = list.length === 0
+          ? 0
+          : relevantTargets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0);
+        return {
+          value: `RM ${targetSum.toLocaleString()}`,
+          sub: 'Customer Target Pool',
+          isLink: true,
+          link: '/customers/target-amount',
+          theme: { bg: 'bg-blue-50', text: 'text-[#0b4da2]', valColor: 'text-slate-900' },
+        };
+      }
+      case 'deposit_wallet':
+      case 'deposit_amount':
+      case 'customer_deposit_amount': {
+        const relevantDeposits = depositRecords.filter((d) => {
+          if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(d.customer_id));
+        });
+        const depositSum = list.length === 0
+          ? 0
+          : relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+        return {
+          value: `RM ${depositSum.toLocaleString()}`,
+          sub: 'Customer Deposit Received',
+          isLink: true,
+          link: '/customers/deposit-amount',
+          theme: { bg: 'bg-emerald-50', text: 'text-emerald-700', valColor: 'text-emerald-600' },
+        };
+      }
+      case 'refund_wallet':
+      case 'refund_amount':
+      case 'customer_refund_amount': {
+        const relevantRefunds = refundRecords.filter((r) => {
+          if (selectedCompanyCardId !== 'ALL' && r.company_id && r.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(r.customer_id));
+        });
+        const refundSum = list.length === 0
+          ? 0
+          : relevantRefunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
+        return {
+          value: `RM ${refundSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          sub: 'Customer Refund Outflow',
+          isLink: true,
+          link: '/customers/refund-amount',
+          theme: { bg: 'bg-rose-50', text: 'text-rose-700', valColor: 'text-rose-600' },
+        };
+      }
+      case 'pending_wallet':
+      case 'pending_amount':
+      case 'customer_pending_amount': {
+        const relevantTargets = targetRecords.filter((t) => {
+          if (selectedCompanyCardId !== 'ALL' && t.company_id && t.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(t.customer_id));
+        });
+        const relevantDeposits = depositRecords.filter((d) => {
+          if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(d.customer_id));
+        });
+        const tSum = list.length === 0 ? 0 : relevantTargets.reduce((sum, t) => sum + (Number(t.target_amount) || 0), 0);
+        const dSum = list.length === 0 ? 0 : relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+        const pendingSum = Math.max(0, tSum - dSum);
+        return {
+          value: `RM ${pendingSum.toLocaleString()}`,
+          sub: 'Customer Pending Clearance Dues',
+          isLink: true,
+          link: '/customers/pending-amount',
+          theme: { bg: 'bg-amber-50', text: 'text-amber-700', valColor: 'text-amber-600' },
+        };
+      }
+      case 'cost_wallet':
+      case 'cost_amount':
+      case 'customer_cost_amount': {
+        const relevantCosts = costRecords.filter((c) => {
+          if (selectedCompanyCardId !== 'ALL' && c.company_id && c.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(c.customer_id));
+        });
+        const costSum = list.length === 0
+          ? 0
+          : relevantCosts.reduce((sum, c) => sum + (Number(c.total_cost_amount) || 0), 0);
+        return {
+          value: `RM ${costSum.toLocaleString()}`,
+          sub: 'Company Operational & Levy Cost',
+          isLink: true,
+          link: '/customers/company-cost',
+          theme: { bg: 'bg-rose-50', text: 'text-rose-700', valColor: 'text-rose-600' },
+        };
+      }
+      case 'profit_wallet':
+      case 'total_profit':
+      case 'customer_profit_amount':
+      case 'total_profit_amount': {
+        const relevantDeposits = depositRecords.filter((d) => {
+          if (selectedCompanyCardId !== 'ALL' && d.company_id && d.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(d.customer_id));
+        });
+        const relevantRefunds = refundRecords.filter((r) => {
+          if (selectedCompanyCardId !== 'ALL' && r.company_id && r.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(r.customer_id));
+        });
+        const relevantCosts = costRecords.filter((c) => {
+          if (selectedCompanyCardId !== 'ALL' && c.company_id && c.company_id.toLowerCase() !== selectedCompanyCardId.toLowerCase()) return false;
+          return listCustomerIds.has(String(c.customer_id));
+        });
+
+        const dSum = list.length === 0 ? 0 : relevantDeposits.reduce((sum, d) => sum + (Number(d.deposit_amount) || 0), 0);
+        const rSum = list.length === 0 ? 0 : relevantRefunds.reduce((sum, r) => sum + (Number(r.refund_amount) || 0), 0);
+        const cSum = list.length === 0 ? 0 : relevantCosts.reduce((sum, c) => sum + (Number(c.total_cost_amount) || 0), 0);
+        const profitSum = Math.max(0, dSum - rSum - cSum);
+
+        return {
+          value: `RM ${profitSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          sub: 'Total Net Retained Margin',
+          isLink: true,
+          link: '/masteradmin/customers/statement',
+          theme: { bg: 'bg-emerald-50', text: 'text-emerald-700', valColor: 'text-emerald-600' },
+        };
+      }
+      default: {
+        return {
+          value: '0',
+          sub: card.subtitle || '',
+          isLink: false,
+          theme: { bg: 'bg-slate-100', text: 'text-slate-700', valColor: 'text-slate-800' },
+        };
+      }
+    }
+  };
+
+  // Filtered staff employees for Employees & Permissions view
+  const filteredStaffEmployees = useMemo(() => {
+    return scopedEmployees.filter((emp) => {
+      const term = staffSearchTerm.toLowerCase().trim();
+      const matchSearch =
+        !term ||
+        emp.name.toLowerCase().includes(term) ||
+        emp.employee_code.toLowerCase().includes(term) ||
+        emp.email.toLowerCase().includes(term);
+
+      const matchStatus = staffStatusFilter === 'ALL' || emp.status === staffStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [scopedEmployees, staffSearchTerm, staffStatusFilter]);
+
+  const handleToggleStaffStatus = async (emp: MasterAdminEmployeeRecord) => {
+    const nextStatus = emp.status === 'active' ? 'inactive' : 'active';
+    const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+    try {
+      const res = await fetch(`${apiBase}/employees/${emp.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+
+      if (res.ok) {
+        setEmployees((prev) =>
+          prev.map((e) => (e.id === emp.id ? { ...e, status: nextStatus } : e))
+        );
+        showToast('info', `Staff status updated to ${nextStatus.toUpperCase()}.`);
+      }
+    } catch {
+      showToast('info', 'Failed to update status.');
+    }
+  };
+
+  const handleDeleteStaff = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this staff member?')) return;
+    const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+    try {
+      const res = await fetch(`${apiBase}/employees/${id}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        setEmployees((prev) => prev.filter((e) => e.id !== id));
+        showToast('success', 'Staff member deleted successfully.');
+      }
+    } catch {
+      showToast('info', 'Failed to delete staff member.');
+    }
+  };
+
+  const fetchEmployeesData = async () => {
+    const apiBase = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://127.0.0.1:8000/api';
+    try {
+      const res = await fetch(`${apiBase}/employees`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setEmployees(data);
+        showToast('info', 'Staff list refreshed.');
+      }
+    } catch {
+      showToast('info', 'Failed to refresh staff.');
+    }
+  };
+
+  // Options for Top Dashboard View Selector Dropdown
+  const dashboardViewOptions: Select2Option[] = useMemo(() => [
+    {
+      value: 'foreign_customer',
+      label: 'Foreign Customer',
+      subLabel: 'Customer cards, treasury metrics & statistics graph',
+      badge: 'DEFAULT',
+    },
+    {
+      value: 'employees_permissions',
+      label: 'Employees & Permissions',
+      subLabel: 'Staff roster, roles, credentials & company delegation',
+      badge: `${scopedEmployees.length} Staff`,
+    },
+  ], [scopedEmployees.length]);
+
+  const isAnyFilterActive =
+    selectedCompanyCardId !== 'ALL' ||
+    selectedProgramCardId !== 'ALL' ||
+    selectedSectorCardId !== 'ALL' ||
+    selectedYearCardId !== 'ALL';
+
+  const handleResetAllFilters = () => {
+    setSelectedCompanyCardId('ALL');
+    setSelectedProgramCardId('ALL');
+    setSelectedSectorCardId('ALL');
+    setSelectedYearCardId('ALL');
+  };
 
   const getCompanyExportRow = (company: Company, idx: number) => {
     const planName = company.subscription_plan_key
       ? company.subscription_plan_key
-          .split('_')
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(' ')
+        .split('_')
+        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
       : 'Standard';
 
     const expiryStr = company.subscription_expires_at
@@ -790,235 +1276,6 @@ export default function MasterAdminCompaniesPage() {
     }
   };
 
-  // Aggregated totals strictly for selected scope (single company or all permitted)
-  const totalActiveWorkers = useMemo(() => {
-    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
-      return scopedCustomers.filter((c) => c.status !== 'inactive').length;
-    }
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyActiveWorkers(c), 0);
-  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
-
-  const totalInactiveWorkers = useMemo(() => {
-    if (selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') {
-      return scopedCustomers.filter((c) => c.status === 'inactive').length;
-    }
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyInactiveWorkers(c), 0);
-  }, [selectedCardCompanies, selectedProgramCardId, selectedYearCardId, scopedCustomers]);
-
-  const totalWorkerWallet = useMemo(() => {
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyWorkerWallet(c), 0);
-  }, [selectedCardCompanies]);
-
-  const totalIncomeWallet = useMemo(() => {
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyIncomeWallet(c), 0);
-  }, [selectedCardCompanies]);
-
-  const totalCostWallet = useMemo(() => {
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyCostWallet(c), 0);
-  }, [selectedCardCompanies]);
-
-  const totalProfitWallet = useMemo(() => {
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyProfitWallet(c), 0);
-  }, [selectedCardCompanies]);
-
-  const totalPendingWallet = useMemo(() => {
-    return selectedCardCompanies.reduce((acc, c) => acc + getCompanyPendingWallet(c), 0);
-  }, [selectedCardCompanies]);
-
-  // Compute card metrics strictly for permitted / selected scope
-  const getCardMetrics = (card: CompanyStatCard) => {
-    switch (card.card_key) {
-      case 'registered_companies':
-        if (selectedSingleCompany) {
-          return {
-            value: selectedSingleCompany.name,
-            sub: `${selectedSingleCompany.roc || 'Verified Entity'} • View Profile →`,
-            link: `/masteradmin/companies/${encodeURIComponent(selectedSingleCompany.id)}`,
-            isLink: true,
-            isCompanyEntity: true,
-            theme: {
-              bg: 'bg-blue-50',
-              text: 'text-[#0b4da2]',
-              border: 'border-blue-100',
-              valColor: 'text-slate-900',
-            },
-          };
-        }
-        return {
-          value: `${permittedCompanies.length}`,
-          sub: 'Permitted Employer Entities',
-          link: '/masteradmin/companies',
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-blue-50',
-            text: 'text-[#0b4da2]',
-            border: 'border-blue-100',
-            valColor: 'text-slate-900',
-          },
-        };
-      case 'active_workers':
-        return {
-          value: totalActiveWorkers.toLocaleString(),
-          sub: selectedSingleCompany ? 'Active for this Company' : (card.subtitle || 'Approved & Active Permits'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-emerald-50',
-            text: 'text-emerald-600',
-            border: 'border-emerald-100',
-            valColor: 'text-emerald-600',
-          },
-        };
-      case 'inactive_workers':
-        return {
-          value: totalInactiveWorkers.toLocaleString(),
-          sub: selectedSingleCompany ? 'Inactive for this Company' : (card.subtitle || 'Expired / Renewal Pending'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-amber-50',
-            text: 'text-amber-600',
-            border: 'border-amber-100',
-            valColor: 'text-slate-700',
-          },
-        };
-      case 'target_wallet':
-        return {
-          value: `RM ${totalWorkerWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Worker Target for this Company' : (card.subtitle || 'Total Worker Target Pool'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-purple-50',
-            text: 'text-purple-700',
-            border: 'border-purple-100',
-            valColor: 'text-purple-700',
-          },
-        };
-      case 'deposit_wallet':
-        return {
-          value: `RM ${totalIncomeWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Deposit Inflow for this Company' : (card.subtitle || 'Total Received Inflow'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-blue-50',
-            text: 'text-blue-700',
-            border: 'border-blue-100',
-            valColor: 'text-blue-700',
-          },
-        };
-      case 'cost_wallet':
-        return {
-          value: `RM ${totalCostWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Cost & Levy for this Company' : (card.subtitle || 'Operational & Levy Outflow'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-rose-50',
-            text: 'text-rose-600',
-            border: 'border-rose-100',
-            valColor: 'text-rose-700',
-          },
-        };
-      case 'others_cost':
-      case 'others_expense':
-        return {
-          value: `RM ${(Number(card.custom_value) || 0).toLocaleString()}`,
-          sub: card.subtitle || 'Miscellaneous & Other Expenses',
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-rose-50',
-            text: 'text-rose-600',
-            border: 'border-rose-100',
-            valColor: 'text-rose-700',
-          },
-        };
-      case 'profit_wallet':
-        return {
-          value: `RM ${totalProfitWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Net Margin for this Company' : (card.subtitle || 'Net Retained Margin'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-emerald-50',
-            text: 'text-emerald-600',
-            border: 'border-emerald-100',
-            valColor: 'text-emerald-700',
-          },
-        };
-      case 'others_profit':
-        return {
-          value: `RM ${(Number(card.custom_value) || 0).toLocaleString()}`,
-          sub: card.subtitle || 'Auxiliary & Service Profits',
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-teal-50',
-            text: 'text-teal-700',
-            border: 'border-teal-100',
-            valColor: 'text-teal-700',
-          },
-        };
-      case 'pending_wallet':
-        return {
-          value: `RM ${totalPendingWallet.toLocaleString()}`,
-          sub: selectedSingleCompany ? 'Pending Dues for this Company' : (card.subtitle || 'Pending Approvals & Dues'),
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-amber-50',
-            text: 'text-amber-600',
-            border: 'border-amber-100',
-            valColor: 'text-amber-700',
-          },
-        };
-      case 'others_pending':
-        return {
-          value: `RM ${(Number(card.custom_value) || 0).toLocaleString()}`,
-          sub: card.subtitle || 'Other Pending Invoices & Dues',
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-amber-50',
-            text: 'text-amber-600',
-            border: 'border-amber-100',
-            valColor: 'text-amber-700',
-          },
-        };
-      case 'total_profit':
-        return {
-          value: `RM ${(totalProfitWallet + (Number(card.custom_value) || 0)).toLocaleString()}`,
-          sub: card.subtitle || 'Foreigner Profit + Auxiliary Profit',
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-emerald-100',
-            text: 'text-emerald-800',
-            border: 'border-emerald-200',
-            valColor: 'text-emerald-700',
-          },
-        };
-      default:
-        return {
-          value: typeof card.custom_value === 'number'
-            ? (card.custom_value >= 1000 ? `RM ${card.custom_value.toLocaleString()}` : card.custom_value.toLocaleString())
-            : '0',
-          sub: card.subtitle || 'Custom Treasury Metric',
-          isLink: false,
-          isCompanyEntity: false,
-          theme: {
-            bg: 'bg-slate-100',
-            text: 'text-slate-700',
-            border: 'border-slate-200',
-            valColor: 'text-slate-800',
-          },
-        };
-    }
-  };
-
   // Open Edit Modal
   const openEditModal = (comp: Company) => {
     setEditingCompany(comp);
@@ -1160,12 +1417,12 @@ export default function MasterAdminCompaniesPage() {
         prev.map((c) =>
           c.id === payingCompany.id
             ? {
-                ...c,
-                wallet_balance: updatedWalletBalance,
-                subscription_plan_key: selectedPlanKey || c.subscription_plan_key,
-                subscription_status: 'active',
-                status: 'active',
-              }
+              ...c,
+              wallet_balance: updatedWalletBalance,
+              subscription_plan_key: selectedPlanKey || c.subscription_plan_key,
+              subscription_status: 'active',
+              status: 'active',
+            }
             : c
         )
       );
@@ -1205,39 +1462,85 @@ export default function MasterAdminCompaniesPage() {
       {/* Toast Notification */}
       {notification && (
         <div
-          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-xl border text-xs font-semibold animate-in fade-in slide-in-from-bottom-5 duration-300 ${
-            notification.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-              : 'bg-blue-50 text-blue-800 border-blue-300'
-          }`}
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-xl border text-xs font-semibold animate-in fade-in slide-in-from-bottom-5 duration-300 ${notification.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+            : 'bg-blue-50 text-blue-800 border-blue-300'
+            }`}
         >
           <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
           <span>{notification.message}</span>
         </div>
       )}
 
+      {/* ========================================================================= */}
+      {/* 1. TOP DASHBOARD VIEW MODE SELECTOR (FOREIGN CUSTOMER [DEFAULT], EMPLOYEE, PERMISSION) */}
+      {/* ========================================================================= */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xs flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center font-bold shadow-2xs">
+            <LayoutDashboard size={18} />
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Master Admin Dashboard View
+            </div>
+            <div className="text-xs sm:text-sm font-extrabold text-slate-800">
+              Select Operating Dashboard
+            </div>
+          </div>
+        </div>
 
-      {/* Company Select Filter Bar (Matching Super Admin: Select2 Search or Single Scope indicator) */}
-      {permittedCompanies.length > 1 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-3 flex-wrap">
+        {/* Mode Selector Dropdown */}
+        <div className="w-full sm:w-72 md:w-80">
+          <Select2Search
+            options={dashboardViewOptions}
+            value={dashboardViewMode}
+            onChange={(val) => setDashboardViewMode(val as DashboardViewMode)}
+            placeholder="Select Dashboard View..."
+            searchPlaceholder="Search view..."
+            icon={
+              dashboardViewMode === 'foreign_customer' ? (
+                <Globe2 size={15} className="text-[#0b4da2]" />
+              ) : (
+                <Users size={15} className="text-emerald-600" />
+              )
+            }
+            dropdownWidth="w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px]"
+            dropdownAlign="right"
+          />
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. FILTER BAR (COMPANY, PROGRAM, WORKING SECTOR, YEAR) */}
+      {/* ========================================================================= */}
+      {dashboardViewMode === 'foreign_customer' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 shadow-xs flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
-              <Building2 size={16} className="text-[#0b4da2]" />
-              <span>Filter Cards by Company:</span>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
+              <Filter size={15} className="text-[#0b4da2]" />
+              <span>Filter Scope:</span>
             </div>
 
             {/* 1. Company Filter */}
-            <div className="w-52 sm:w-60 md:w-64 shrink-0">
-              <Select2Search
-                options={companyCardFilterOptions}
-                value={selectedCompanyCardId}
-                onChange={(val) => setSelectedCompanyCardId(val)}
-                placeholder="All Permitted Companies (Aggregated)"
-                searchPlaceholder="Search company by name, ROC, sector..."
-                icon={<Building2 size={14} className="text-blue-600" />}
-                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px]"
-              />
-            </div>
+            {permittedCompanies.length > 1 ? (
+              <div className="w-52 sm:w-56 md:w-60 shrink-0">
+                <Select2Search
+                  options={companyCardFilterOptions}
+                  value={selectedCompanyCardId}
+                  onChange={(val) => setSelectedCompanyCardId(val)}
+                  placeholder="All Permitted Companies"
+                  searchPlaceholder="Search company by name, ROC, sector..."
+                  icon={<Building2 size={14} className="text-blue-600" />}
+                  dropdownWidth="w-[calc(100vw-2rem)] sm:w-[320px] max-w-[340px]"
+                />
+              </div>
+            ) : permittedCompanies.length === 1 ? (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold text-slate-800 shrink-0">
+                <Building2 size={13} className="text-blue-600" />
+                <span>{permittedCompanies[0].name}</span>
+              </div>
+            ) : null}
 
             {/* 2. Program Filter */}
             <div className="w-44 sm:w-48 md:w-52 shrink-0">
@@ -1252,63 +1555,20 @@ export default function MasterAdminCompaniesPage() {
               />
             </div>
 
-            {/* 3. Year Filter */}
-            <div className="w-32 sm:w-36 md:w-40 shrink-0">
-              <Select2Search
-                options={yearCardFilterOptions}
-                value={selectedYearCardId}
-                onChange={(val) => setSelectedYearCardId(val)}
-                placeholder="All Years"
-                searchPlaceholder="Search year (e.g. 2026)..."
-                icon={<Calendar size={14} className="text-amber-600" />}
-                dropdownAlign="right"
-                dropdownWidth="w-[calc(100vw-2rem)] sm:w-[220px] max-w-[240px]"
-              />
-            </div>
-
-            {/* Reset All Filters button */}
-            {(selectedCompanyCardId !== 'ALL' || selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCompanyCardId('ALL');
-                  setSelectedProgramCardId('ALL');
-                  setSelectedYearCardId('ALL');
-                }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-                title="Reset card metrics to all defaults"
-              >
-                <X size={13} />
-                <span>Reset to All</span>
-              </button>
-            )}
-          </div>
-        </div>
-      ) : permittedCompanies.length === 1 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2.5 text-xs text-slate-700 flex-wrap flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
-              <Building2 size={16} className="text-[#0b4da2]" />
-              <span>Filter Cards by Company:</span>
-            </div>
-            <span className="font-extrabold text-slate-900 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200 shrink-0 text-xs">
-              {permittedCompanies[0].name}
-            </span>
-
-            {/* Program Filter */}
+            {/* 3. Working Sector Filter (New Addition) */}
             <div className="w-44 sm:w-48 md:w-52 shrink-0">
               <Select2Search
-                options={programCardFilterOptions}
-                value={selectedProgramCardId}
-                onChange={(val) => setSelectedProgramCardId(val)}
-                placeholder="All Programs"
-                searchPlaceholder="Search program name or code..."
-                icon={<Layers size={14} className="text-indigo-600" />}
+                options={sectorCardFilterOptions}
+                value={selectedSectorCardId}
+                onChange={(val) => setSelectedSectorCardId(val)}
+                placeholder="All Working Sectors"
+                searchPlaceholder="Search working sector..."
+                icon={<Briefcase size={14} className="text-emerald-600" />}
                 dropdownWidth="w-[calc(100vw-2rem)] sm:w-[300px] max-w-[320px]"
               />
             </div>
 
-            {/* Year Filter */}
+            {/* 4. Year Filter */}
             <div className="w-32 sm:w-36 md:w-40 shrink-0">
               <Select2Search
                 options={yearCardFilterOptions}
@@ -1322,172 +1582,507 @@ export default function MasterAdminCompaniesPage() {
               />
             </div>
 
-            {(selectedProgramCardId !== 'ALL' || selectedYearCardId !== 'ALL') && (
+            {/* Reset All Filters Button */}
+            {isAnyFilterActive && (
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedProgramCardId('ALL');
-                  setSelectedYearCardId('ALL');
-                }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
-                title="Reset filters"
+                onClick={handleResetAllFilters}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0b4da2] hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Reset all filters to defaults"
               >
-                <X size={13} />
-                <span>Reset to All</span>
+                <RotateCcw size={13} />
+                <span>Reset All</span>
               </button>
             )}
           </div>
-        </div>
-      ) : null}
 
-      {/* Financial Treasury Cards Section (Read-Only: No Add Card, No Manage Priority) */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3 px-1">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
-              Overview & Financial Treasury Cards
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0b4da2] border border-blue-200 text-[10px] font-bold font-mono">
-              {statCards.length} Cards
+          <div className="text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg shrink-0">
+            Scope:{' '}
+            <span className="font-bold text-slate-700">
+              {selectedSingleCompany ? selectedSingleCompany.name : `${permittedCompanies.length} Permitted Entities`}
             </span>
           </div>
-
-          <div className="text-[11px] font-medium text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1 rounded-lg">
-            Scope: <span className="font-bold text-slate-700">{selectedSingleCompany ? selectedSingleCompany.name : `${permittedCompanies.length} Permitted Companies`}</span>
-          </div>
         </div>
+      )}
 
-        {/* Stat Cards Grid (Clickable to switch chart metric) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {statCards.map((card, index) => {
-            const metrics = getCardMetrics(card);
-            const isCurrency = metrics.value.startsWith('RM');
-            const isCompanyEntity = metrics.isCompanyEntity && selectedSingleCompany;
-            const isSelected = selectedCardKey === card.card_key;
-            const animClass = getServiceCardAnimationClass(cardAnimation, index);
-            const animStyle = getServiceCardAnimationStyle(index, cardDuration, cardStagger);
-            const cardKey = `${card.id || card.card_key}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`;
+      {/* ========================================================================= */}
+      {/* 3. VIEW 1: FOREIGN CUSTOMER DASHBOARD (DEFAULT VIEW) */}
+      {/* ========================================================================= */}
+      {dashboardViewMode === 'foreign_customer' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
+                Foreign Customer Overview &amp; Treasury Cards
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-[#0b4da2] border border-blue-200 text-[10px] font-bold font-mono">
+                {FOREIGN_CUSTOMER_STAT_CARDS.length} Cards
+              </span>
+            </div>
 
-            const cardClasses = `${animClass} ${
-              isGlass
-                ? `dashboard-card-glass admin-stat-card rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[130px] no-underline cursor-pointer active:scale-[0.99] ${
-                    isSelected
-                      ? 'ring-2 ring-emerald-400/80 shadow-lg'
-                      : card.card_key === 'total_profit'
-                      ? 'ring-1 ring-emerald-300/60'
-                      : ''
-                  }`
-                : `bg-white admin-stat-card border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[130px] no-underline cursor-pointer ${
-                    isSelected
-                      ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/10'
-                      : card.card_key === 'total_profit'
-                      ? 'border-emerald-300 ring-1 ring-emerald-200/80 bg-gradient-to-br from-emerald-50/30 via-white to-emerald-50/10 hover:border-emerald-400'
-                      : 'border-slate-200 hover:border-blue-400'
-                  }`
-            }`;
+            <div className="flex items-center gap-2">
+              <Link
+                href="/customers/create"
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-[#22a34a] hover:bg-[#1b843c] text-white shadow-2xs transition-colors no-underline"
+              >
+                <Plus size={13} />
+                <span>Add Customer</span>
+              </Link>
+              <Link
+                href="/customers/dashboard"
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-blue-50 hover:bg-blue-100 text-[#0b4da2] border border-blue-200 transition-colors no-underline"
+              >
+                <Users size={13} />
+                <span>Customer Directory</span>
+              </Link>
+            </div>
+          </div>
 
-            const cardContent = (
-              <>
-                {/* Top Row: Title on Left, Icon or Logo on Right */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span
-                    className="text-xs text-slate-600 font-bold tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight line-clamp-2"
-                    title={isCompanyEntity ? selectedSingleCompany.name : card.name}
-                  >
-                    {isCompanyEntity ? 'REGISTERED COMPANY' : card.name}
-                  </span>
-                  <div
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors p-0.5 ${
-                      isCompanyEntity && selectedSingleCompany.logo
-                        ? 'bg-white border border-slate-200 shadow-2xs'
-                        : `${metrics.theme.bg} ${metrics.theme.text}`
-                    }`}
-                  >
-                    {isCompanyEntity && selectedSingleCompany.logo ? (
-                      <img
-                        src={resolveFileUrl(selectedSingleCompany.logo)}
-                        alt={selectedSingleCompany.name}
-                        className="w-full h-full object-contain"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
+          {/* 11 Foreign Customer Stat & Wallet Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {FOREIGN_CUSTOMER_STAT_CARDS.map((card, index) => {
+              const metrics = getForeignCustomerCardMetrics(card);
+              const isCurrency = metrics.value.startsWith('RM');
+              const isSelected = selectedCardKey === (card.id || card.metric_type);
+              const animClass = getServiceCardAnimationClass(cardAnimation, index);
+              const animStyle = getServiceCardAnimationStyle(index, cardDuration, cardStagger);
+              const cardKey = `fc-${card.id || card.metric_type}-${cardAnimation}-${animTriggerKey}-${isGlass ? 'glass' : 'default'}`;
+
+              const cardClasses = `admin-stat-card ${animClass} ${isGlass
+                ? `dashboard-card-glass rounded-2xl p-5 transition-all flex flex-col justify-between group min-h-[110px] no-underline cursor-pointer active:scale-[0.99] ${isSelected
+                  ? 'ring-2 ring-emerald-500 shadow-md bg-emerald-50/20'
+                  : ''
+                }`
+                : `bg-white border rounded-xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group min-h-[110px] no-underline cursor-pointer ${isSelected
+                  ? 'border-emerald-500 ring-2 ring-emerald-500/25 bg-emerald-50/15'
+                  : 'border-slate-200 hover:border-blue-400'
+                }`
+                }`;
+
+              return (
+                <div
+                  key={cardKey}
+                  style={animStyle}
+                  onClick={() => setSelectedCardKey(card.id || card.metric_type || 'total_customers')}
+                  className={cardClasses}
+                  title={`Click to view ${card.title} in order statistics chart`}
+                >
+                  {/* Top Row: Title on Left, Icon on Right */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span
+                      className="text-xs text-slate-600 font-bold tracking-wide group-hover:text-[#0b4da2] transition-colors leading-tight line-clamp-2"
+                      title={card.title}
+                    >
+                      {card.title}
+                    </span>
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors p-0.5 ${metrics.theme.bg} ${metrics.theme.text}`}
+                    >
                       <DynamicCardIcon icon={card.icon} size={16} />
-                    )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Middle Row: Full Width Value or Company Name */}
-                {isCompanyEntity ? (
+                  {/* Middle Row: Full Width Value */}
                   <div
-                    className="font-extrabold tracking-tight text-slate-900 text-sm sm:text-base line-clamp-2 leading-snug my-1 min-h-[44px] flex items-center"
-                    title={selectedSingleCompany.name}
-                  >
-                    {selectedSingleCompany.name}
-                  </div>
-                ) : (
-                  <div
-                    className={`font-bold tracking-tight font-mono my-0.5 ${
-                      isCurrency ? 'text-[20px] sm:text-[22px] xl:text-[24px]' : 'text-2xl'
-                    } ${metrics.theme.valColor}`}
+                    className={`font-bold tracking-tight font-mono my-0.5 ${isCurrency ? 'text-[20px] sm:text-[22px] xl:text-[24px]' : 'text-2xl'
+                      } ${metrics.theme.valColor}`}
                   >
                     {metrics.value}
                   </div>
-                )}
 
-                {/* Bottom Row: Subtitle / Link */}
-                {metrics.isLink && metrics.link ? (
-                  <div className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-medium group-hover:underline">
-                    <TrendingUp size={12} className="shrink-0" />
-                    <span className="truncate">{metrics.sub}</span>
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-slate-500 mt-1 truncate" title={metrics.sub}>
-                    {metrics.sub}
-                  </div>
-                )}
-              </>
-            );
-
-            if (metrics.isLink && metrics.link) {
-              return (
-                <Link
-                  key={cardKey}
-                  href={metrics.link}
-                  style={animStyle}
-                  className={cardClasses}
-                >
-                  {cardContent}
-                </Link>
+                  {/* Bottom Row: Subtitle / Link */}
+                  {metrics.isLink && metrics.link ? (
+                    <div className="flex items-center justify-between gap-1 text-[11px] text-slate-500 mt-1">
+                      <span className="truncate">{metrics.sub}</span>
+                      <Link
+                        href={metrics.link}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-0.5 text-emerald-600 hover:text-emerald-700 font-semibold shrink-0 no-underline"
+                        title={`Go to ${card.title} page`}
+                      >
+                        <span>View</span>
+                        <ArrowRight size={10} />
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-500 mt-1 truncate" title={metrics.sub}>
+                      {metrics.sub}
+                    </div>
+                  )}
+                </div>
               );
-            }
+            })}
+          </div>
 
-            return (
-              <div
-                key={cardKey}
-                style={animStyle}
-                onClick={() => setSelectedCardKey(card.card_key)}
-                className={cardClasses}
-                title={`Click to view ${card.name} in statistics graph`}
-              >
-                {cardContent}
-              </div>
-            );
-          })}
+          {/* Interactive Date-Wise Customer Order & Metric Statistics Chart */}
+          <CustomerOrderStatisticsChart
+            customers={scopedCustomers}
+            companies={selectedCardCompanies}
+            statCards={FOREIGN_CUSTOMER_STAT_CARDS}
+            initialCardKey={selectedCardKey}
+          />
         </div>
-      </div>
+      )}
 
-      {/* Interactive Date-Wise Order & Metric Statistics Chart (Strictly Permitted Scope) */}
-      <CompanyOrderStatisticsChart
-        companies={selectedCardCompanies}
-        statCards={statCards}
-        initialCardKey={selectedCardKey}
-      />
+      {/* ========================================================================= */}
+      {/* 4. VIEW 2: EMPLOYEES & PERMISSIONS DASHBOARD (EXACT SAME AS /masteradmin/employees) */}
+      {/* ========================================================================= */}
+      {dashboardViewMode === 'employees_permissions' && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-[#072a6b] via-[#093a8e] to-[#0c4da2] text-white rounded-2xl p-6 sm:p-7 shadow-sm relative overflow-hidden">
+            <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 bg-yellow-400/20 text-yellow-300 border border-yellow-400/30 text-[10px] font-bold tracking-wider px-2.5 py-0.5 rounded-full uppercase mb-2">
+                  <Users size={12} className="text-yellow-400" />
+                  <span>Scope Delegation &amp; Staff Access</span>
+                </div>
+                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white m-0">
+                  Employees &amp; Permissions
+                </h1>
+                <p className="text-xs text-blue-100/90 mt-1 max-w-xl leading-relaxed m-0">
+                  Manage operational staff and configure access permissions across your {permittedCompanies.length} permitted companies.
+                </p>
+              </div>
 
-      {/* Main Companies List & Table Card */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        {/* Filters */}
+              <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+                <Link
+                  href="/masteradmin/employees/resignations"
+                  className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-white/20 transition-all no-underline shrink-0"
+                >
+                  <FileText size={16} className="text-yellow-300" />
+                  <span>Resignations &amp; Letters</span>
+                </Link>
+
+                <Link
+                  href="/masteradmin/employees/create"
+                  className="inline-flex items-center gap-2 bg-[#22a34a] hover:bg-[#1b843c] text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer no-underline shrink-0"
+                >
+                  <Plus size={16} />
+                  <span>Add Staff Member</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* KPI Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
+              <div>
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  Total Employees
+                </span>
+                <div className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                  {filteredStaffEmployees.length}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1">In your assigned scope</div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#0b4da2] flex items-center justify-center">
+                <Users size={20} />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
+              <div>
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  Total Active Employees
+                </span>
+                <div className="text-2xl font-bold text-emerald-600 tracking-tight mt-1">
+                  {filteredStaffEmployees.filter((e) => e.status === 'active').length}
+                </div>
+                <div className="text-[11px] text-emerald-600 mt-1">Operational accounts</div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <UserCheck size={20} />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between admin-stat-card">
+              <div>
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  Inactive Employees
+                </span>
+                <div className="text-2xl font-bold text-rose-600 tracking-tight mt-1">
+                  {filteredStaffEmployees.filter((e) => e.status !== 'active').length}
+                </div>
+                <div className="text-[11px] text-rose-600 mt-1">Inactive / suspended accounts</div>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                <UserX size={20} />
+              </div>
+            </div>
+          </div>
+
+          {/* Main Staff Table Card */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            {/* Table Filter Bar */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex-1 relative max-w-md">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={staffSearchTerm}
+                  onChange={(e) => setStaffSearchTerm(e.target.value)}
+                  placeholder="Search staff by Name, Code, or Email..."
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-[#0b4da2] focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-lg bg-slate-200/60 p-0.5 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setStaffStatusFilter('ALL')}
+                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer border-0 ${
+                      staffStatusFilter === 'ALL'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900 bg-transparent'
+                    }`}
+                  >
+                    All ({filteredStaffEmployees.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStaffStatusFilter('active')}
+                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer border-0 ${
+                      staffStatusFilter === 'active'
+                        ? 'bg-white text-emerald-700 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900 bg-transparent'
+                    }`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStaffStatusFilter('inactive')}
+                    className={`px-3 py-1 rounded-md transition-colors cursor-pointer border-0 ${
+                      staffStatusFilter === 'inactive'
+                        ? 'bg-white text-rose-700 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900 bg-transparent'
+                    }`}
+                  >
+                    Inactive
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchEmployeesData}
+                  className="p-2 text-slate-500 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
+                  title="Refresh staff list"
+                >
+                  <RotateCcw size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Staff Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold text-[11px] border-b border-slate-200">
+                    <th className="py-3 px-4">Staff Member</th>
+                    <th className="py-3 px-4">Employee Code</th>
+                    <th className="py-3 px-4">Assigned Companies</th>
+                    <th className="py-3 px-4">Action Permissions</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredStaffEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        <Users size={36} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm font-semibold text-slate-600 m-0">
+                          No Staff Records Found
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1 mb-4">
+                          {staffSearchTerm
+                            ? 'Try clearing your search query.'
+                            : 'Add staff members to delegate company workload.'}
+                        </p>
+                        <Link
+                          href="/masteradmin/employees/create"
+                          className="inline-flex items-center gap-1.5 bg-[#0b4da2] text-white px-3.5 py-2 rounded-xl text-xs font-semibold no-underline shadow-xs"
+                        >
+                          <Plus size={14} />
+                          <span>Add Staff Member</span>
+                        </Link>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStaffEmployees.map((emp) => {
+                      const assigned = Array.isArray(emp.assigned_companies)
+                        ? emp.assigned_companies
+                        : [];
+
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                          {/* Name & Avatar */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#0b4da2] flex items-center justify-center font-bold text-xs shrink-0">
+                                {emp.name
+                                  .split(' ')
+                                  .map((n) => n[0])
+                                  .slice(0, 2)
+                                  .join('')
+                                  .toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-bold text-slate-900 text-xs">
+                                  {emp.name}
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {emp.email} • <span className="font-semibold text-slate-600">{emp.role}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Code */}
+                          <td className="py-3.5 px-4">
+                            <span className="inline-flex items-center font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                              {emp.employee_code}
+                            </span>
+                          </td>
+
+                          {/* Assigned Companies */}
+                          <td className="py-3.5 px-4 max-w-xs">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {assigned.length === 0 ? (
+                                <span className="text-[11px] text-slate-400 italic">
+                                  No companies assigned
+                                </span>
+                              ) : (
+                                assigned.slice(0, 2).map((cId) => {
+                                  const match = allCompanies.find(
+                                    (c) => c.id.toLowerCase() === cId.toLowerCase()
+                                  );
+                                  return (
+                                    <span
+                                      key={cId}
+                                      className="inline-flex items-center gap-1 bg-blue-50 text-[#0b4da2] border border-blue-200 px-2 py-0.5 rounded text-[10px] font-bold"
+                                    >
+                                      <Building2 size={10} />
+                                      <span className="truncate max-w-[85px]">
+                                        {match ? match.name : cId}
+                                      </span>
+                                    </span>
+                                  );
+                                })
+                              )}
+                              {assigned.length > 2 && (
+                                <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded">
+                                  +{assigned.length - 2} more
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Permissions */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                  emp.can_create
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-slate-100 text-slate-400'
+                                }`}
+                                title={emp.can_create ? 'Allowed to create' : 'Cannot create'}
+                              >
+                                Create
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                  emp.can_edit
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-slate-100 text-slate-400'
+                                }`}
+                                title={emp.can_edit ? 'Allowed to edit' : 'Cannot edit'}
+                              >
+                                Edit
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                  emp.can_delete
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-slate-100 text-slate-400'
+                                }`}
+                                title={emp.can_delete ? 'Allowed to delete' : 'Cannot delete'}
+                              >
+                                Delete
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3.5 px-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStaffStatus(emp)}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer transition-colors border-0 ${
+                                emp.status === 'active'
+                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  emp.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500'
+                                }`}
+                              />
+                              <span>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
+                            </button>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <Link
+                                href={`/masteradmin/employees/resignations/new?employee_code=${emp.employee_code}`}
+                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors inline-flex items-center no-underline"
+                                title="Issue Resignation & Clearance"
+                              >
+                                <UserMinus size={14} />
+                              </Link>
+
+                              <Link
+                                href={`/masteradmin/employees/edit?id=${emp.id}`}
+                                className="p-1.5 text-slate-600 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center no-underline"
+                                title="Edit Staff Member"
+                              >
+                                <Edit2 size={14} />
+                              </Link>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStaff(emp.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
+                                title="Delete Staff Member"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. MAIN COMPANIES REGISTRY TABLE & MANAGEMENT CARD */}
+      {/* ========================================================================= */}
+      {dashboardViewMode === 'foreign_customer' && (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        {/* Table Filters & Actions */}
         <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex-1 relative max-w-md">
             <Search
@@ -1524,7 +2119,7 @@ export default function MasterAdminCompaniesPage() {
                 setSelectedCompanyCardId('ALL');
               }}
               className="p-2 text-slate-500 hover:text-[#0b4da2] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border-0 bg-transparent"
-              title="Reset filters"
+              title="Reset table search"
             >
               <RotateCcw size={15} />
             </button>
@@ -1580,7 +2175,7 @@ export default function MasterAdminCompaniesPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table Content */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-700 border-collapse">
             <thead>
@@ -1612,7 +2207,6 @@ export default function MasterAdminCompaniesPage() {
               ) : (
                 filteredCompanies.map((comp) => {
                   const income = getCompanyIncomeWallet(comp);
-                  const cost = getCompanyCostWallet(comp);
                   const profit = getCompanyProfitWallet(comp);
 
                   return (
@@ -1705,11 +2299,10 @@ export default function MasterAdminCompaniesPage() {
                           <button
                             type="button"
                             onClick={() => setSelectedCompanyCardId(selectedCompanyCardId === String(comp.id) ? 'ALL' : String(comp.id))}
-                            className={`px-2.5 py-1 rounded text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer border ${
-                              selectedCompanyCardId === String(comp.id)
-                                ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
-                                : 'bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-[#0b4da2] border-slate-200'
-                            }`}
+                            className={`px-2.5 py-1 rounded text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer border ${selectedCompanyCardId === String(comp.id)
+                              ? 'bg-[#0b4da2] text-white border-[#0b4da2] shadow-2xs'
+                              : 'bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-[#0b4da2] border-slate-200'
+                              }`}
                             title="Filter cards and metrics to this company"
                           >
                             <Building2 size={12} />
@@ -1751,6 +2344,7 @@ export default function MasterAdminCompaniesPage() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Edit Company Details Modal */}
       {editingCompany && (
@@ -1940,6 +2534,7 @@ export default function MasterAdminCompaniesPage() {
           </div>
         </div>
       )}
+
       {/* Payment & Subscription Activation Modal */}
       <CompanyPaymentModal
         isOpen={!!payingCompany}
@@ -1947,21 +2542,21 @@ export default function MasterAdminCompaniesPage() {
         data={
           payingCompany
             ? {
-                id: payingCompany.id,
-                companyName: payingCompany.name,
-                roc: payingCompany.roc,
-                email: payingCompany.email,
-                phone: payingCompany.phone,
-                address: payingCompany.address,
-                planPackage: payingCompany.subscription_plan_key || 'Standard Subscription',
-                amount: Number(
-                  subscriptionPlans.find(
-                    (p) =>
-                      p.plan_key === payingCompany.subscription_plan_key ||
-                      p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
-                  )?.price || 199
-                ),
-              }
+              id: payingCompany.id,
+              companyName: payingCompany.name,
+              roc: payingCompany.roc,
+              email: payingCompany.email,
+              phone: payingCompany.phone,
+              address: payingCompany.address,
+              planPackage: payingCompany.subscription_plan_key || 'Standard Subscription',
+              amount: Number(
+                subscriptionPlans.find(
+                  (p) =>
+                    p.plan_key === payingCompany.subscription_plan_key ||
+                    p.name?.toLowerCase() === payingCompany.subscription_plan_key?.toLowerCase()
+                )?.price || 199
+              ),
+            }
             : null
         }
         isSubmitting={isSubmittingPayment}

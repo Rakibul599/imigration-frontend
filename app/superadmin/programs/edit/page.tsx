@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   BookOpen,
   Briefcase,
+  Calendar,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -35,6 +36,7 @@ function EditProgramForm() {
 
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
+  const [year, setYear] = useState<string>('');
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [status, setStatus] = useState<'active' | 'inactive' | 'upcoming' | 'closed'>('active');
 
@@ -107,6 +109,7 @@ function EditProgramForm() {
       .then((prog) => {
         if (prog) {
           setName(prog.name || '');
+          setYear(prog.year ? String(prog.year) : '');
           if (prog.category) {
             const list = prog.category
               .split(',')
@@ -229,6 +232,7 @@ function EditProgramForm() {
       const result = await updateProgram(programId, {
         name: name.trim(),
         category: selectedSectors.join(', '),
+        year: year.trim() || undefined,
         status,
       });
 
@@ -631,6 +635,88 @@ function EditProgramForm() {
 
               <p className="text-[11px] text-slate-400">
                 You can select multiple sectors from the dropdown. Click a sector to check/uncheck it.
+              </p>
+            </div>
+
+            {/* Field 3: Program Year */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Program Year
+                </label>
+                <span className="text-[11px] text-indigo-600 font-semibold">Select from calendar</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-600 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={year}
+                    onChange={(e) => setYear(e.target.value)}
+                    placeholder="e.g. 2026"
+                    className="w-full pl-10 pr-4 py-2.5 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  />
+                </div>
+                {/* Native Calendar Picker Button */}
+                <div className="relative">
+                  <input
+                    type="date"
+                    id="editProgramYearPicker"
+                    className="sr-only"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const yr = e.target.value.split('-')[0];
+                        if (yr) setYear(yr);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const picker = document.getElementById('editProgramYearPicker') as HTMLInputElement | null;
+                      if (picker) {
+                        if (typeof picker.showPicker === 'function') {
+                          picker.showPicker();
+                        } else {
+                          picker.focus();
+                          picker.click();
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs"
+                    title="Open calendar to pick year"
+                  >
+                    <Calendar size={14} />
+                    <span>Pick from Calendar</span>
+                  </button>
+                </div>
+              </div>
+              {/* Quick Year Selection Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[11px] text-slate-400 mr-1">Quick Select:</span>
+                {[
+                  new Date().getFullYear() - 1,
+                  new Date().getFullYear(),
+                  new Date().getFullYear() + 1,
+                  new Date().getFullYear() + 2,
+                  new Date().getFullYear() + 3,
+                ].map((yVal) => (
+                  <button
+                    key={yVal}
+                    type="button"
+                    onClick={() => setYear(String(yVal))}
+                    className={`px-2.5 py-0.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                      year === String(yVal)
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                    }`}
+                  >
+                    {yVal}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5">
+                Click "Pick from Calendar" to select year from calendar, or select a year pill above.
               </p>
             </div>
 

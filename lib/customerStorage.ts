@@ -55,6 +55,8 @@ export interface CustomerRecord {
   bank_account_name?: string;
   bank_account_number?: string;
   total_payment?: string;
+  target_amount?: number | string;
+  year_targets?: any[];
   role: string;
   profile_pic?: string;
   profile_image?: string;
@@ -346,6 +348,7 @@ export async function deleteCustomer(id: number | string): Promise<boolean> {
     });
     if (res.ok) {
       updateLocalCache({ id: Number(id) } as CustomerRecord, 'delete');
+      cleanCustomerLocalFinances(id);
       return true;
     }
   } catch (err) {
@@ -353,7 +356,44 @@ export async function deleteCustomer(id: number | string): Promise<boolean> {
   }
 
   updateLocalCache({ id: Number(id) } as CustomerRecord, 'delete');
+  cleanCustomerLocalFinances(id);
   return true;
+}
+
+function cleanCustomerLocalFinances(id: number | string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const targetRaw = localStorage.getItem('agency_customer_targets');
+    if (targetRaw) {
+      const tList = JSON.parse(targetRaw).filter((t: any) => String(t.customer_id) !== String(id));
+      localStorage.setItem('agency_customer_targets', JSON.stringify(tList));
+      window.dispatchEvent(new Event('customerTargetsUpdated'));
+    }
+    const depRaw = localStorage.getItem('agency_customer_deposits');
+    if (depRaw) {
+      const dList = JSON.parse(depRaw).filter((d: any) => String(d.customer_id) !== String(id));
+      localStorage.setItem('agency_customer_deposits', JSON.stringify(dList));
+      window.dispatchEvent(new Event('customerDepositsUpdated'));
+    }
+    const pendRaw = localStorage.getItem('agency_customer_pendings');
+    if (pendRaw) {
+      const pList = JSON.parse(pendRaw).filter((p: any) => String(p.customer_id) !== String(id));
+      localStorage.setItem('agency_customer_pendings', JSON.stringify(pList));
+      window.dispatchEvent(new Event('customerPendingsUpdated'));
+    }
+    const costRaw = localStorage.getItem('agency_customer_company_costs');
+    if (costRaw) {
+      const cList = JSON.parse(costRaw).filter((c: any) => String(c.customer_id) !== String(id));
+      localStorage.setItem('agency_customer_company_costs', JSON.stringify(cList));
+      window.dispatchEvent(new Event('companyCostsUpdated'));
+    }
+    const refRaw = localStorage.getItem('agency_customer_refunds');
+    if (refRaw) {
+      const rList = JSON.parse(refRaw).filter((r: any) => String(r.customer_id) !== String(id));
+      localStorage.setItem('agency_customer_refunds', JSON.stringify(rList));
+      window.dispatchEvent(new Event('customerRefundsUpdated'));
+    }
+  } catch {}
 }
 
 function updateLocalCache(record: CustomerRecord, action: 'create' | 'update' | 'delete') {

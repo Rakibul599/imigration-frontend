@@ -265,7 +265,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     );
   }, [availableServices]);
 
-  // Available company sectors for the dropdown (merges selected company sectors, all company sectors registry, and all registered companies)
+  // Available sectors for the dropdown (prioritizes selected program's sectors, then employer company sectors)
   const availableCompanySectors = useMemo(() => {
     const list: string[] = [];
     const addSector = (name?: string) => {
@@ -275,7 +275,19 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       }
     };
 
-    // 1. If an employer company is selected, add its sectors first
+    // 1. If a program is selected, show only sectors belonging to that program
+    if (programId) {
+      const selectedProg = programs.find((p) => String(p.id) === String(programId));
+      if (selectedProg && selectedProg.category) {
+        selectedProg.category.split(',').forEach(addSector);
+        if (workingSector) {
+          addSector(workingSector);
+        }
+        if (list.length > 0) return list;
+      }
+    }
+
+    // 2. If an employer company is selected, add its sectors first
     const selectedComp = companies.find((c) => c.id.toLowerCase() === (companyId || '').toLowerCase());
     if (selectedComp?.sectors && Array.isArray(selectedComp.sectors)) {
       selectedComp.sectors.forEach(addSector);
@@ -284,10 +296,10 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       selectedComp.sector.split(',').forEach(addSector);
     }
 
-    // 2. Add all configured company sectors from registry
+    // 3. Add all configured company sectors from registry
     sectors.forEach((sec) => addSector(sec.name));
 
-    // 3. Add sectors from any other registered companies
+    // 4. Add sectors from any other registered companies
     companies.forEach((comp) => {
       if (comp.sectors && Array.isArray(comp.sectors)) {
         comp.sectors.forEach(addSector);
@@ -297,13 +309,13 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       }
     });
 
-    // 4. Ensure current workingSector is present in the list if already set
+    // 5. Ensure current workingSector is present in the list if already set
     if (workingSector) {
       addSector(workingSector);
     }
 
     return list;
-  }, [companies, companyId, sectors, workingSector]);
+  }, [programId, programs, companies, companyId, sectors, workingSector]);
 
   // UI feedback states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -692,8 +704,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     return companies.map((c) => ({
       value: c.id,
       label: c.name,
-      subLabel: `${c.sector || 'Employer'} • ROC: ${c.roc || 'Verified'}`,
-      badge: c.tag || 'Verified',
     }));
   }, [companies]);
 
@@ -702,15 +712,11 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     return [
       {
         value: '',
-        label: 'No Agent / Direct Recruitment',
-        subLabel: 'Self-applied / Direct onboarding',
-        badge: 'Direct',
+        label: 'No Agent',
       },
       ...agents.map((a) => ({
         value: String(a.id),
         label: a.name,
-        subLabel: a.phone ? `Phone: ${a.phone}` : 'No phone recorded',
-        badge: a.notes ? 'With Note' : 'Agent',
       })),
     ];
   }, [agents]);
@@ -720,15 +726,11 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
     return [
       {
         value: '',
-        label: 'No Program (General / Unassigned)',
-        subLabel: 'Standard foreign worker deployment',
-        badge: 'General',
+        label: 'No Program',
       },
       ...programs.map((p) => ({
         value: String(p.id),
-        label: `${p.name}${p.code ? ` (${p.code})` : ''}`,
-        subLabel: [p.category, p.duration, p.fees ? `Fee: RM ${p.fees}` : null].filter(Boolean).join(' • ') || 'Standard program',
-        badge: p.status === 'active' ? 'Active' : p.status,
+        label: p.name,
       })),
     ];
   }, [programs]);
@@ -888,6 +890,11 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
       username: canLogin ? loginUsername.trim() : undefined,
       password: canLogin ? loginPassword : undefined,
       assigned_service_cards: canLogin ? customerAssignedCards : undefined,
+      target_amount: liveFinancialCalculation.calculatedTotalTarget,
+      year_targets: yearTargets.map((row) => ({
+        year: Number(row.year),
+        target_amount: row.target_amount === '' ? 0 : Number(row.target_amount),
+      })),
     };
 
     try {
@@ -913,7 +920,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   company_id: companyId || undefined,
                   company_name: companies.find((c) => c.id === companyId)?.name || companyId || undefined,
                   target_amount: Number(row.target_amount),
-                  target_year: row.year,
+                  target_year: String(row.year),
                   target_category: 'Annual Target',
                   quota_workers_count: 1,
                   status: 'In Progress',
@@ -942,7 +949,7 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   company_id: created.company_id || companyId || undefined,
                   company_name: companies.find((c) => c.id === companyId)?.name || created.company_id || undefined,
                   target_amount: Number(row.target_amount),
-                  target_year: row.year,
+                  target_year: String(row.year),
                   target_category: 'Annual Target',
                   quota_workers_count: 1,
                   status: 'In Progress',
@@ -1294,7 +1301,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                 disabled={effectiveIsViewMode}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="e.g. Mohammad Rafiqul Islam"
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
@@ -1329,26 +1335,67 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                     setWorkingSector('');
                   }
                 }}
-                placeholder="Search & select employer company..."
-                searchPlaceholder="Type company name, ROC or sector..."
+                placeholder=""
+                searchPlaceholder=""
+                hideExtra
                 icon={<Building2 size={15} className="text-slate-400" />}
               />
-              {portalType === 'masteradmin' && (
-                <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                  <span className="text-blue-700 font-medium">
-                    {companies.length > 0
-                      ? `Showing ${companies.length} permitted ${companies.length === 1 ? 'company' : 'companies'}`
-                      : 'No company access assigned.'}
-                  </span>
-                  {companies.length > 1 && (
-                    <span className="text-slate-400">Searchable Select2</span>
-                  )}
-                </div>
-              )}
             </div>
 
-            {/* Select Recruitment Agent - Placed below Assigned Employer Company */}
+            {/* Select Program - Placed directly below Assigned Employer Company */}
             <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Select Program
+                </label>
+              </div>
+              <Select2Search
+                options={programOptions}
+                value={programId}
+                disabled={effectiveIsViewMode}
+                onChange={(val) => {
+                  setProgramId(val);
+                  if (val) {
+                    const matchedProg = programs.find((p) => String(p.id) === String(val));
+                    if (matchedProg?.category) {
+                      const progSectors = matchedProg.category.split(',').map((s) => s.trim()).filter(Boolean);
+                      if (progSectors.length > 0 && !progSectors.includes(workingSector)) {
+                        setWorkingSector(progSectors[0]);
+                      }
+                    }
+                  }
+                }}
+                placeholder=""
+                searchPlaceholder=""
+                hideExtra
+                icon={<BookOpen size={15} className="text-slate-400" />}
+              />
+            </div>
+
+            {/* Working Sector - Placed directly beside / after Select Program */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-800">
+                  Working Sector <span className="text-red-500">*</span>
+                </label>
+              </div>
+              <select
+                value={workingSector}
+                disabled={effectiveIsViewMode}
+                onChange={(e) => setWorkingSector(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
+              >
+                <option value="">Select Working Sector</option>
+                {availableCompanySectors.map((sectorName) => (
+                  <option key={sectorName} value={sectorName}>
+                    {sectorName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Select Recruitment Agent */}
+            <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-slate-800 mb-1.5">
                 Select Recruitment Agent
               </label>
@@ -1357,63 +1404,11 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                 value={agentId}
                 disabled={effectiveIsViewMode}
                 onChange={(val) => setAgentId(val)}
-                placeholder="Search & select recruitment agent..."
-                searchPlaceholder="Type agent name, phone or note..."
+                placeholder=""
+                searchPlaceholder=""
+                hideExtra
                 icon={<Briefcase size={15} className="text-slate-400" />}
               />
-              {agentId ? (
-                <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                  <span className="text-blue-700 font-medium truncate">
-                    Selected Agent: <strong className="font-semibold text-slate-800">{agents.find((a) => String(a.id) === agentId)?.name}</strong>
-                  </span>
-                  {agents.find((a) => String(a.id) === agentId)?.phone && (
-                    <span className="font-mono text-slate-600 shrink-0">
-                      {agents.find((a) => String(a.id) === agentId)?.phone}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-1.5 text-[11px] text-slate-400">
-                  Optional: Associate this foreign worker with a recruitment agent
-                </div>
-              )}
-            </div>
-
-            {/* Select Program - Placed directly below Select Recruitment Agent */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-800">
-                  Select Program
-                </label>
-                <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                  Program Scheme
-                </span>
-              </div>
-              <Select2Search
-                options={programOptions}
-                value={programId}
-                disabled={effectiveIsViewMode}
-                onChange={(val) => setProgramId(val)}
-                placeholder="Search & select recruitment program..."
-                searchPlaceholder="Type program name, code or category..."
-                icon={<BookOpen size={15} className="text-slate-400" />}
-              />
-              {programId ? (
-                <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                  <span className="text-indigo-700 font-medium truncate">
-                    Selected Program: <strong className="font-semibold text-slate-800">{programs.find((p) => String(p.id) === programId)?.name}</strong>
-                  </span>
-                  {programs.find((p) => String(p.id) === programId)?.code && (
-                    <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] shrink-0 font-semibold">
-                      {programs.find((p) => String(p.id) === programId)?.code}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-1.5 text-[11px] text-slate-400">
-                  Optional: Select a specific foreign worker recruitment / deployment program
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1435,7 +1430,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                 disabled={effectiveIsViewMode}
                 value={passportNo}
                 onChange={(e) => setPassportNo(e.target.value)}
-                placeholder="e.g. A01234567"
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
@@ -1450,7 +1444,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                 disabled={effectiveIsViewMode}
                 value={nidNo}
                 onChange={(e) => setNidNo(e.target.value)}
-                placeholder="e.g. 1988269123456"
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
@@ -1480,7 +1473,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                 disabled={effectiveIsViewMode}
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                placeholder="e.g. Bangladesh, Indonesia"
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
@@ -1506,7 +1498,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   disabled={effectiveIsViewMode}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+60 12-345 6789"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
@@ -1523,7 +1514,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   disabled={effectiveIsViewMode}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="worker@agency.com"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
@@ -1539,60 +1529,22 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
               disabled={effectiveIsViewMode}
               value={leavingAddress}
               onChange={(e) => setLeavingAddress(e.target.value)}
-              placeholder="Enter worker's residential living address in home country or current location..."
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
             />
           </div>
         </div>
 
-        {/* Card 4: Working Sector & (Optional for Employee) Salary & OT */}
+        {/* Card 4: Official Worksite & (Optional for Employee) Salary & OT */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Building2 size={15} className="text-[#0b4da2]" />
               <span>
                 {portalType === 'employee'
-                  ? 'Working Sector & Official Worksite'
-                  : 'Working Sector, Basic Salary & OT(Over time)'}
+                  ? 'Official Worksite'
+                  : 'Official Worksite, Basic Salary & OT(Over time)'}
               </span>
             </div>
-            <span className="text-[11px] text-blue-600 font-semibold">Admin Panel Manageable Sectors</span>
-          </div>
-
-          {/* Working Sector */}
-          <div className="bg-blue-50/50 border border-blue-200/80 rounded-xl p-4 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800">
-                Working Sector <span className="text-red-500">*</span>
-              </label>
-              <span className="text-[11px] text-slate-500 font-normal">
-                Company Business Sector
-              </span>
-            </div>
-
-            <select
-              value={workingSector}
-              disabled={effectiveIsViewMode}
-              onChange={(e) => setWorkingSector(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-hidden focus:border-[#0b4da2] cursor-pointer disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
-            >
-              <option value="">-- Select Company Working Sector --</option>
-              {availableCompanySectors.map((sectorName) => {
-                const selectedComp = companies.find(
-                  (c) => c.id.toLowerCase() === (companyId || '').toLowerCase()
-                );
-                const isCompanySector =
-                  selectedComp &&
-                  ((selectedComp.sectors && selectedComp.sectors.includes(sectorName)) ||
-                    (selectedComp.sector && selectedComp.sector.toLowerCase().includes(sectorName.toLowerCase())));
-
-                return (
-                  <option key={sectorName} value={sectorName}>
-                    {sectorName} {isCompanySector ? `• (${selectedComp.name})` : ''}
-                  </option>
-                );
-              })}
-            </select>
           </div>
 
           {/* Working Address */}
@@ -1607,7 +1559,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                 disabled={effectiveIsViewMode}
                 value={workingAddress}
                 onChange={(e) => setWorkingAddress(e.target.value)}
-                placeholder="Enter work site / manufacturing plant / project location address..."
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
               />
             </div>
@@ -1627,7 +1578,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                     disabled={effectiveIsViewMode}
                     value={basicSalary}
                     onChange={(e) => setBasicSalary(e.target.value)}
-                    placeholder="e.g. RM 2,500"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                   />
                 </div>
@@ -1644,7 +1594,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                     disabled={effectiveIsViewMode}
                     value={overtime}
                     onChange={(e) => setOvertime(e.target.value)}
-                    placeholder="e.g. 1.5x / RM 15.00/hr / 8 hrs"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                   />
                 </div>
@@ -1798,7 +1747,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                           disabled={effectiveIsViewMode}
                           value={row.target_amount}
                           onChange={(e) => handleTargetAmountChange(idx, e.target.value)}
-                          placeholder="0.00"
                           className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100"
                         />
                       </div>
@@ -1912,7 +1860,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   disabled={effectiveIsViewMode}
                   value={otherCompanyName}
                   onChange={(e) => setOtherCompanyName(e.target.value)}
-                  placeholder="e.g. Subcontractor or Partner Enterprise"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
@@ -1930,7 +1877,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   disabled={effectiveIsViewMode}
                   value={otherCompanyBossPhone}
                   onChange={(e) => setOtherCompanyBossPhone(e.target.value)}
-                  placeholder="e.g. +60 12-345 6789"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
@@ -1948,7 +1894,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                   disabled={effectiveIsViewMode}
                   value={otherCompanyAddress}
                   onChange={(e) => setOtherCompanyAddress(e.target.value)}
-                  placeholder="Enter working company premises, project site or office address..."
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                 />
               </div>
@@ -1973,29 +1918,78 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
               </div>
             </div>
 
-            {/* Main Checkbox / Toggle */}
-            <label className={`relative inline-flex items-center ${effectiveIsViewMode ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'} select-none`}>
-              <input
-                type="checkbox"
+            {/* Main Toggle Switch with Clear ON/OFF States */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
                 disabled={effectiveIsViewMode}
-                checked={canLogin}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setCanLogin(checked);
-                  if (checked && !loginUsername) {
+                onClick={() => {
+                  if (effectiveIsViewMode) return;
+                  const next = !canLogin;
+                  setCanLogin(next);
+                  if (next && !loginUsername) {
                     setLoginUsername(passportNo.trim() || `WORKER-${Math.floor(1000 + Math.random() * 9000)}`);
                   }
-                  if (checked && !loginPassword) {
+                  if (next && !loginPassword) {
                     setLoginPassword('password123');
                   }
                 }}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0b4da2]"></div>
-              <span className="ml-3 text-xs font-bold text-slate-800">
-                {canLogin ? 'Login Access Enabled' : 'Login Access Disabled'}
+                role="switch"
+                aria-checked={canLogin}
+                className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-[#0b4da2] focus:ring-offset-2 ${
+                  effectiveIsViewMode ? 'opacity-70 cursor-not-allowed' : ''
+                } ${
+                  canLogin
+                    ? 'bg-[#0b4da2] border-[#0b4da2]'
+                    : 'bg-slate-300 border-slate-400 shadow-inner'
+                }`}
+              >
+                {/* Background labels ON / OFF inside track */}
+                <span
+                  className={`absolute left-2 text-[10px] font-black tracking-wider text-white transition-opacity duration-200 select-none ${
+                    canLogin ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  ON
+                </span>
+                <span
+                  className={`absolute right-2 text-[10px] font-black tracking-wider text-slate-600 transition-opacity duration-200 select-none ${
+                    canLogin ? 'opacity-0' : 'opacity-100'
+                  }`}
+                >
+                  OFF
+                </span>
+
+                {/* Slider Knob */}
+                <span
+                  className={`pointer-events-none inline-flex h-6.5 w-6.5 transform items-center justify-center rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out border border-slate-300 ${
+                    canLogin ? 'translate-x-8' : 'translate-x-0.5'
+                  }`}
+                >
+                  {canLogin ? (
+                    <Check size={13} className="text-[#0b4da2]" strokeWidth={3} />
+                  ) : (
+                    <X size={13} className="text-slate-500" strokeWidth={3} />
+                  )}
+                </span>
+              </button>
+
+              {/* Status Label Badge */}
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                  canLogin
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                    : 'bg-rose-50 text-rose-800 border-rose-300 shadow-2xs'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    canLogin ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                  }`}
+                />
+                <span>{canLogin ? 'Login Access Enabled' : 'Login Access Disabled'}</span>
               </span>
-            </label>
+            </div>
           </div>
 
           {!canLogin ? (
@@ -2032,7 +2026,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                       disabled={effectiveIsViewMode}
                       value={loginUsername}
                       onChange={(e) => setLoginUsername(e.target.value)}
-                      placeholder="e.g. Passport number or custom User ID"
                       required={canLogin}
                       className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 font-mono font-semibold focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                     />
@@ -2062,7 +2055,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                       disabled={effectiveIsViewMode}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="Enter password"
                       required={canLogin}
                       className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 font-mono focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                     />
@@ -2224,7 +2216,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                         disabled={effectiveIsViewMode}
                         value={doc.name}
                         onChange={(e) => handleDocumentFieldChange(idx, 'name', e.target.value)}
-                        placeholder="e.g. Passport, NID, Medical"
                         className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                       />
                     </div>
@@ -2233,7 +2224,6 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                     <div className="lg:col-span-3">
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1 flex items-center justify-between">
                         <span>Select Service Card</span>
-                        <span className="text-[10px] text-blue-600 font-semibold">Service Tag</span>
                       </label>
                       <select
                         value={doc.service_id || ''}
@@ -2241,10 +2231,10 @@ function CustomerFormContent({ portalType, backUrl, initialMode }: CustomerFormF
                         onChange={(e) => handleDocumentServiceChange(idx, e.target.value)}
                         className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-900 font-medium focus:outline-hidden focus:border-[#0b4da2] disabled:opacity-80 disabled:cursor-not-allowed disabled:bg-slate-100/70"
                       >
-                        <option value="">-- General Document (None) --</option>
+                        <option value="">General Document</option>
                         {selectableServices.map((svc) => (
                           <option key={svc.id} value={svc.id}>
-                            {svc.title} {svc.tag ? `[${svc.tag}]` : ''}
+                            {svc.title}
                           </option>
                         ))}
                       </select>

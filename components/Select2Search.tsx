@@ -24,6 +24,7 @@ interface Select2SearchProps {
   minDropdownWidth?: string;
   dropdownWidth?: string;
   triggerClassName?: string;
+  hideExtra?: boolean;
 }
 
 export default function Select2Search({
@@ -40,6 +41,7 @@ export default function Select2Search({
   minDropdownWidth = 'min-w-full',
   dropdownWidth,
   triggerClassName = '',
+  hideExtra = false,
 }: Select2SearchProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -146,16 +148,6 @@ export default function Select2Search({
               <span className="font-bold text-slate-800 truncate">
                 {selectedOption.label}
               </span>
-              {selectedOption.subLabel && selectedOption.value !== 'ALL' && (
-                <span className="text-[10px] text-slate-500 font-mono shrink-0 hidden xl:inline">
-                  ({selectedOption.subLabel})
-                </span>
-              )}
-              {selectedOption.badge && (
-                <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold font-mono shrink-0 border border-blue-200">
-                  {selectedOption.badge}
-                </span>
-              )}
             </div>
           ) : (
             <span className="text-slate-400 truncate">{placeholder}</span>
@@ -174,7 +166,7 @@ export default function Select2Search({
       {isOpen && (
         <div
           className={`absolute ${
-            effectiveAlign === 'right' ? 'right-0 left-auto' : 'left-0 right-auto'
+            effectiveAlign === 'right' ? 'right-0 left-auto origin-top-right' : 'left-0 right-auto origin-top-left'
           } top-full mt-2 z-[100] ${
             dropdownWidth
               ? dropdownWidth
@@ -206,10 +198,11 @@ export default function Select2Search({
                 </button>
               )}
             </div>
-            <div className="flex items-center justify-between px-1 pt-2 text-[10px] text-slate-400 font-medium">
-              <span>{filteredOptions.length} available</span>
-              {searchTerm && <span>Filtered by &quot;{searchTerm}&quot;</span>}
-            </div>
+            {searchTerm && (
+              <div className="flex items-center justify-between px-1 pt-2 text-[10px] text-slate-400 font-medium">
+                <span>Filtered by &quot;{searchTerm}&quot;</span>
+              </div>
+            )}
           </div>
 
           {/* Options List with comfortable spacing between items */}
@@ -237,7 +230,7 @@ export default function Select2Search({
                           {opt.label}
                         </span>
                       </div>
-                      {opt.subLabel && (
+                      {opt.subLabel && !hideExtra && (
                         <span className="text-[10px] text-slate-500 truncate font-normal mt-0.5 leading-tight">
                           {opt.subLabel}
                         </span>
@@ -245,7 +238,7 @@ export default function Select2Search({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 ml-2">
-                      {opt.badge && (
+                      {opt.badge && !hideExtra && (
                         <span
                           className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
                             isSelected

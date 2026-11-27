@@ -8,12 +8,11 @@ import {
   ArrowLeft,
   Briefcase,
   Building2,
-  Calendar,
   Camera,
   CheckCircle2,
-  FileText,
   Globe2,
   Layers,
+  MapPin,
   Phone,
   Save,
   Upload,
@@ -38,11 +37,10 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
   // Form State
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [leavingAddress, setLeavingAddress] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [programId, setProgramId] = useState('');
   const [sector, setSector] = useState('');
-  const [year, setYear] = useState('');
-  const [notes, setNotes] = useState('');
   const [image, setImage] = useState('');
   const [imageName, setImageName] = useState('');
 
@@ -85,47 +83,39 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
     };
   }, [portalType]);
 
-  // Year options: past 3 years to future 4 years
-  const currentYear = new Date().getFullYear();
-  const yearOptions = useMemo(() => {
-    const list: number[] = [];
-    for (let y = currentYear - 3; y <= currentYear + 4; y++) {
-      list.push(y);
-    }
-    return list;
-  }, [currentYear]);
+  // Sector options filtered under selected program
+  const programSectors = useMemo(() => {
+    if (!programId) return [];
+    const prog = programs.find((p) => String(p.id) === String(programId));
+    if (!prog || !prog.category) return [];
+    return prog.category
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }, [programId, programs]);
 
-  // Sector options: combine backend sectors with standard fallback list
-  const sectorOptions = useMemo(() => {
-    const set = new Set<string>();
-    sectors.forEach((s) => {
-      if (s.name && s.name.trim()) set.add(s.name.trim());
-    });
-    const defaults = [
-      'Construction',
-      'Manufacturing',
-      'Plantation',
-      'Agriculture',
-      'Services',
-      'Cleaning',
-      'Hospitality',
-      'Security',
-      'F&B',
-      'IT / Office',
-      'Other',
-    ];
-    defaults.forEach((d) => set.add(d));
-    return Array.from(set).sort();
-  }, [sectors]);
+  const handleProgramChange = (pId: string) => {
+    setProgramId(pId);
+    if (!pId) {
+      setSector('');
+      return;
+    }
+    const prog = programs.find((p) => String(p.id) === String(pId));
+    if (prog && prog.category) {
+      const pSectors = prog.category
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (pSectors.length > 0 && !pSectors.includes(sector)) {
+        setSector(pSectors[0]);
+      }
+    } else {
+      setSector('');
+    }
+  };
 
   const handleCompanyChange = (cId: string) => {
     setCompanyId(cId);
-    if (!sector && cId) {
-      const found = companies.find((c) => c.id === cId);
-      if (found?.sector) {
-        setSector(found.sector);
-      }
-    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,13 +166,12 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
       await createAgent({
         name: name.trim(),
         phone: phone.trim(),
+        leaving_address: leavingAddress.trim() || undefined,
         company_id: companyId || undefined,
         company_name: selectedComp?.name || undefined,
         program_id: programId || undefined,
         program_name: selectedProg?.name || undefined,
         sector: sector || undefined,
-        year: year || undefined,
-        notes: notes.trim() || undefined,
         image: image || undefined,
       });
 
@@ -252,7 +241,7 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
             Register New Agency Partner
           </h2>
           <p className="text-xs text-slate-500 mt-1 m-0">
-            Register authorized recruitment agents, assign company, program, sector, year, contact information, and portrait.
+            Register authorized recruitment agents, contact information, leaving address, program, sector, and company.
           </p>
         </div>
 
@@ -326,7 +315,7 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
 
         {/* Organized Form Sections */}
         <div className="space-y-5">
-          {/* Section 1: Basic Identity (Agent Name & Phone) */}
+          {/* Section 1: Basic Identity (Agent Name, Phone & Leaving Address) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Agent Full Name */}
             <div>
@@ -342,7 +331,6 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Md. Rafiqul Islam / Ahmad Farhan"
                   className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
                 />
               </div>
@@ -362,21 +350,42 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g. +880 1712-345678 or +60 19-876 5432"
                   className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-mono font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Leaving Address */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <MapPin size={13} className="text-[#0b4da2]" />
+                  <span>Leaving Address</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                  <MapPin size={15} />
+                </span>
+                <input
+                  type="text"
+                  value={leavingAddress}
+                  onChange={(e) => setLeavingAddress(e.target.value)}
+                  className="w-full bg-slate-50/70 border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section 2: Affiliation & Program Categorization (Company, Program, Sector, Year) */}
+          {/* Section 2: Affiliation & Program Categorization (Company, Program, Sector) */}
           <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-200/80 space-y-4">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200/80 pb-2">
               <Building2 size={14} className="text-[#0b4da2]" />
               <span>Agency Affiliation &amp; Recruitment Scope</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Company Select */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
@@ -414,7 +423,7 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
                 <div className="relative">
                   <select
                     value={programId}
-                    onChange={(e) => setProgramId(e.target.value)}
+                    onChange={(e) => handleProgramChange(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
                   >
                     <option value="">-- Select Program --</option>
@@ -427,7 +436,7 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
                 </div>
               </div>
 
-              {/* Sector Select */}
+              {/* Sector Select - Only sectors under selected program */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
@@ -439,59 +448,27 @@ export default function AgentCreateContent({ portalType, backUrl }: AgentCreateC
                 <div className="relative">
                   <select
                     value={sector}
+                    disabled={!programId}
                     onChange={(e) => setSector(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
-                    <option value="">-- Select Working Sector --</option>
-                    {sectorOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    {!programId ? (
+                      <option value="">-- Select Program First --</option>
+                    ) : programSectors.length === 0 ? (
+                      <option value="">-- No sectors defined for this program --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Sector --</option>
+                        {programSectors.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
-
-              {/* Year Select */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar size={13} className="text-[#0b4da2]" />
-                    <span>Year</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">Optional</span>
-                </label>
-                <div className="relative">
-                  <select
-                    value={year}
-                    onChange={(e) => setYear(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-[#0b4da2] transition-colors"
-                  >
-                    <option value="">-- Select Recruitment Year --</option>
-                    {yearOptions.map((y) => (
-                      <option key={y} value={String(y)}>
-                        {y}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Notes & Remarks */}
-          <div>
-            <label className="block text-xs font-bold text-slate-800 mb-1.5">
-              Recruitment Remarks &amp; Specialization <span className="text-slate-400 font-normal">(Optional)</span>
-            </label>
-            <div className="relative">
-              <textarea
-                rows={4}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Primary recruitment partner for construction workforce, plantation workers, or specific countries..."
-                className="w-full bg-slate-50/70 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-hidden focus:border-[#0b4da2] focus:bg-white transition-colors"
-              />
             </div>
           </div>
         </div>

@@ -74,6 +74,7 @@ export default function SubscriptionPlansPage() {
   const [trialDays, setTrialDays] = useState(3);
   const [isPopular, setIsPopular] = useState(false);
   const [isActive, setIsActive] = useState(true);
+  const [isFreePlan, setIsFreePlan] = useState(false);
   const [sortOrder, setSortOrder] = useState(1);
   const [featureInput, setFeatureInput] = useState('');
   const [featuresList, setFeaturesList] = useState<string[]>([]);
@@ -673,6 +674,7 @@ export default function SubscriptionPlansPage() {
     setTrialDays(3);
     setIsPopular(false);
     setIsActive(true);
+    setIsFreePlan(false);
     setSortOrder(plans.length + 1);
     setFeaturesList(['Multi-Company Access', 'Attendance & Biometrics', 'Employee Management', 'Invoicing & Reports']);
     setFeatureInput('');
@@ -692,6 +694,7 @@ export default function SubscriptionPlansPage() {
     setTrialDays(p.trial_days ?? 3);
     setIsPopular(Boolean(p.is_popular));
     setIsActive(Boolean(p.is_active));
+    setIsFreePlan(Boolean(p.is_free_plan));
     setSortOrder(p.sort_order ?? 1);
     setFeaturesList(Array.isArray(p.features) ? p.features : []);
     setFeatureInput('');
@@ -715,7 +718,7 @@ export default function SubscriptionPlansPage() {
       alert('Plan name is required.');
       return;
     }
-    if (durationDays < 1) {
+    if (!isFreePlan && durationDays < 1) {
       alert('Duration days must be at least 1 day.');
       return;
     }
@@ -725,16 +728,17 @@ export default function SubscriptionPlansPage() {
       const payload: Partial<SubscriptionPlan> = {
         name: name.trim(),
         plan_key: planKey.trim() || undefined,
-        duration_days: Number(durationDays),
-        price: parseFloat(price) || 0,
+        duration_days: isFreePlan ? 0 : Number(durationDays),
+        price: isFreePlan ? 0 : (parseFloat(price) || 0),
         currency: currency.trim() || 'RM',
-        badge: badge.trim() || null,
-        savings_text: savingsText.trim() || null,
+        badge: badge.trim() || (isFreePlan ? 'FREE PLAN' : null),
+        savings_text: savingsText.trim() || (isFreePlan ? 'No Expiry / Lifetime' : null),
         description: description.trim() || null,
         features: featuresList,
-        trial_days: Number(trialDays),
+        trial_days: isFreePlan ? 0 : Number(trialDays),
         is_popular: isPopular,
         is_active: isActive,
+        is_free_plan: isFreePlan,
         sort_order: Number(sortOrder),
       };
 
@@ -904,12 +908,14 @@ export default function SubscriptionPlansPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
           {filteredPlans.map((plan) => {
+            const isPlanFree = Boolean(plan.is_free_plan);
             const isFreePrice = Number(plan.price) === 0;
-            const durationDays = Number(plan.duration_days || 30);
-            const trialDays = Number(plan.trial_days ?? 3);
+            const durationDays = isPlanFree ? 0 : Number(plan.duration_days || 30);
+            const trialDays = isPlanFree ? 0 : Number(plan.trial_days ?? 3);
 
             let durationText = '';
-            if (durationDays === 30) durationText = '1 Month';
+            if (isPlanFree || durationDays === 0) durationText = 'Lifetime Access';
+            else if (durationDays === 30) durationText = '1 Month';
             else if (durationDays === 90) durationText = '3 Months';
             else if (durationDays === 180) durationText = '6 Months';
             else if (durationDays === 300) durationText = '10 Months';
@@ -919,7 +925,8 @@ export default function SubscriptionPlansPage() {
             else durationText = plan.name || 'Subscription';
 
             let trialText = '';
-            if (trialDays === 30) trialText = '1 Month Free';
+            if (isPlanFree) trialText = 'No Expiry';
+            else if (trialDays === 30) trialText = '1 Month Free';
             else if (trialDays > 0) trialText = `${trialDays} Days Free`;
             else if (isFreePrice) trialText = 'Free';
             else trialText = '3 Days Free';
@@ -936,6 +943,11 @@ export default function SubscriptionPlansPage() {
                 {/* Popular or Custom Badge + Status */}
                 <div className="flex items-center justify-between gap-1.5 mb-2.5 flex-wrap">
                   <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    {plan.is_free_plan && (
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider bg-purple-700 text-white shadow-2xs">
+                        Free Plan (Admin Only)
+                      </span>
+                    )}
                     {plan.badge ? (
                       <span
                         className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider ${
@@ -984,7 +996,13 @@ export default function SubscriptionPlansPage() {
                   </div>
 
                   <div className="mt-2 mb-2.5">
-                    {isFreePrice ? (
+                    {isPlanFree ? (
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="text-xl sm:text-2xl font-black text-purple-700 tracking-tight">FREE</span>
+                        <span className="text-[11px] font-bold text-slate-400">({plan.currency} 0.00)</span>
+                        <span className="text-xs text-purple-700 font-bold ml-1">• No Duration / Lifetime</span>
+                      </div>
+                    ) : isFreePrice ? (
                       <div className="flex items-baseline gap-1.5 flex-wrap">
                         <span className="text-xl sm:text-2xl font-black text-emerald-600 tracking-tight">FREE</span>
                         <span className="text-[11px] font-bold text-slate-400">({plan.currency} 0.00)</span>
@@ -1004,6 +1022,12 @@ export default function SubscriptionPlansPage() {
                   {plan.savings_text && (
                     <div className="inline-block text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded mb-2">
                       {plan.savings_text}
+                    </div>
+                  )}
+
+                  {plan.is_free_plan && (
+                    <div className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded mb-2">
+                      <span>Super Admin Company Create Only (Hidden from Public)</span>
                     </div>
                   )}
 
@@ -1494,7 +1518,7 @@ export default function SubscriptionPlansPage() {
                                 )}
                               </div>
                               <div className="text-[10px] text-slate-400 font-medium">
-                                {assignedPlan.duration_days} Days Access
+                                {assignedPlan.is_free_plan ? 'Lifetime Access (No Expiry)' : `${assignedPlan.duration_days} Days Access`}
                               </div>
                             </div>
                           ) : comp.subscription_plan_key ? (
@@ -1557,7 +1581,11 @@ export default function SubscriptionPlansPage() {
 
                         {/* 8. Expire Date */}
                         <td className="py-3.5 px-4 align-middle">
-                          {comp.subscription_expires_at ? (
+                          {assignedPlan?.is_free_plan ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                              Lifetime Access
+                            </span>
+                          ) : comp.subscription_expires_at ? (
                             <div suppressHydrationWarning>
                               <div className="font-bold text-slate-800 text-xs" suppressHydrationWarning>
                                 {new Date(comp.subscription_expires_at).toLocaleDateString('en-GB', {
@@ -1580,7 +1608,12 @@ export default function SubscriptionPlansPage() {
 
                         {/* 9. Live Countdown */}
                         <td className="py-3.5 px-4 align-middle" suppressHydrationWarning>
-                          {countdown.hasExpiry ? (
+                          {assignedPlan?.is_free_plan ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                              <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                              <span>Lifetime (No Expiry)</span>
+                            </span>
+                          ) : countdown.hasExpiry ? (
                             <div
                               suppressHydrationWarning
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black shadow-2xs ${
@@ -1776,7 +1809,9 @@ export default function SubscriptionPlansPage() {
                   <div>
                     <span className="text-slate-500 text-[10px] block uppercase font-bold">Current Expiry:</span>
                     <strong className="text-[#0b4da2] font-mono">
-                      {targetCompany.subscription_expires_at
+                      {assignedPlan?.is_free_plan
+                        ? 'Lifetime Access (No Expiry)'
+                        : targetCompany.subscription_expires_at
                         ? new Date(targetCompany.subscription_expires_at).toLocaleString('en-MY', {
                             day: '2-digit',
                             month: 'short',
@@ -2304,55 +2339,75 @@ export default function SubscriptionPlansPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Duration in Days <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={durationDays}
-                    onChange={(e) => setDurationDays(parseInt(e.target.value) || 30)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-                  />
-                </div>
+                {!isFreePlan ? (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Duration in Days <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={durationDays}
+                      onChange={(e) => setDurationDays(parseInt(e.target.value) || 30)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-purple-900 mb-1">
+                      Plan Duration
+                    </label>
+                    <div className="w-full px-3.5 py-2 rounded-xl bg-purple-50 border border-purple-200 text-xs font-bold text-purple-700 flex items-center justify-between">
+                      <span>No Duration (Lifetime Access)</span>
+                      <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-purple-200 text-purple-800">Unlimited</span>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Price <span className="text-rose-500">*</span>
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value)}
-                      className="w-16 px-2.5 py-2 rounded-xl border border-slate-300 text-xs text-center font-bold text-slate-700 focus:outline-none focus:border-[#0b4da2]"
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      min={0}
-                      value={price}
-                      onChange={(e) => setPrice(e.target.value)}
-                      className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-                    />
-                  </div>
+                  {!isFreePlan ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={currency}
+                        onChange={(e) => setCurrency(e.target.value)}
+                        className="w-16 px-2.5 py-2 rounded-xl border border-slate-300 text-xs text-center font-bold text-slate-700 focus:outline-none focus:border-[#0b4da2]"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        min={0}
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full px-3.5 py-2 rounded-xl bg-purple-50 border border-purple-200 text-xs font-bold text-purple-700">
+                      RM 0.00 (100% Free)
+                    </div>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Free Trial Days
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={trialDays}
-                    onChange={(e) => setTrialDays(parseInt(e.target.value) || 0)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
-                  />
-                </div>
+                {!isFreePlan && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Free Trial Days
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={trialDays}
+                      onChange={(e) => setTrialDays(parseInt(e.target.value) || 0)}
+                      className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#0b4da2]"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -2439,6 +2494,32 @@ export default function SubscriptionPlansPage() {
                 </div>
 
                 {/* Toggles */}
+                <div className="flex items-start gap-2.5 pt-2 sm:col-span-2 p-3 rounded-2xl bg-purple-50/70 border border-purple-200">
+                  <input
+                    type="checkbox"
+                    id="isFreePlanToggle"
+                    checked={isFreePlan}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsFreePlan(checked);
+                      if (checked) {
+                        setPrice('0.00');
+                        if (!badge) setBadge('FREE PLAN');
+                        if (!savingsText) setSavingsText('Super Admin Only');
+                      }
+                    }}
+                    className="w-4 h-4 mt-0.5 rounded text-purple-600 focus:ring-purple-500 border-purple-300 cursor-pointer"
+                  />
+                  <div>
+                    <label htmlFor="isFreePlanToggle" className="text-xs font-bold text-purple-900 cursor-pointer block">
+                      Free Plan (Super Admin Company Creation Only)
+                    </label>
+                    <p className="text-[11px] text-purple-700 m-0 leading-relaxed">
+                      When enabled, this plan is hidden from the public Home page &amp; Application page. It will only be visible to Super Admin when creating a company.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2 pt-2">
                   <input
                     type="checkbox"

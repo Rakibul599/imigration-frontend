@@ -122,6 +122,7 @@ export const DEFAULT_CUSTOMER_CHART_CARDS = [
   { key: 'deposit_wallet', name: 'TOTAL DEPOSIT WALLET', isCurrency: true },
   { key: 'cost_wallet', name: 'TOTAL COST WALLET', isCurrency: true },
   { key: 'pending_wallet', name: 'TOTAL PENDING DUES', isCurrency: true },
+  { key: 'profit_wallet', name: 'TOTAL PROFIT AMOUNT', isCurrency: true },
 ];
 
 export default function CustomerOrderStatisticsChart({
@@ -331,6 +332,11 @@ export default function CustomerOrderStatisticsChart({
       case 'pending_wallet':
       case 'pending_amount':
         return list.length * 700;
+      case 'profit_wallet':
+      case 'total_profit':
+      case 'customer_profit_amount':
+      case 'total_profit_amount':
+        return Math.max(0, (list.length * 2800) - (list.length * 1200));
       default:
         return list.length;
     }
@@ -342,8 +348,8 @@ export default function CustomerOrderStatisticsChart({
       validStart.getMonth() === validEnd.getMonth() &&
       validStart.getFullYear() === validEnd.getFullYear();
 
-    const allDeposits = currentCard.key.includes('deposit') ? getStoredCustomerDeposits() : [];
-    const allRefunds = currentCard.key.includes('refund') ? getStoredCustomerRefunds() : [];
+    const allDeposits = (currentCard.key.includes('deposit') || currentCard.key.includes('profit')) ? getStoredCustomerDeposits() : [];
+    const allRefunds = (currentCard.key.includes('refund') || currentCard.key.includes('profit')) ? getStoredCustomerRefunds() : [];
 
     const data: {
       day: string;
@@ -434,6 +440,27 @@ export default function CustomerOrderStatisticsChart({
         case 'pending_amount':
           pointVal = customersOnDay.length * 700;
           break;
+        case 'profit_wallet':
+        case 'total_profit':
+        case 'customer_profit_amount':
+        case 'total_profit_amount': {
+          const relevantDep = allDeposits.filter((dep) => {
+            const dDate = (dep.deposit_date || dep.created_at || '').slice(0, 10);
+            if (dDate !== dateStr) return false;
+            if (selectedCompanyId !== 'ALL' && dep.company_id !== selectedCompanyId) return false;
+            return true;
+          });
+          const relevantRef = allRefunds.filter((ref) => {
+            const rDate = (ref.refund_date || ref.created_at || '').slice(0, 10);
+            if (rDate !== dateStr) return false;
+            if (selectedCompanyId !== 'ALL' && ref.company_id !== selectedCompanyId) return false;
+            return true;
+          });
+          const dSum = relevantDep.reduce((sum, dep) => sum + (Number(dep.deposit_amount) || 0), 0);
+          const rSum = relevantRef.reduce((sum, ref) => sum + (Number(ref.refund_amount) || 0), 0);
+          pointVal = Math.max(0, dSum - rSum);
+          break;
+        }
         default:
           pointVal = customersOnDay.length;
           break;
