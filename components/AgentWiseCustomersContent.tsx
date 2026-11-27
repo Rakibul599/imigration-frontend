@@ -409,6 +409,13 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
         ? '/superadmin/customers/create'
         : '/customers/create';
 
+  const statementBaseUrl =
+    portalType === 'masteradmin'
+      ? '/masteradmin/customers/statement'
+      : portalType === 'frontend_superadmin'
+        ? '/superadmin/customers/statement'
+        : '/customers/statement';
+
   return (
     <div className="space-y-6 pb-16 max-w-7xl mx-auto">
       {/* Top Breadcrumb & Return Action */}
@@ -1037,7 +1044,11 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                       {/* Worker Profile */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs text-[#0b4da2]">
+                          <Link
+                            href={`${statementBaseUrl}?id=${cust.id}`}
+                            className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs text-[#0b4da2] hover:ring-2 hover:ring-[#0b4da2] transition-all cursor-pointer"
+                            title="View Financial Statement & Wallet"
+                          >
                             {cust.profile_pic || cust.profile_image ? (
                               <img
                                 src={getFileUrl(cust.profile_pic || cust.profile_image)}
@@ -1047,11 +1058,15 @@ export default function AgentWiseCustomersContent({ portalType, backUrl }: Agent
                             ) : (
                               cust.full_name ? cust.full_name.charAt(0).toUpperCase() : 'W'
                             )}
-                          </div>
+                          </Link>
                           <div>
-                            <span className="font-bold text-slate-900 block leading-tight">
+                            <Link
+                              href={`${statementBaseUrl}?id=${cust.id}`}
+                              className="font-bold text-slate-900 hover:text-[#0b4da2] hover:underline transition-colors block leading-tight cursor-pointer"
+                              title="View Financial Statement & Wallet"
+                            >
                               {cust.full_name}
-                            </span>
+                            </Link>
                             <span className="text-[10px] font-mono text-slate-400">
                               ID #{cust.id} {cust.working_sector ? `• ${cust.working_sector}` : ''}
                             </span>

@@ -1177,24 +1177,36 @@ export default function SuperAdminCustomersPage() {
                       {/* Worker Name */}
                       <td className="py-4 px-4 align-middle whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          {cust.profile_pic || cust.profile_image ? (
-                            <img
-                              src={getFileUrl(cust.profile_pic || cust.profile_image)}
-                              alt={cust.full_name}
-                              className="w-9 h-9 rounded-full object-cover shadow-xs shrink-0 border border-slate-200"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
-                              {cust.full_name
-                                .split(' ')
-                                .map((n) => n[0])
-                                .slice(0, 2)
-                                .join('')
-                                .toUpperCase() || 'CW'}
-                            </div>
-                          )}
-                          <div className="font-bold text-slate-900 text-xs">
-                            {cust.full_name}
+                          <Link
+                            href={`/superadmin/customers/statement?id=${cust.id}`}
+                            className="shrink-0 group cursor-pointer"
+                            title="View Financial Statement & Wallet"
+                          >
+                            {cust.profile_pic || cust.profile_image ? (
+                              <img
+                                src={getFileUrl(cust.profile_pic || cust.profile_image)}
+                                alt={cust.full_name}
+                                className="w-9 h-9 rounded-full object-cover shadow-xs shrink-0 border border-slate-200 group-hover:ring-2 group-hover:ring-[#0b4da2] transition-all"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-blue-50 group-hover:text-[#0b4da2] transition-all">
+                                {cust.full_name
+                                  .split(' ')
+                                  .map((n) => n[0])
+                                  .slice(0, 2)
+                                  .join('')
+                                  .toUpperCase() || 'CW'}
+                              </div>
+                            )}
+                          </Link>
+                          <div>
+                            <Link
+                              href={`/superadmin/customers/statement?id=${cust.id}`}
+                              className="font-bold text-slate-900 hover:text-[#0b4da2] hover:underline text-xs transition-colors cursor-pointer block"
+                              title="View Financial Statement & Wallet"
+                            >
+                              {cust.full_name}
+                            </Link>
                           </div>
                         </div>
                       </td>

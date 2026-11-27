@@ -482,8 +482,8 @@ function CustomersContent() {
                           <td className="py-4 px-4 border-r border-slate-200 align-middle whitespace-nowrap">
                             <div className="flex items-center gap-3">
                               <Link
-                                href={`/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}`}
-                                className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden text-slate-600 font-bold text-xs shadow-xs hover:ring-2 hover:ring-blue-400 transition-all no-underline"
+                                href={activeCompany ? `/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}` : `/customers/${cust.id}`}
+                                className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden text-slate-600 font-bold text-xs shadow-xs hover:ring-2 hover:ring-blue-400 transition-all no-underline cursor-pointer"
                                 title="View Customer Dossier"
                               >
                                 {cust.profile_pic ? (
@@ -498,8 +498,8 @@ function CustomersContent() {
                               </Link>
                               <div className="font-bold text-slate-900 text-xs">
                                 <Link
-                                  href={`/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}`}
-                                  className="text-slate-900 hover:text-blue-700 transition-colors no-underline"
+                                  href={activeCompany ? `/customers/${cust.id}?company=${encodeURIComponent(activeCompany.id)}` : `/customers/${cust.id}`}
+                                  className="text-slate-900 hover:text-blue-700 transition-colors no-underline cursor-pointer"
                                   title="View Customer Dossier"
                                 >
                                   {cust.full_name}

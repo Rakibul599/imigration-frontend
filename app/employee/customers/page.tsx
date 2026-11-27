@@ -386,13 +386,21 @@ export default function EmployeeCustomersPage() {
                   {/* Name & Credentials */}
                   <td className="py-3.5 px-4 border-r border-slate-200 align-middle">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-blue-100 text-[#0b4da2] font-bold flex items-center justify-center text-xs shrink-0">
+                      <Link
+                        href={`/employee/customers/view?id=${cust.id}`}
+                        className="w-9 h-9 rounded-full bg-blue-100 text-[#0b4da2] font-bold flex items-center justify-center text-xs shrink-0 hover:ring-2 hover:ring-[#0b4da2] transition-all cursor-pointer no-underline"
+                        title="View Worker Dossier"
+                      >
                         {cust.full_name?.charAt(0).toUpperCase() || 'W'}
-                      </div>
+                      </Link>
                       <div>
-                        <span className="font-bold text-slate-900 block text-[13px]">
+                        <Link
+                          href={`/employee/customers/view?id=${cust.id}`}
+                          className="font-bold text-slate-900 hover:text-[#0b4da2] hover:underline block text-[13px] cursor-pointer no-underline"
+                          title="View Worker Dossier"
+                        >
                           {cust.full_name}
-                        </span>
+                        </Link>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="font-mono text-[10px] font-bold text-[#0b4da2] bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
                             {cust.passport_no || 'NO PASSPORT'}

@@ -1168,26 +1168,36 @@ export default function MasterAdminCustomersPage() {
                       {/* Name & Origin */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          {cust.profile_pic || cust.profile_image ? (
-                            <img
-                              src={getFileUrl(cust.profile_pic || cust.profile_image)}
-                              alt={cust.full_name}
-                              className="w-9 h-9 rounded-xl object-cover shadow-xs shrink-0 border border-slate-200"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#072a6b] to-[#0c4da2] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
-                              {cust.full_name
-                                .split(' ')
-                                .map((n) => n[0])
-                                .slice(0, 2)
-                                .join('')
-                                .toUpperCase()}
-                            </div>
-                          )}
+                          <Link
+                            href={`/masteradmin/customers/statement?id=${cust.id}`}
+                            className="shrink-0 group cursor-pointer"
+                            title="View Financial Statement & Wallet"
+                          >
+                            {cust.profile_pic || cust.profile_image ? (
+                              <img
+                                src={getFileUrl(cust.profile_pic || cust.profile_image)}
+                                alt={cust.full_name}
+                                className="w-9 h-9 rounded-xl object-cover shadow-xs shrink-0 border border-slate-200 group-hover:ring-2 group-hover:ring-[#0b4da2] transition-all"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#072a6b] to-[#0c4da2] text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0 group-hover:opacity-90 transition-opacity">
+                                {cust.full_name
+                                  .split(' ')
+                                  .map((n) => n[0])
+                                  .slice(0, 2)
+                                  .join('')
+                                  .toUpperCase()}
+                              </div>
+                            )}
+                          </Link>
                           <div>
-                            <div className="font-bold text-slate-900 text-xs">
+                            <Link
+                              href={`/masteradmin/customers/statement?id=${cust.id}`}
+                              className="font-bold text-slate-900 hover:text-[#0b4da2] hover:underline text-xs transition-colors cursor-pointer block"
+                              title="View Financial Statement & Wallet"
+                            >
                               {cust.full_name}
-                            </div>
+                            </Link>
                             <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
                               <Globe2 size={10} />
                               <span>{cust.country || 'N/A'}</span>

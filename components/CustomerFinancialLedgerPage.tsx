@@ -20,6 +20,7 @@ import {
   Calendar,
   Building2,
   User,
+  Phone,
   CheckCircle2,
   AlertCircle,
   FileText,
@@ -37,7 +38,7 @@ import {
   fetchCustomersFromBackend,
   getFileUrl,
 } from '@/lib/customerStorage';
-import { Company } from '@/lib/companies';
+import { Company, resolveFileUrl } from '@/lib/companies';
 import {
   getStoredCompanies,
   fetchCompaniesFromBackend,
@@ -188,7 +189,14 @@ function CustomerFinancialLedgerContent({
   // Employer company of selected customer
   const selectedCustomerCompany = useMemo(() => {
     if (!selectedCustomer) return null;
-    return companies.find((comp) => comp.id.toLowerCase() === selectedCustomer.company_id?.toLowerCase()) || null;
+    const compId = selectedCustomer.company_id || '';
+    return (
+      companies.find(
+        (comp) =>
+          String(comp.id).toLowerCase() === String(compId).toLowerCase() ||
+          String(comp.name).toLowerCase() === String(compId).toLowerCase()
+      ) || null
+    );
   }, [companies, selectedCustomer]);
 
   // Customer specific financial data
@@ -615,53 +623,112 @@ function CustomerFinancialLedgerContent({
               />
             </div>
           </div>
+        </div>
 
-          {/* Selected Customer Profile Strip */}
-          {selectedCustomer && (
-            <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#0b4da2]/10 text-[#0b4da2] flex items-center justify-center font-black text-sm shrink-0 border border-blue-200">
-                  {selectedCustomer.full_name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase()}
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <span>{selectedCustomer.full_name}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-emerald-100 text-emerald-800 uppercase">
-                      {selectedCustomer.status || 'Active'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span>
-                      Passport: <strong className="font-mono text-slate-700">{selectedCustomer.passport_no || '—'}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      NID: <strong className="font-mono text-slate-700">{selectedCustomer.nid_no || '—'}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Employer:{' '}
-                      <strong className="text-slate-700">
-                        {selectedCustomerCompany?.name || selectedCustomer.other_company_name || 'Individual Worker'}
-                      </strong>
-                    </span>
-                  </div>
-                </div>
+        {/* Customer & Employer Overview (Identical to Edit Page Header: Company Logo Left, Customer Image & Info Right) */}
+        {selectedCustomer && (
+          <div className={`${isGlass ? 'dashboard-card-glass rounded-2xl' : 'bg-white border border-slate-200 rounded-2xl'} p-5 sm:p-6 shadow-xs space-y-4`}>
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={16} className="text-[#0b4da2]" />
+                <span>Customer &amp; Employer Overview</span>
               </div>
-
-              <div className="flex items-center gap-2 text-xs">
-                <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold border border-slate-200">
-                  Sector: <strong>{selectedCustomer.working_sector || 'General'}</strong>
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase border ${
+                  selectedCustomer.status === 'active'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : selectedCustomer.status === 'pending'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : selectedCustomer.status === 'runaway'
+                    ? 'bg-orange-50 text-orange-700 border-orange-200'
+                    : selectedCustomer.status === 'blacklist'
+                    ? 'bg-rose-950 text-rose-100 border-rose-900'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  {selectedCustomer.status === 'blacklist' ? 'Black List' : selectedCustomer.status || 'Active'}
+                </span>
+                <span className="text-[11px] text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full font-semibold">
+                  Financial Statement &amp; Wallet
                 </span>
               </div>
             </div>
-          )}
-        </div>
+
+            <div className="p-4 sm:p-6 rounded-xl bg-gradient-to-r from-slate-50/90 via-white to-blue-50/30 border border-slate-200/90 flex flex-col sm:flex-row items-center justify-around gap-6 shadow-2xs">
+              {/* Left Side: Company Logo on Top, Name Underneath */}
+              <div className="flex flex-col items-center text-center max-w-[260px] w-full sm:w-auto">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center p-2 overflow-hidden transition-all hover:shadow-xs">
+                  {selectedCustomerCompany?.logo ? (
+                    <img
+                      src={resolveFileUrl(selectedCustomerCompany.logo)}
+                      alt={selectedCustomerCompany.name || 'Company'}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <Building2 size={32} className="text-indigo-600" />
+                  )}
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2 block">
+                  Employer / Company
+                </span>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 m-0 mt-0.5 leading-snug">
+                  {selectedCustomerCompany?.name || selectedCustomer.company_id || selectedCustomer.other_company_name || 'Direct Employer'}
+                </h3>
+                <div className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full mt-1">
+                  {selectedCustomerCompany?.sector || selectedCustomer.working_sector || 'Corporate'}
+                </div>
+              </div>
+
+              {/* Divider in between on larger screens */}
+              <div className="hidden sm:block h-20 w-px bg-slate-200" />
+
+              {/* Right Side: Customer Pic on Top, Name & Phone Underneath */}
+              <div className="flex flex-col items-center text-center max-w-[260px] w-full sm:w-auto">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white border-2 border-blue-500/30 shadow-2xs flex items-center justify-center p-0.5 overflow-hidden">
+                  {selectedCustomer.profile_pic || selectedCustomer.profile_image ? (
+                    <img
+                      src={getFileUrl(selectedCustomer.profile_pic || selectedCustomer.profile_image)}
+                      alt={selectedCustomer.full_name || 'Customer'}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-full h-full rounded-lg bg-gradient-to-br from-[#0b4da2] to-blue-800 text-white font-black text-xl sm:text-2xl flex items-center justify-center shadow-inner">
+                      {selectedCustomer.full_name ? selectedCustomer.full_name.charAt(0).toUpperCase() : <User size={28} />}
+                    </div>
+                  )}
+                </div>
+
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2 block">
+                  Customer / Worker
+                </span>
+                <h3 className="text-sm sm:text-base font-black text-slate-900 m-0 mt-0.5 leading-snug">
+                  {selectedCustomer.full_name || 'Customer'}
+                </h3>
+                {selectedCustomer.phone || selectedCustomer.worker_phone ? (
+                  <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                    <Phone size={11} className="text-emerald-600" />
+                    <span>{selectedCustomer.phone || selectedCustomer.worker_phone}</span>
+                  </div>
+                ) : (
+                  <div className="mt-1 font-mono text-[11px] text-slate-400 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200">
+                    No Phone
+                  </div>
+                )}
+                <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-500">
+                  {selectedCustomer.passport_no && (
+                    <span className="font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-semibold">
+                      Pass: {selectedCustomer.passport_no}
+                    </span>
+                  )}
+                  {selectedCustomer.nid_no && (
+                    <span className="font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                      NID: {selectedCustomer.nid_no}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ========================================================================= */}
         {/* THE 5 REQUIRED WALLET CARDS */}

@@ -560,7 +560,11 @@ export function ProgramCustomersContent({
                     {/* Worker Info */}
                     <td className="py-4 px-4 align-middle">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                        <Link
+                          href={`${rootPath}/customers/statement?id=${cust.id}`}
+                          className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 group-hover:ring-2 group-hover:ring-indigo-500 transition-all cursor-pointer"
+                          title="View Financial Statement & Wallet"
+                        >
                           {cust.profile_pic ? (
                             <img
                               src={cust.profile_pic}
@@ -570,9 +574,15 @@ export function ProgramCustomersContent({
                           ) : (
                             <User size={15} className="text-slate-400" />
                           )}
-                        </div>
-                        <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                          {cust.full_name}
+                        </Link>
+                        <div>
+                          <Link
+                            href={`${rootPath}/customers/statement?id=${cust.id}`}
+                            className="font-bold text-slate-900 hover:text-indigo-600 hover:underline transition-colors block cursor-pointer"
+                            title="View Financial Statement & Wallet"
+                          >
+                            {cust.full_name}
+                          </Link>
                         </div>
                       </div>
                     </td>
